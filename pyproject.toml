@@ -1,0 +1,87 @@
+[project]
+name = "RAG"
+version = "0.1.0"
+description = "A prod ready RAG service"
+readme = "README.md"
+license = "MIT"
+
+authors = [{ name = "hadifar" }]
+
+requires-python = ">=3.12"
+dependencies = [
+    "gradio>=6.27.0",
+    "langgraph>=1.2.11",
+    "langchain-openai>=1.6.2",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.53.0",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "typer>=0.27.2",
+    "pinecone>=6.0.0",
+    "langchain-pinecone>=0.2.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/hadifar/rag"
+
+[project.scripts]
+rag = "rag.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["rag"]
+
+[tool.ruff.lint]
+extend-select = ["C901", "B", "SIM", "C4", "RET", "UP", "ERA", "PLR2004", "PTH"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 5
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_scheme = "semver2"
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = true
+version_provider = "pep621"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "commitizen",
+    "import-linter>=2.15",
+    "pre-commit",
+    "ruff",
+]
+
+[tool.importlinter]
+root_package = "rag"
+
+[[tool.importlinter.contracts]]
+name = "domain is pure"
+type = "forbidden"
+source_modules = ["rag.domain"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.ui"]
+
+[[tool.importlinter.contracts]]
+name = "services do not import adapters directly"
+type = "forbidden"
+source_modules = ["rag.services"]
+forbidden_modules = ["rag.adapters"]
+
+[[tool.importlinter.contracts]]
+name = "layering"
+type = "layers"
+layers = [
+    "rag.api | rag.ui",
+    "rag.services",
+    "rag.domain",
+]

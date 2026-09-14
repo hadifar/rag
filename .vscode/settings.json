@@ -1,0 +1,94 @@
+{
+    // ════════════════════════════════════════════════════════════
+    //  EDITOR — applies everywhere, then refined in the [python] scope
+    // ════════════════════════════════════════════════════════════
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": false, // paste-format is noisy; save-format is enough
+    "editor.rulers": [
+        88
+    ], // visual guide at Ruff/Black default line length
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.bracketPairColorization.enabled": true,
+    "editor.stickyScroll.enabled": true, // keeps the current func/class header pinned on top
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    // ════════════════════════════════════════════════════════════
+    //  PYTHON LANGUAGE SCOPE — the heart of the setup
+    // ════════════════════════════════════════════════════════════
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            // "explicit" = run on Cmd/Ctrl+S. Use "never" if you prefer manual control
+            // (some devs dislike auto-removing imports they're mid-way through writing).
+            "source.fixAll": "explicit", // auto-fix lint violations Ruff can fix
+            "source.organizeImports": "explicit" // sort + prune imports (isort behavior)
+        }
+    },
+    // ════════════════════════════════════════════════════════════
+    //  RUFF — linter + formatter + import sorter (replaces Black/isort/Flake8/pylint)
+    //  Prefer putting RULE config in pyproject.toml, not here, so CI matches.
+    // ════════════════════════════════════════════════════════════
+    "ruff.nativeServer": "on", // use the fast Rust language server
+    "ruff.codeAction.disableRuleComment": {
+        "enable": false
+    }, // less Ctrl+. clutter
+    // ════════════════════════════════════════════════════════════
+    //  PYLANCE / TYPE CHECKING — IntelliSense + static analysis
+    // ════════════════════════════════════════════════════════════
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic", // "basic" → "standard" → "strict"
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "python.analysis.inlayHints.variableTypes": true,
+    "python.analysis.inlayHints.pytestParameters": true,
+    "python.analysis.diagnosticMode": "workspace", // analyze whole project, not just open files
+    "python.analysis.autoFormatStrings": true, // auto-add f-string prefix when you type {
+    // ════════════════════════════════════════════════════════════
+    //  INTERPRETER & ENVIRONMENT
+    //  With uv, point this at the project venv so the right interpreter is auto-selected.
+    // ════════════════════════════════════════════════════════════
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    // ════════════════════════════════════════════════════════════
+    //  TESTING — pytest wired into the Test Explorer
+    // ════════════════════════════════════════════════════════════
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
+    // ════════════════════════════════════════════════════════════
+    //  NOISE REDUCTION — hide generated/cache clutter from the file tree & search
+    // ════════════════════════════════════════════════════════════
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true,
+        "**/.mypy_cache": true,
+        "**/*.egg-info": true
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/.git": true,
+        "**/node_modules": true
+    },
+    // ════════════════════════════════════════════════════════════
+    //  HTML — rendering/templates/*.html are Jinja2 templates, not plain
+    //  HTML: embedded <script>/<style> blocks contain {% ... %}/{{ ... }}
+    //  that aren't valid JS/CSS on their own, so the built-in embedded
+    //  language validators just produce false-positive syntax errors there.
+    // ════════════════════════════════════════════════════════════
+    "html.validate.scripts": false,
+    "html.validate.styles": false,
+    // ════════════════════════════════════════════════════════════
+    //  GIT / QoL
+    // ════════════════════════════════════════════════════════════
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "diffEditor.ignoreTrimWhitespace": false
+}

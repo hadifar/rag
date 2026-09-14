@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# gitflow guard — installed via .pre-commit-config.yaml (local pre-push hook).
+#
+# Rules enforced:
+#   1. master and dev only accept merge commits (via PR/merge), never direct
+#      single-parent commits pushed straight to the branch.
+#   2. Any other branch being pushed for the first time must match the
+#      gitflow prefix set: feat/ fix/ refactor/ docs/ chore/ release/ hotfix/
+#
+# Bypass (deliberate emergencies only): git push --no-verify
+#
+# NOTE: pre-commit's `language: script` hooks do NOT receive git's pre-push
+# stdin (the "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines) —
+# pre-commit reads and consumes that stdin itself to compute its own
+# diffing context, and exposes the result via PRE_COMMIT_* env vars instead.
+# A hook that tries to `read` from stdin here gets immediate EOF, so its
+# checks silently never run. Use the env vars pre-commit sets for pre-push
+# (PRE_COMMIT_REMOTE_BRANCH / PRE_COMMIT_FROM_REF / PRE_COMMIT_TO_REF)
+# instead. One consequence inherited from pre-commit: only the first pushed
+# ref is exposed, so `git push --all`/multi-branch pushes only get the
+# first branch checked.
+
+set -euo pipefail
+
+protected_branches="master dev"
+branch_prefix_re='^(feat|fix|refactor|docs|chore|release|hotfix)/.+'
+
+branch="${PRE_COMMIT_REMOTE_BRANCH:-}"
+branch="${branch#refs/heads/}"
+remote_name="${PRE_COMMIT_REMOTE_NAME:-origin}"
+to_ref="${PRE_COMMIT_TO_REF:-}"
+from_ref="${PRE_COMMIT_FROM_REF:-}"
+
+# Nothing to check (e.g. a branch deletion never reaches this hook at all).
+[ -z "$branch" ] && exit 0
+
+[ -z "$to_ref" ] && to_ref="$(git rev-parse -q --verify "refs/heads/$branch" 2>/dev/null || true)"
+[ -z "$to_ref" ] && exit 0
+
+is_protected=""
+for b in $protected_branches; do
+    [ "$branch" = "$b" ] && is_protected=1
+done
+
+if [ -n "$is_protected" ]; then
+    if [ -n "$from_ref" ]; then
+        range="$from_ref..$to_ref"
+    else
+        range="$to_ref"
+    fi
+
+    # --first-parent restricts this to the branch's own mainline: commits
+    # that only arrived as the second parent of a legitimate --no-ff merge
+    # (i.e. ordinary work inside a feature branch) must not be flagged here.
+    non_merge=$(git rev-list --no-merges --first-parent "$range" 2>/dev/null || true)
+    if [ -n "$non_merge" ]; then
+        echo "error: refusing to push directly to '$branch'." >&2
+        echo "       $branch only accepts merge commits (PR/merge), not direct commits:" >&2
+        echo "$non_merge" | sed 's/^/         /' >&2
+        echo "       Push your work to a feat/fix/... branch and merge into $branch instead." >&2
+        echo "       (deliberate override: git push --no-verify)" >&2
+        exit 1
+    fi
+else
+    # New branch names must follow the gitflow prefix convention. Ask the
+    # remote directly whether it already knows this branch (no reliable
+    # local signal survives the trip through pre-commit's env vars).
+    if ! git ls-remote --exit-code --heads "$remote_name" "$branch" >/dev/null 2>&1; then
+        if ! echo "$branch" | grep -Eq "$branch_prefix_re"; then
+            echo "error: branch name '$branch' doesn't match gitflow convention." >&2
+            echo "       expected one of: feat/ fix/ refactor/ docs/ chore/ release/ hotfix/" >&2
+            echo "       (deliberate override: git push --no-verify)" >&2
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
