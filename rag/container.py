@@ -7,7 +7,7 @@ from rag.adapters.pinecone_client import build_vector_store
 from rag.config import Settings
 from rag.services.embedding_service.service import EmbeddingService
 from rag.services.generation_service.service import GenerationService
-from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.ranking_service.service import RankingService
 
@@ -34,7 +34,7 @@ def build_container(settings: Settings) -> Container:
     )
 
     ingestion_service = IngestionService(
-        vector_store=vector_store, chunker=MarkdownHeaderChunker()
+        vector_store=vector_store, chunker=WholeDocumentChunker()
     )
 
     return Container(
