@@ -24,9 +24,6 @@ class Settings(BaseSettings):
     PORT: int = 8000
     LOG_LEVEL: str = "INFO"
 
-    # Unused seam for a future minimal API-key check — see engineering_design.md.
-    API_KEY: str | None = None
-
 
 @lru_cache
 def get_settings() -> Settings:
