@@ -1,19 +1,31 @@
 from functools import partial
+from typing import Annotated, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from rag.services.generation_service.guardrail import OFF_TOPIC_INSTRUCTION, is_relevant
-from rag.services.generation_service.prompts import SYSTEM_PROMPT
-from rag.services.generation_service.state import GraphState
 from rag.services.generation_service.verifier import REVISION_INSTRUCTION, is_grounded
 
 MAX_VERIFY_ATTEMPTS = 1
+SYSTEM_PROMPT = (
+    "You are a support assistant for AtlasFlow. Use the search_kb tool to find relevant "
+    "documentation before answering. Only answer based on retrieved content, and say you "
+    "don't know if the knowledge base doesn't cover it. Cite the source file(s) you used."
+)
+
+
+class GraphState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+    relevant: NotRequired[bool]
+    grounded: NotRequired[bool]
+    verify_attempts: NotRequired[int]
 
 
 async def _guardrail(llm: BaseChatModel, state: GraphState) -> dict:
