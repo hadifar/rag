@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# gitflow guard — installed via .pre-commit-config.yaml (local pre-commit hook).
+#
+# Blocks `git commit` itself while checked out on master or dev, except for
+# the commit that finalizes an in-progress merge (git sets .git/MERGE_HEAD
+# while completing that commit). This is the commit-time companion to
+# scripts/git-hooks/pre-push, which only ever caught this at push time —
+# by then the "wrong" commit already exists on the branch and has to be
+# cleaned up after the fact. Catching it here means git refuses the commit
+# before it's ever created.
+#
+# Bypass (deliberate emergencies only): git commit --no-verify
+
+set -euo pipefail
+
+protected_branches="master dev"
+
+branch="$(git symbolic-ref --short -q HEAD || true)"
+[ -z "$branch" ] && exit 0  # detached HEAD — not on a protected branch
+
+is_protected=""
+for b in $protected_branches; do
+    [ "$branch" = "$b" ] && is_protected=1
+done
+[ -z "$is_protected" ] && exit 0
+
+# Allow the commit that finalizes an in-progress merge.
+git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+
+echo "error: refusing to commit directly to '$branch'." >&2
+echo "       $branch only accepts merge commits (PR/merge), not direct commits." >&2
+echo "       Create a feature branch instead, e.g.:" >&2
+echo "         git checkout -b fix/your-change" >&2
+echo "       (deliberate override: git commit --no-verify)" >&2
+exit 1
