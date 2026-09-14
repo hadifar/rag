@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from rag.api.schema import ChatRequest
-from rag.services.generation_service.service import GenerationService
+from rag.container import ContainerHandle
 from rag.services.generation_service.streaming import (
     StreamEvent,
     TextDelta,
@@ -13,11 +13,13 @@ from rag.services.generation_service.streaming import (
 )
 
 
-def build_chat_router(generation_service: GenerationService) -> APIRouter:
+def build_chat_router(handle: ContainerHandle) -> APIRouter:
     router = APIRouter()
 
     @router.post("/stream")
     async def stream(request: ChatRequest) -> StreamingResponse:
+        generation_service = handle.get().generation_service
+
         async def event_stream():
             async for event in generation_service.stream_chat(
                 request.message, request.thread_id

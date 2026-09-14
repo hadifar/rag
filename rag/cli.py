@@ -32,12 +32,17 @@ def ingest(
 ) -> None:
     """Load the markdown KB, embed, upsert into the vector store."""
     from rag.container import build_container
+    from rag.domain.models import IngestionReport
     from rag.services.ingestion_service.loaders import MarkdownFileLoader
 
     settings = get_settings()
-    container = build_container(settings)
     loader = MarkdownFileLoader(Path(source) if source else settings.KNOWLEDGE_BASE_DIR)
-    report = asyncio.run(container.ingestion_service.ingest(loader))
+
+    async def run() -> IngestionReport:
+        async with build_container(settings) as container:
+            return await container.ingestion_service.ingest(loader)
+
+    report = asyncio.run(run())
     typer.echo(f"Ingested {report.documents} documents, {report.chunks} chunks")
 
 

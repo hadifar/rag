@@ -18,7 +18,6 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "typer>=0.27.2",
     "pinecone>=6.0.0",
-    "langchain-pinecone>=0.2.4",
 ]
 
 [project.urls]

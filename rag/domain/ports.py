@@ -1,9 +1,4 @@
-"""Contracts every service depends on instead of a concrete SDK.
-
-Method names on EmbedderPort/VectorStorePort deliberately mirror langchain-core's
-Embeddings/VectorStore interfaces, so the concrete langchain objects built in
-rag/adapters satisfy these Protocols structurally, with no wrapper class needed.
-"""
+"""Contracts every service depends on instead of a concrete SDK."""
 
 from collections.abc import Iterable
 from typing import Protocol
@@ -11,11 +6,6 @@ from typing import Protocol
 from langchain_core.documents import Document
 
 from rag.domain.models import RawDocument
-
-
-class EmbedderPort(Protocol):
-    async def aembed_query(self, text: str) -> list[float]: ...
-    async def aembed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class VectorStorePort(Protocol):
