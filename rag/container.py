@@ -1,42 +1,60 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from rag.adapters.checkpointer import build_checkpointer
-from rag.adapters.embedding_client import build_embeddings
 from rag.adapters.llm_client import build_llm
-from rag.adapters.pinecone_client import build_vector_store
+from rag.adapters.pinecone_client import open_vector_store
 from rag.config import Settings
-from rag.services.embedding_service.service import EmbeddingService
 from rag.services.generation_service.service import GenerationService
-from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.ranking_service.service import RankingService
 
 
 @dataclass
 class Container:
-    embedding_service: EmbeddingService
     ranking_service: RankingService
     generation_service: GenerationService
     ingestion_service: IngestionService
 
 
-def build_container(settings: Settings) -> Container:
-    embeddings = build_embeddings(settings)
-    embedding_service = EmbeddingService(embedder=embeddings)
+@asynccontextmanager
+async def build_container(settings: Settings) -> AsyncGenerator[Container]:
+    """Opens the vector store connection for the caller's scope and tears it down on
+    exit — see rag.adapters.pinecone_client.open_vector_store.
+    """
+    async with open_vector_store(settings) as vector_store:
+        ranking_service = RankingService(vector_store=vector_store)
 
-    vector_store = build_vector_store(settings, embeddings)
-    ranking_service = RankingService(vector_store=vector_store)
+        generation_service = GenerationService(
+            llm=build_llm(settings),
+            ranking_service=ranking_service,
+            checkpointer=build_checkpointer(settings),
+        )
 
-    generation_service = GenerationService(
-        llm=build_llm(settings),
-        ranking_service=ranking_service,
-        checkpointer=build_checkpointer(settings),
-    )
+        ingestion_service = IngestionService(
+            vector_store=vector_store, chunker=WholeDocumentChunker()
+        )
 
-    ingestion_service = IngestionService(
-        vector_store=vector_store, chunker=MarkdownHeaderChunker()
-    )
+        yield Container(ranking_service, generation_service, ingestion_service)
 
-    return Container(
-        embedding_service, ranking_service, generation_service, ingestion_service
-    )
+
+class ContainerHandle:
+    """Holds the active Container; the FastAPI lifespan swaps it in on startup.
+
+    Routers and the Gradio UI are built once, before the lifespan runs (Gradio's
+    mount_gradio_app and APIRouter both need their handlers up front), so they close
+    over this handle and resolve `.get()` per-request rather than holding a Container
+    directly.
+    """
+
+    def __init__(self, container: Container | None = None) -> None:
+        self.container = container
+
+    def get(self) -> Container:
+        if self.container is None:
+            raise RuntimeError(
+                "Container not initialized — app lifespan hasn't started"
+            )
+        return self.container

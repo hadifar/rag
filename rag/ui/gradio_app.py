@@ -3,7 +3,7 @@ import uuid
 
 import gradio as gr
 
-from rag.services.generation_service.service import GenerationService
+from rag.container import ContainerHandle
 from rag.services.generation_service.streaming import (
     StreamEvent,
     TextDelta,
@@ -55,8 +55,9 @@ class _RenderState:
         return messages
 
 
-def build_gradio_ui(generation_service: GenerationService) -> gr.Blocks:
+def build_gradio_ui(handle: ContainerHandle) -> gr.Blocks:
     async def respond(message: str, history: list, thread_id: str):
+        generation_service = handle.get().generation_service
         state = _RenderState()
         async for event in generation_service.stream_chat(message, thread_id):
             state.apply(event)
