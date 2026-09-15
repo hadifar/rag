@@ -1,13 +1,15 @@
 # RAG (Retrieval Augmented Generation)
 A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + Gradio + LangGraph + Pinecone. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
 
+![Chat UI](docs/images/screenshot.png)
+
 ## Setup
 ```bash
 git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 ```
-Then create & fill in `.env` via `OPENAI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`.
+Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
 
 ## Running
 
@@ -27,7 +29,7 @@ rag serve
 docker compose up
 ```
 
-Once running: chat UI at `/ui`, API at `POST /chat/stream`, health checks at `/health/live` and `/health/ready`.
+Once running: UI at `http://localhost:8000/ui`
 
 ## Coding style
 Follows PEP 20 and the [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md).
