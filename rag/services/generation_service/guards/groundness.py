@@ -6,8 +6,8 @@ content from the search_kb calls this turn) instead of threading it through
 GraphState separately.
 """
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.runnables import Runnable
 
 VERIFIER_PROMPT = (
     "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
@@ -28,7 +28,7 @@ def _collect_context(messages: list[BaseMessage]) -> str:
     )
 
 
-async def is_grounded(llm: BaseChatModel, messages: list[BaseMessage]) -> bool:
+async def is_grounded(llm: Runnable, messages: list[BaseMessage]) -> bool:
     context = _collect_context(messages)
     answer = messages[-1]
 

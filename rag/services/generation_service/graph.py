@@ -2,23 +2,45 @@ from functools import partial
 from typing import Annotated, NotRequired, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import Runnable
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from rag.services.generation_service.guardrail import OFF_TOPIC_INSTRUCTION, is_relevant
-from rag.services.generation_service.verifier import REVISION_INSTRUCTION, is_grounded
+from rag.services.generation_service.guards.groundness import (
+    REVISION_INSTRUCTION,
+    is_grounded,
+)
+from rag.services.generation_service.guards.topical import (
+    OFF_TOPIC_INSTRUCTION,
+    is_relevant,
+)
 
 MAX_VERIFY_ATTEMPTS = 1
+LLM_RETRY_ATTEMPTS = 3
+
 SYSTEM_PROMPT = (
     "You are a support assistant for AtlasFlow. Use the search_kb tool to find relevant "
     "documentation before answering. Only answer based on retrieved content, and say you "
     "don't know if the knowledge base doesn't cover it. Cite the source file(s) you used."
 )
+FALLBACK_MESSAGE = "I'm having trouble reaching the language model right now. Please try again shortly."
+
+
+def _fallback_response(_input: object) -> AIMessage:
+    return AIMessage(content=FALLBACK_MESSAGE)
+
+
+def _with_resilience(llm: Runnable) -> Runnable:
+    """Retries transient failures, then falls back to a fixed apology message rather
+    than propagating the error into the graph run (would 500 the chat request).
+    """
+    return llm.with_retry(stop_after_attempt=LLM_RETRY_ATTEMPTS).with_fallbacks(
+        [RunnableLambda(_fallback_response)]
+    )
 
 
 class GraphState(TypedDict):
@@ -28,7 +50,7 @@ class GraphState(TypedDict):
     verify_attempts: NotRequired[int]
 
 
-async def _guardrail(llm: BaseChatModel, state: GraphState) -> dict:
+async def _guardrail(llm: Runnable, state: GraphState) -> dict:
     if await is_relevant(llm, state["messages"]):
         return {"relevant": True}
     return {
@@ -45,7 +67,7 @@ async def _call_model(llm_with_tools: Runnable, state: GraphState) -> dict:
     return {"messages": [response]}
 
 
-async def _verify(llm: BaseChatModel, state: GraphState) -> dict:
+async def _verify(llm: Runnable, state: GraphState) -> dict:
     attempts = state.get("verify_attempts", 0)
     grounded = await is_grounded(llm, state["messages"])
 
@@ -68,13 +90,14 @@ def _route_after_verify(state: GraphState) -> str:
 def build_graph(
     llm: BaseChatModel, tools: list[BaseTool], checkpointer: BaseCheckpointSaver
 ) -> Runnable:
-    llm_with_tools: Runnable = llm.bind_tools(tools)
+    resilient_llm = _with_resilience(llm)
+    llm_with_tools = _with_resilience(llm.bind_tools(tools))
 
     graph = StateGraph(GraphState)
-    graph.add_node("guardrail", partial(_guardrail, llm))
+    graph.add_node("guardrail", partial(_guardrail, resilient_llm))
     graph.add_node("agent", partial(_call_model, llm_with_tools))
     graph.add_node("tools", ToolNode(tools))
-    graph.add_node("verify", partial(_verify, llm))
+    graph.add_node("verify", partial(_verify, resilient_llm))
 
     graph.set_entry_point("guardrail")
     graph.add_edge("guardrail", "agent")
