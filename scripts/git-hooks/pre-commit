@@ -9,6 +9,16 @@
 # cleaned up after the fact. Catching it here means git refuses the commit
 # before it's ever created.
 #
+# Also runs outside of a real `git commit` — e.g. `pre-commit run --all-files`
+# in CI (.github/workflows/pre-commit.yml), which lints an already-finished
+# checkout instead of creating a commit. MERGE_HEAD is deleted the moment a
+# merge commit is finalized, so it never exists in that mode — a bare
+# MERGE_HEAD check would reject every merge commit ever pushed to master.
+# Told apart from a live commit by the index: a real `git commit` always has
+# a pending change staged against HEAD, whereas a CI/manual `pre-commit run`
+# lints a clean tree with nothing staged. Only in the latter case do we fall
+# back to judging the already-made HEAD commit by its parent count instead.
+#
 # Bypass (deliberate emergencies only): git commit --no-verify
 
 set -euo pipefail
@@ -26,6 +36,11 @@ done
 
 # Allow the commit that finalizes an in-progress merge.
 git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+
+if git diff --cached --quiet; then
+    # Nothing staged: not a live commit. Judge the already-made HEAD commit.
+    git rev-parse -q --verify HEAD^2 >/dev/null 2>&1 && exit 0
+fi
 
 echo "error: refusing to commit directly to '$branch'." >&2
 echo "       $branch only accepts merge commits (PR/merge), not direct commits." >&2
