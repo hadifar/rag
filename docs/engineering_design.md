@@ -1,23 +1,8 @@
 # Engineering Design — RAG Chatbot
 
-A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`), designed for clear
-service boundaries and long-term maintainability rather than the shortest path to a demo.
+A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`).
 
 ![langgraph](images/langgraph.png)
-
-## Guiding principles
-
-- **Zen of Python (PEP 20), applied at the architecture level, not just line-by-line.**
-  "Explicit is better than implicit" → dependencies are passed in via typed constructors, never
-  reached for through globals or hidden imports. "Simple is better than complex" → four services,
-  four ports, no framework abstractions adopted speculatively. "There should be one obvious way to
-  do it" → one composition root (`container.py`) builds every object graph; nothing is wired twice.
-- **Dependency inversion at every service boundary.** Business logic depends on `Protocol`
-  interfaces (`domain/ports.py`), never on a concrete SDK. Concrete clients are swappable without
-  touching a service.
-- **YAGNI over speculative generality.** A few things were deliberately *not* built now (see
-  "Explicitly deferred" below) because nothing in this project's actual scope needs them yet — the
-  seams to add them later already exist.
 
 ## Tech stack
 
@@ -168,13 +153,3 @@ console step required.
 
 Auth/rate-limiting: **out of scope** for this build. `Settings` carries an unused optional `api_key`
 field as a seam so a minimal API-key check can be added later without redesigning `api/`.
-
-
-## Explicitly deferred (with rationale, not oversight)
-
-| Item | Why deferred | Re-add path |
-|---|---|---|
-| `RerankerPort` | 28 short markdown docs — plain top-k similarity is very likely sufficient; a reranker adds latency/cost for dubious benefit at this corpus size | Same seam as `VectorStorePort`; add the port + adapter behind `ranking_service` if retrieval quality needs it |
-| Automated tests | Out of scope for this build's timeline | Ports/DI already make every service testable with fakes — `tests/` mirroring `rag/`, `pytest` + `pytest-asyncio`, whenever added |
-| Auth / rate limiting | Out of scope for this build | `Settings.api_key` seam already reserved |
-| Persistent checkpointing | `MemorySaver` is sufficient for single-replica/demo scope | One-line swap in `build_checkpointer()` |

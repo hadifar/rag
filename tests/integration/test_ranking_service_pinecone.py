@@ -1,10 +1,3 @@
-"""Exercises RankingService against the real, already-ingested knowledge base in
-Pinecone (see `rag ingest`) — read-only, no seeding or cleanup needed.
-
-Requires Pinecone/OpenAI credentials in .env (see conftest.py's integration_settings
-fixture, which skips with a clear reason if they're missing).
-"""
-
 from rag.adapters.pinecone_client import open_vector_store
 from rag.services.ranking_service.service import RankingService
 

@@ -26,8 +26,8 @@ uv run python -m rag serve
 
 ### CLI
 ```bash
-rag ingest   # embeds data/*.md and upserts into Pinecone — run once before serving
-rag serve
+uv run rag ingest   # embeds data/*.md and upserts into Pinecone — run once before serving
+uv run rag serve
 ```
 
 ### Docker
