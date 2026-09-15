@@ -1,3 +1,13 @@
+## v0.3.0 (2026-09-15)
+
+### Feat
+
+- new sessioin btn added to ui & memorysaver replace with InMemorySaver
+
+### Fix
+
+- only consider 3 topk
+
 ## v0.2.1 (2026-09-15)
 
 ### Fix
