@@ -20,3 +20,12 @@ Deliberate override for any of these: `--no-verify`.
 ## Commit messages
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `fix: handle missing session UUID`, `feat: add search highlighting`), enforced by the `commitizen` hook.
+
+
+## Test
+
+```
+uv run pytest
+```
+
+Runs the integration suite in `tests/integration` against real Pinecone — requires `PINECONE_API_KEY`/`OPENAI_API_KEY` in `.env` (see `tests/integration/conftest.py`; the run skips with a clear reason if they're missing).

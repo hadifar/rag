@@ -36,6 +36,9 @@ packages = ["rag"]
 [tool.ruff.lint]
 extend-select = ["C901", "B", "SIM", "C4", "RET", "UP", "ERA", "PLR2004", "PTH"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 5
 
@@ -53,11 +56,17 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "commitizen",
     "import-linter>=2.15",
     "pre-commit",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff",
 ]
 
