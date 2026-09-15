@@ -19,17 +19,17 @@ class Settings(BaseSettings):
     PINECONE_SPARSE_MODEL: str
     PINECONE_NAMESPACE: str
 
+    LANGFUSE_ENABLED: bool
+    LANGFUSE_PUBLIC_KEY: str
+    LANGFUSE_SECRET_KEY: str
+    LANGFUSE_HOST: str
+
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
     CHECKPOINTER_BACKEND: str = "memory"
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-
-    LANGFUSE_ENABLED: bool = False
-    LANGFUSE_PUBLIC_KEY: str = ""
-    LANGFUSE_SECRET_KEY: str = ""
-    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
 
 @lru_cache

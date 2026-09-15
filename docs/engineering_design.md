@@ -3,6 +3,8 @@
 A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`), designed for clear
 service boundaries and long-term maintainability rather than the shortest path to a demo.
 
+![langgraph](images/langgraph.png)
+
 ## Guiding principles
 
 - **Zen of Python (PEP 20), applied at the architecture level, not just line-by-line.**
@@ -89,17 +91,8 @@ Four services, each with a narrow, ports-typed constructor:
 
 `RerankerPort` was considered and **dropped** — see "Explicitly deferred."
 
-### `langchain-pinecone` reconciliation
 
-`CLAUDE.md` specifies `langchain-pinecone`, which bundles a vector store's embedding step and its
-similarity search behind one `VectorStore` interface, rather than treating them as fully separate
-steps. The design keeps `EmbedderPort`/`EmbeddingService` as an explicit port — still backed by the
-same `OpenAIEmbeddings` instance — but `adapters/pinecone_client.py`'s `VectorStorePort`
-implementation wraps `langchain_pinecone.PineconeVectorStore`, constructed with that embeddings
-object, and `VectorStorePort.query(text, top_k)` takes raw query text (delegating to
-`asimilarity_search`) rather than a pre-computed vector. This keeps the embedding *provider* still
-swappable at the `EmbeddingService` seam, while the query path stays idiomatic to
-`langchain-pinecone` instead of fighting its abstraction.
+
 
 ## Dependency injection
 
