@@ -1,3 +1,9 @@
+## v0.2.1 (2026-09-15)
+
+### Fix
+
+- rename config base url
+
 ## v0.2.0 (2026-09-15)
 
 ### Feat
