@@ -1,0 +1,37 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str
+
+    PINECONE_API_KEY: str
+    PINECONE_DENSE_INDEX_NAME: str
+    PINECONE_SPARSE_INDEX_NAME: str
+    PINECONE_CLOUD: str
+    PINECONE_REGION: str
+    PINECONE_DENSE_MODEL: str
+    PINECONE_SPARSE_MODEL: str
+    PINECONE_NAMESPACE: str
+
+    KNOWLEDGE_BASE_DIR: Path = Path("data")
+
+    CHECKPOINTER_BACKEND: str = "memory"
+
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()  # pyright: ignore[reportCallIssue] — fields are populated from .env
