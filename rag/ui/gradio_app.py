@@ -29,12 +29,13 @@ class _RenderState:
                 self._tool_block = {
                     "role": "assistant",
                     "content": f"Searching for: {args.get('query', args)}",
-                    "metadata": {"title": f"🔧 {name}"},
+                    "metadata": {"title": f"🔧 {name}", "status": "pending"},
                 }
                 self._rendered.append(self._tool_block)
             case ToolCallResult(output=output):
                 if self._tool_block is not None:
                     self._tool_block["content"] = output
+                    self._tool_block["metadata"]["status"] = "done"
                 self._sources.update(_SOURCE_RE.findall(output))
             case TextDelta(text=text):
                 self._answer["content"] += text
@@ -44,12 +45,12 @@ class _RenderState:
         # claims it cited — more reliable than parsing/trusting free-text citations.
         messages = [*self._rendered, self._answer]
         if self._sources:
-            links = ", ".join(f"[{name}](/kb/{name})" for name in sorted(self._sources))
+            links = "\n".join(f"[{name}](/kb/{name})" for name in sorted(self._sources))
             messages.append(
                 {
                     "role": "assistant",
                     "content": links,
-                    "metadata": {"title": "📚 Sources"},
+                    "metadata": {"title": "📚 Sources", "status": "done"},
                 }
             )
         return messages
@@ -65,6 +66,14 @@ def build_gradio_ui(handle: ContainerHandle) -> gr.Blocks:
 
     with gr.Blocks(title="RAG") as demo:
         thread_id = gr.State(lambda: str(uuid.uuid4()))
-        gr.ChatInterface(fn=respond, additional_inputs=[thread_id])
+
+        chat = gr.ChatInterface(
+            fn=respond,
+            save_history=True,
+            fill_width=True,
+            fill_height=True,
+            additional_inputs=[thread_id],
+        )
+        chat.new_chat_button.click(lambda: str(uuid.uuid4()), outputs=[thread_id])
 
     return demo
