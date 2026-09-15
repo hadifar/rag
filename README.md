@@ -11,6 +11,7 @@ bash scripts/setup.sh
 ```
 Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
 
+**You must have a folder (`~/data/`) with .md files**
 ## Running
 
 ### Python (uv)
