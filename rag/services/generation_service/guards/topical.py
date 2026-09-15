@@ -7,8 +7,8 @@ so it goes through the one, already-correct streaming path instead of needing
 a second one.
 """
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.runnables import Runnable
 
 GUARDRAIL_PROMPT = (
     "You are a scope classifier for a support assistant that only answers questions about "
@@ -32,7 +32,7 @@ def _latest_human_message(messages: list[BaseMessage]) -> str:
     return ""
 
 
-async def is_relevant(llm: BaseChatModel, messages: list[BaseMessage]) -> bool:
+async def is_relevant(llm: Runnable, messages: list[BaseMessage]) -> bool:
     message = _latest_human_message(messages)
     if not message:
         return True
