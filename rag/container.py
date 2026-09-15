@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from rag.adapters.checkpointer import build_checkpointer
 from rag.adapters.llm_client import build_llm
 from rag.adapters.pinecone_client import open_vector_store
+from rag.adapters.observability import trace_config
 from rag.config import Settings
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -31,6 +32,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
             llm=build_llm(settings),
             ranking_service=ranking_service,
             checkpointer=build_checkpointer(settings),
+            trace_config=trace_config,
         )
 
         ingestion_service = IngestionService(

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import gradio as gr
 from fastapi import FastAPI
 
+from rag.adapters.observability import flush
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
@@ -26,6 +27,7 @@ def _build_lifespan(handle: ContainerHandle, settings: Settings):
             handle.container = built
             yield
             handle.container = None
+        flush()
 
     return lifespan
 
