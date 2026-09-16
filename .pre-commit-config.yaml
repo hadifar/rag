@@ -20,6 +20,7 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: true
+
       - id: gitflow-guard
         name: gitflow branch/push guard
         entry: scripts/git-hooks/pre-push
@@ -28,6 +29,7 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: true
+
       - id: stale-branch-warning
         name: stale master/dev warning
         entry: scripts/git-hooks/post-checkout
