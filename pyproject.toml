@@ -88,6 +88,13 @@ source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters"]
 
 [[tool.importlinter.contracts]]
+name = "api and ui do not import adapters directly"
+type = "forbidden"
+source_modules = ["rag.api", "rag.ui"]
+forbidden_modules = ["rag.adapters"]
+ignore_imports = ["rag.container -> rag.adapters.**"]
+
+[[tool.importlinter.contracts]]
 name = "layering"
 type = "layers"
 layers = [
