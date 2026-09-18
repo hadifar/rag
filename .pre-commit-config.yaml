@@ -10,32 +10,13 @@ repos:
 
   # Enforce gitflow: master/dev only accept merges, other branches must
   # follow the feat/fix/refactor/docs/chore/release/hotfix naming convention.
-  - repo: local
+  - repo: https://github.com/hadifar/precommit-gitguard
+    rev: v0.1.2
     hooks:
-      - id: gitflow-commit-guard
-        name: gitflow commit guard
-        entry: scripts/git-hooks/pre-commit
-        language: script
-        pass_filenames: false
-        always_run: true
-        verbose: true
-        stages: [pre-commit]
-
-      - id: gitflow-guard
-        name: gitflow branch/push guard
-        entry: scripts/git-hooks/pre-push
-        language: script
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: stale-branch-warning
-        name: stale master/dev warning
-        entry: scripts/git-hooks/post-checkout
-        language: script
-        pass_filenames: false
-        always_run: true
-        stages: [post-checkout]
+      - id: no-direct-commit
+      - id: no-direct-push
+      - id: branch-name
+      - id: stale-branch
 
   - repo: local
     hooks:
