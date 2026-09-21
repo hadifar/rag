@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useMessages } from '@chatui/core';
 import { streamChat } from '../api/chat';
 import { USER, ASSISTANT } from '../components/avatars';
@@ -7,8 +7,7 @@ import type { ChatStreamEvent, TextContent, ToolContent, SourcesContent } from '
 const SOURCE_RE = /\[source: ([^\]]+)\]/g;
 
 export function useChat() {
-  const { messages, appendMsg, updateMsg } = useMessages([]);
-  const [isTyping, setIsTyping] = useState(false);
+  const { messages, appendMsg, updateMsg, deleteMsg } = useMessages([]);
   const threadIdRef = useRef(crypto.randomUUID());
   const abortRef = useRef<AbortController | null>(null);
 
@@ -23,7 +22,14 @@ export function useChat() {
         position: 'right',
         user: USER,
       });
-      setIsTyping(true);
+
+      // Chat's built-in `isTyping` renders a typing Message without going
+      // through renderMessageContent, so it shows nothing. Use a real message.
+      let typingMsgId: string | null = appendMsg({ type: 'typing', user: ASSISTANT });
+      const clearTyping = () => {
+        if (typingMsgId !== null) deleteMsg(typingMsgId);
+        typingMsgId = null;
+      };
 
       let assistantMsgId: string | null = null;
       let assistantText = '';
@@ -34,7 +40,7 @@ export function useChat() {
       abortRef.current = controller;
 
       const onEvent = (event: ChatStreamEvent) => {
-        setIsTyping(false);
+        clearTyping();
         switch (event.type) {
           case 'text':
             assistantText += event.text;
@@ -95,7 +101,7 @@ export function useChat() {
           });
         }
       } finally {
-        setIsTyping(false);
+        clearTyping();
         if (sources.size > 0) {
           appendMsg({
             type: 'sources',
@@ -105,8 +111,8 @@ export function useChat() {
         }
       }
     },
-    [appendMsg, updateMsg],
+    [appendMsg, updateMsg, deleteMsg],
   );
 
-  return { messages, isTyping, sendMessage };
+  return { messages, sendMessage };
 }

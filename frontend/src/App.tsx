@@ -1,39 +1,22 @@
-import Chat from '@chatui/core';
-import { useChat } from './hooks/useChat';
-import { renderMessageContent } from './components/MessageContent';
-import { EmptyState } from './components/EmptyState';
+import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
-import './App.css';
+import AppLayout from './components/layout/AppLayout';
+import ChatPage from './pages/ChatPage';
+import SettingsPage from './pages/SettingsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
-function App() {
-  const { messages, isTyping, sendMessage } = useChat();
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <AppLayout />,
+    children: [
+      { index: true, element: <ChatPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+    ],
+  },
+  { path: '*', element: <NotFoundPage /> },
+]);
 
-  // const defaultQuickReplies = [
-  //   {
-  //     name: 'What is your name?',
-  //   },
-  //   {
-  //     name: 'Tell me a joke.',
-  //   },
-  //   {
-  //     name: 'How to cook pasta?',
-  //   },
-  // ];
-
-  return (
-    <Chat
-      locale="en-US"
-      navbar={{ title: 'RAG' }}
-      placeholder="Type a message..."
-      messages={messages}
-      renderBeforeMessageList={() => (messages.length === 0 ? <EmptyState /> : null)}
-      renderMessageContent={renderMessageContent}
-      // quickReplies={defaultQuickReplies}
-      // onQuickReplyClick={(item: QuickReplyItemProps) => sendMessage('text', item.name)}
-      isTyping={isTyping}
-      onSend={sendMessage}
-    />
-  );
+export default function App() {
+  return <RouterProvider router={router} />;
 }
-
-export default App;
