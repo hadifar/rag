@@ -34,9 +34,13 @@ uv run rag serve
 ```bash
 docker compose up --build
 ```
-Starts the API on `http://localhost:8000` and the frontend (nginx) on `http://localhost:3000`.
+Starts the API on `http://localhost:8000` and the frontend (nginx) on `http://localhost:3000`. nginx proxies `/api/*` to the `backend` service, so use the frontend URL for the UI.
 
-API at `http://localhost:8000`.
+```bash
+docker compose down   # stop and remove the containers
+```
+
+If nginx fails with `host not found in upstream "backend"`, the backend container has exited. Check `docker compose logs backend`, and rebuild with `docker compose build --no-cache backend` if the image is stale.
 
 ### Frontend
 ```bash
