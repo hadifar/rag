@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  ChatBubbleLeftRightIcon,
+  PencilSquareIcon,
   Cog6ToothIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -10,7 +10,20 @@ import {
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 
-const mainLinks: NavItem[] = [{ to: '/', label: 'Chat', Icon: ChatBubbleLeftRightIcon }];
+// TODO: replace with real sessions from the backend.
+const MOCK_SESSIONS = [
+  { id: 's1', title: 'How do I reset my password?' },
+  { id: 's2', title: 'Summarize the onboarding guide' },
+  { id: 's3', title: 'Refund policy for annual plans' },
+  { id: 's4', title: 'Compare pricing tiers' },
+  { id: 's5', title: 'Explain the API rate limits' },
+  { id: 's6', title: 'Steps to configure SSO' },
+  { id: 's7', title: 'What changed in the last release?' },
+  { id: 's8', title: 'Data retention and deletion' },
+  { id: 's9', title: 'Troubleshooting failed uploads' },
+  { id: 's10', title: 'Security certifications' },
+];
+
 const footerLinks: NavItem[] = [{ to: '/settings', label: 'Settings', Icon: Cog6ToothIcon }];
 
 function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: boolean }) {
@@ -20,7 +33,7 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
       end={to === '/'}
       title={isCollapsed ? label : undefined}
       className={({ isActive }) =>
-        `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors ${
+        `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
           isCollapsed ? 'justify-center' : ''
         } ${
           isActive
@@ -44,6 +57,13 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  const startNewChat = () => {
+    setActiveSession(null);
+    navigate('/');
+  };
 
   return (
     <aside
@@ -89,11 +109,48 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
-        {mainLinks.map((link) => (
-          <SidebarLink key={link.to} {...link} isCollapsed={isCollapsed} />
-        ))}
+      {/* New chat */}
+      <div className="px-2 pt-4 shrink-0">
+        <button
+          onClick={startNewChat}
+          title={isCollapsed ? 'New chat' : undefined}
+          className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors ${
+            isCollapsed ? 'justify-center' : ''
+          }`}
+        >
+          <PencilSquareIcon
+            className="shrink-0 text-slate-400"
+            style={{ height: '1.125rem', width: '1.125rem' }}
+          />
+          {!isCollapsed && 'New chat'}
+        </button>
+      </div>
+
+      <div className="mx-3 my-3 border-t border-slate-100 shrink-0" />
+
+      {/* Previous sessions */}
+      <nav className="flex-1 px-2 pb-2 space-y-0.5 overflow-y-auto min-h-0">
+        {!isCollapsed && (
+          <>
+            <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+              Recent
+            </p>
+            {MOCK_SESSIONS.map(({ id, title }) => (
+              <button
+                key={id}
+                onClick={() => setActiveSession(id)}
+                title={title}
+                className={`block w-full truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
+                  activeSession === id
+                    ? 'bg-slate-100 font-medium text-slate-900'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                {title}
+              </button>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer */}

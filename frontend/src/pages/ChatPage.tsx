@@ -1,11 +1,12 @@
 import Chat from '@chatui/core';
+import { useLocation } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
 import { renderMessageContent } from '../components/MessageContent';
 
 
 import '../App.css';
 
-export default function ChatPage() {
+function ChatSession() {
   const { messages, sendMessage } = useChat();
 
   return (
@@ -18,4 +19,11 @@ export default function ChatPage() {
       onSend={sendMessage}
     />
   );
+}
+
+// New-chat navigates to '/' again, which produces a fresh location.key;
+// keying the session on it remounts the chat with empty state.
+export default function ChatPage() {
+  const { key } = useLocation();
+  return <ChatSession key={key} />;
 }
