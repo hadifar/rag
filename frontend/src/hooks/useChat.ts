@@ -7,17 +7,11 @@ import type { ChatStreamEvent, TextContent, ToolContent, SourcesContent } from '
 const SOURCE_RE = /\[source: ([^\]]+)\]/g;
 
 export function useChat() {
-  const { messages, appendMsg, updateMsg, resetList } = useMessages([]);
+  const { messages, appendMsg, updateMsg } = useMessages([]);
   const [isTyping, setIsTyping] = useState(false);
   const threadIdRef = useRef(crypto.randomUUID());
   const abortRef = useRef<AbortController | null>(null);
 
-  const newChat = useCallback(() => {
-    abortRef.current?.abort();
-    threadIdRef.current = crypto.randomUUID();
-    resetList([]);
-    setIsTyping(false);
-  }, [resetList]);
 
   const sendMessage = useCallback(
     async (type: string, val: string) => {
@@ -114,5 +108,5 @@ export function useChat() {
     [appendMsg, updateMsg],
   );
 
-  return { messages, isTyping, newChat, sendMessage };
+  return { messages, isTyping, sendMessage };
 }

@@ -1,10 +1,12 @@
-import { Bubble, TypingBubble, type MessageProps } from '@chatui/core';
+import { Bubble, Typing, TypingBubble, type MessageProps } from '@chatui/core';
 import { ToolBubble } from './ToolBubble';
 import { SourcesBubble } from './SourcesBubble';
 import type { TextContent, ToolContent, SourcesContent } from '../types/chat';
 
 export function renderMessageContent(msg: MessageProps) {
   switch (msg.type) {
+    case 'typing':
+      return <Typing />;
     case 'text': {
       const { text } = msg.content as TextContent;
       return msg.position === 'right' ? (

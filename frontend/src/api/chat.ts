@@ -2,6 +2,7 @@ import {
   EventStreamContentType,
   fetchEventSource,
 } from '@microsoft/fetch-event-source';
+
 import type { ChatStreamEvent } from '../types/chat';
 
 export function streamChat(
@@ -12,11 +13,13 @@ export function streamChat(
 ): Promise<void> {
 
   return fetchEventSource('/chat/stream', {
+
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, thread_id: threadId }),
     signal,
     openWhenHidden: true,
+
     async onopen(response) {
       const contentType = response.headers.get('content-type') ?? '';
       if (response.ok && contentType.startsWith(EventStreamContentType)) {
@@ -24,6 +27,7 @@ export function streamChat(
       }
       throw new Error(`chat stream failed to open: ${response.status}`);
     },
+
     onmessage(ev) {
       switch (ev.event) {
         case 'text':
