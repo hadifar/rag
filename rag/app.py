@@ -1,7 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-import gradio as gr
 from fastapi import FastAPI
 
 from rag.adapters.observability import flush
@@ -10,7 +9,6 @@ from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
 from rag.config import Settings, get_settings
 from rag.container import Container, ContainerHandle, build_container
-from rag.ui.gradio_app import build_gradio_ui
 
 
 def _build_lifespan(handle: ContainerHandle, settings: Settings):
@@ -42,7 +40,4 @@ def create_app(
     app.include_router(build_chat_router(handle), prefix="/chat")
     app.include_router(build_health_router(handle), prefix="/health")
     app.include_router(build_kb_router(settings), prefix="/kb")
-
-    demo = build_gradio_ui(handle)
-    gr.mount_gradio_app(app, demo, path="/ui")
     return app

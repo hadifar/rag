@@ -9,7 +9,6 @@ authors = [{ name = "hadifar" }]
 
 requires-python = ">=3.12"
 dependencies = [
-    "gradio>=6.27.0",
     "langgraph>=1.2.11",
     "langchain-openai>=1.6.2",
     "fastapi>=0.141.1",
@@ -79,7 +78,7 @@ root_package = "rag"
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.ui"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.api"]
 
 [[tool.importlinter.contracts]]
 name = "services do not import adapters directly"
@@ -88,9 +87,9 @@ source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters"]
 
 [[tool.importlinter.contracts]]
-name = "api and ui do not import adapters directly"
+name = "api does not import adapters directly"
 type = "forbidden"
-source_modules = ["rag.api", "rag.ui"]
+source_modules = ["rag.api"]
 forbidden_modules = ["rag.adapters"]
 ignore_imports = ["rag.container -> rag.adapters.**"]
 
@@ -98,7 +97,7 @@ ignore_imports = ["rag.container -> rag.adapters.**"]
 name = "layering"
 type = "layers"
 layers = [
-    "rag.api | rag.ui",
+    "rag.api",
     "rag.services",
     "rag.domain",
 ]
