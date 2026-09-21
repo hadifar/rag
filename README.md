@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![pre-commit](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml)
 
-A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + Gradio + LangGraph + Pinecone. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
+A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + LangGraph + Pinecone, with a React frontend. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
 
 ![Chat UI](docs/images/screenshot.png)
 
@@ -35,7 +35,15 @@ uv run rag serve
 docker compose up
 ```
 
-Once running: UI at `http://localhost:8000/ui`
+API at `http://localhost:8000`.
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev   # UI at http://localhost:5173, proxies API calls to :8000
+```
+See [frontend/README.md](frontend/README.md).
 
 ## Coding style
 Follows PEP 20 and the [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md).
