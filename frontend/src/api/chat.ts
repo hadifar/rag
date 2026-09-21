@@ -12,7 +12,7 @@ export function streamChat(
   signal?: AbortSignal,
 ): Promise<void> {
 
-  return fetchEventSource('/chat/stream', {
+  return fetchEventSource('api/chat/stream', {
 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

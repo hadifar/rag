@@ -32,8 +32,9 @@ uv run rag serve
 
 ### Docker
 ```bash
-docker compose up
+docker compose up --build
 ```
+Starts the API on `http://localhost:8000` and the frontend (nginx) on `http://localhost:3000`.
 
 API at `http://localhost:8000`.
 
