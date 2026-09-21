@@ -2,8 +2,8 @@ import { type SubmitEvent, useState } from 'react';
 import type { Settings } from '../types';
 
 const inputCls =
-  'rounded-md border border-gray-500/40 bg-transparent px-2.5 py-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-indigo-500';
-const labelCls = 'flex flex-col gap-1.5 text-sm font-medium';
+  'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-normal text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition';
+const labelCls = 'flex flex-col gap-1.5 text-sm font-medium text-slate-700';
 
 const DEFAULTS: Settings = { model: '', temperature: 0, top_k: 4, system_prompt: '' };
 
@@ -20,7 +20,7 @@ export default function SettingsPage() {
 
   return (
     <form className="flex max-w-xl flex-col gap-4 p-8" onSubmit={handleSubmit}>
-      <h1 className="mb-2 text-xl font-semibold">Settings</h1>
+      <h1 className="mb-2 text-xl font-semibold text-slate-900">Settings</h1>
 
       <label className={labelCls}>
         Model
@@ -57,7 +57,7 @@ export default function SettingsPage() {
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
         >
           Save
         </button>
