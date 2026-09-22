@@ -18,13 +18,24 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # pyproject.toml's pre_bump_hooks (uv lock + git add) run before commitizen creates the
-      # bump commit, so uv.lock lands in the same commit — needs uv on PATH first.
-      - uses: astral-sh/setup-uv@v10.1.0
-
       - name: Bump version and push tag
         uses: commitizen-tools/commitizen-action@0.27.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           changelog: true
           push: true
+
+      # commitizen-action runs in its own Docker container with no uv, so uv.lock can't be
+      # synced via pyproject.toml's pre_bump_hooks — do it here on the runner instead.
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      - name: Sync uv.lock with the bumped version
+        run: |
+          uv lock
+          if ! git diff --quiet uv.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add uv.lock
+            git commit -m "chore: sync uv.lock after version bump [skip ci]"
+            git push
+          fi
