@@ -7,6 +7,7 @@ from rag.adapters.observability import flush
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
+from rag.api.routers.settings import build_settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, ContainerHandle, build_container
 
@@ -40,4 +41,5 @@ def create_app(
     app.include_router(build_chat_router(handle), prefix="/api/chat")
     app.include_router(build_health_router(handle), prefix="/api/health")
     app.include_router(build_kb_router(settings), prefix="/api/kb")
+    app.include_router(build_settings_router(settings), prefix="/api/settings")
     return app
