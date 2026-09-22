@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,7 +27,8 @@ class Settings(BaseSettings):
 
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
-    CHECKPOINTER_BACKEND: str = "memory"
+    CHECKPOINTER_BACKEND: Literal["memory", "postgres"] = "memory"
+    DATABASE_URL: str | None = None
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

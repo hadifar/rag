@@ -3,39 +3,20 @@ default_install_hook_types: [pre-commit, commit-msg, pre-push, post-checkout]
 repos:
   # Enforce Conventional Commits on the commit message
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.18.0
+    rev: v4.18.1
     hooks:
       - id: commitizen
         stages: [commit-msg]
 
   # Enforce gitflow: master/dev only accept merges, other branches must
   # follow the feat/fix/refactor/docs/chore/release/hotfix naming convention.
-  - repo: local
+  - repo: https://github.com/hadifar/precommit-gitguard
+    rev: v0.1.2
     hooks:
-      - id: gitflow-commit-guard
-        name: gitflow commit guard
-        entry: scripts/git-hooks/pre-commit
-        language: script
-        stages: [pre-commit]
-        pass_filenames: false
-        always_run: true
-        verbose: true
-      - id: gitflow-guard
-        name: gitflow branch/push guard
-        entry: scripts/git-hooks/pre-push
-        language: script
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-        verbose: true
-      - id: stale-branch-warning
-        name: stale master/dev warning
-        entry: scripts/git-hooks/post-checkout
-        language: script
-        stages: [post-checkout]
-        pass_filenames: false
-        verbose: true
-        always_run: true
+      - id: no-direct-commit
+      - id: no-direct-push
+      - id: branch-name
+      - id: stale-branch
 
   - repo: local
     hooks:
@@ -44,25 +25,32 @@ repos:
         entry: uv run lint-imports
         language: system
         pass_filenames: false
+        stages: [pre-commit]
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-      - id: check-merge-conflict
-      - id: debug-statements
+          - id: trailing-whitespace
+          - id: end-of-file-fixer
+          - id: check-yaml
+          - id: check-added-large-files
+            args: [--maxkb=1000]
+          - id: check-merge-conflict
+          - id: debug-statements
+            name: pre-commit general file check
+
+
 
   # Ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.17
+    rev: v0.16.8
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+        name: ruff
+        stages: [pre-commit]
 
   # type checking via pyright
   - repo: https://github.com/RobertCraigie/pyright-python

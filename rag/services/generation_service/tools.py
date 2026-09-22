@@ -1,9 +1,9 @@
 from langchain_core.tools import BaseTool, tool
 
-from rag.services.ranking_service.service import RankingService
+from rag.services.retrieval_service.service import RetrievalService
 
 
-def build_search_tool(ranking_service: RankingService) -> BaseTool:
+def build_search_tool(ranking_service: RetrievalService) -> BaseTool:
     """Closure over an injected RankingService — see engineering_design.md's note on
     reconciling LangGraph's module-level @tool convention with constructor injection.
     """

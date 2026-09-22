@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![pre-commit](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml)
 
-A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + Gradio + LangGraph + Pinecone. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
+A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + LangGraph + Pinecone, with a React frontend. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
 
 ![Chat UI](docs/images/screenshot.png)
 
@@ -17,12 +17,26 @@ bash scripts/setup.sh
 Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
 
 **You must have a folder (`~/data/`) with .md files**
+
+If running via Docker (below), also create the Postgres init password Docker Compose expects,
+gitignored and never read by the app itself:
+```bash
+mkdir -p .secrets
+openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
+```
+Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
+directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
+
 ## Running
 
 ### Python (uv)
 ```bash
 uv run python -m rag serve
 ```
+If `.env` has `CHECKPOINTER_BACKEND=postgres`, a Postgres instance must be reachable at
+`DATABASE_URL` — either `docker compose up -d postgres` (published on `localhost:5432`; adjust
+`DATABASE_URL`'s host to `localhost` when running the app outside Docker) or set
+`CHECKPOINTER_BACKEND=memory` for a dependency-free local run.
 
 ### CLI
 ```bash
@@ -32,10 +46,28 @@ uv run rag serve
 
 ### Docker
 ```bash
-docker compose up
+docker compose up --build
+```
+Starts `postgres` (checkpointer storage, published on `localhost:5432`), `backend`, and the
+frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to the host,
+only reachable inside the compose network. nginx proxies `/api/*` to it, so use the frontend URL
+for both the UI and the API.
+
+Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup) above.
+
+```bash
+docker compose down   # stop and remove the containers
 ```
 
-Once running: UI at `http://localhost:8000/ui`
+If nginx fails with `host not found in upstream "backend"`, the backend container has exited. Check `docker compose logs backend`, and rebuild with `docker compose build --no-cache backend` if the image is stale.
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev   # UI at http://localhost:5173, proxies API calls to :8000
+```
+See [frontend/README.md](frontend/README.md).
 
 ## Coding style
 Follows PEP 20 and the [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md).

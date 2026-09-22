@@ -9,7 +9,6 @@ authors = [{ name = "hadifar" }]
 
 requires-python = ">=3.12"
 dependencies = [
-    "gradio>=6.27.0",
     "langgraph>=1.2.11",
     "langchain-openai>=1.6.2",
     "fastapi>=0.141.1",
@@ -20,6 +19,8 @@ dependencies = [
     "pinecone>=6.0.0",
     "langfuse>=4.15.2",
     "langchain>=1.4.0",
+    "langgraph-checkpoint-postgres>=3.1.2",
+    "psycopg[binary,pool]>=3.3.6",
 ]
 
 [project.urls]
@@ -51,6 +52,7 @@ tag_format = "v$version"
 update_changelog_on_bump = true
 major_version_zero = true
 version_provider = "pep621"
+version_files = ["frontend/package.json:version"]
 
 [tool.pyright]
 typeCheckingMode = "basic"
@@ -79,7 +81,7 @@ root_package = "rag"
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.ui"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.api"]
 
 [[tool.importlinter.contracts]]
 name = "services do not import adapters directly"
@@ -88,10 +90,17 @@ source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters"]
 
 [[tool.importlinter.contracts]]
+name = "api does not import adapters directly"
+type = "forbidden"
+source_modules = ["rag.api"]
+forbidden_modules = ["rag.adapters"]
+ignore_imports = ["rag.container -> rag.adapters.**"]
+
+[[tool.importlinter.contracts]]
 name = "layering"
 type = "layers"
 layers = [
-    "rag.api | rag.ui",
+    "rag.api",
     "rag.services",
     "rag.domain",
 ]
