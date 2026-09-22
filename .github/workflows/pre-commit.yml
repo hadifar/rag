@@ -9,7 +9,12 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — gitguard's no-direct-commit hook checks merge-commit parent count;
+      # the default shallow (depth 1) checkout strips parent metadata from merge commits,
+      # making every real merge look like a direct commit.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
