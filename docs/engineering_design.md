@@ -1,22 +1,46 @@
 # Engineering Design — RAG Chatbot
 
-A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`).
+A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`), with a FastAPI
+backend and a separate React frontend.
 
-![langgraph](images/langgraph.png)
+```mermaid
+graph TD
+    __start__((start)) --> guardrail(guardrail)
+    guardrail(guardrail) --> agent(agent)
+    agent(agent) -.-> tools(tools)
+    agent(agent) -.-> verify(verify)
+    tools(tools) --> agent(agent)
+    verify(verify) -.->|ungrounded| agent(agent)
+    verify(verify) -.->|grounded| __end__((end))
+
+    classDef default fill:#f2f0ff,line-height:1.2
+    classDef first fill-opacity:0
+    classDef last fill:#bfb6fc
+    class __start__ first
+    class __end__ last
+```
+
+`guardrail` classifies the message as in/out of scope for AtlasFlow (adding an off-topic
+instruction rather than short-circuiting, so the decline text is still generated — and
+streamed — by `agent`). `agent` calls the LLM (bound to `search_kb`); `tools_condition` routes
+to `tools` on a tool call or on to `verify` otherwise. `tools` always loops back to `agent`.
+`verify` checks the final answer against retrieved context (`is_grounded`) and either ends the
+turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
 
 ## Tech stack
 
 | Concern | Choice |
 |---|---|
 | Language / runtime | Python ≥3.12, managed with `uv` |
-| Web framework | FastAPI (`/chat/stream`, health endpoints) |
-| UI | Gradio, mounted onto the FastAPI app (`gr.mount_gradio_app`) |
+| Backend framework | FastAPI (`/api/chat`, `/api/health`, `/api/kb`, `/api/settings`) |
+| Frontend | React 19 + TypeScript + Vite, Tailwind CSS, `@chatui/core`; talks to the backend over SSE via `@microsoft/fetch-event-source` |
 | Orchestration | LangGraph |
-| LLM + embeddings | `langchain-openai` — `ChatOpenAI` (`gpt-4o-mini`), `OpenAIEmbeddings` (`text-embedding-3-small`, 1536-dim) |
-| Vector store | Pinecone via `langchain-pinecone` |
-| Config | `pydantic` + `pydantic-settings` (defaults in code, `.env` overrides) |
+| LLM | `langchain-openai` — `ChatOpenAI` (model configurable via `OPENAI_MODEL`, e.g. `gpt-4o-mini`), streaming enabled |
+| Retrieval | Hybrid search against two Pinecone-managed indexes (dense + sparse) via the `pinecone` SDK's async client directly — **no client-side embedding step**; Pinecone hosts the embedding models (`PINECONE_DENSE_MODEL` / `PINECONE_SPARSE_MODEL`) |
+| Observability | Langfuse tracing (`adapters/observability.py`), toggled by `LANGFUSE_ENABLED` |
+| Config | `pydantic` + `pydantic-settings` (`.env` overrides, no code defaults for secrets) |
 | CLI | Typer (`rag.cli:app`) |
-| Deployment | Docker → Azure Container Apps (serve) / Container Apps Jobs (ingest) |
+| Deployment | Docker Compose — separate `backend` (FastAPI/uvicorn) and `frontend` (nginx serving the Vite build, proxying `/api/*`) containers |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` |
 
 ## Layout
@@ -26,105 +50,126 @@ rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
 ├── cli.py                            # Typer: `rag serve`, `rag ingest`
 ├── config.py                         # Settings (pydantic-settings)
-├── container.py                      # composition root — builds the object graph only
-├── app.py                            # FastAPI-specific only: routes, Gradio mount
+├── container.py                      # composition root — async context manager, builds Container
+├── app.py                            # FastAPI-specific only: lifespan, routers
 │
 ├── domain/                           # zero framework imports — pure contracts + models
-│   ├── models.py                     # RawDocument, Chunk, RetrievedChunk, ChatTurn, Citation
-│   └── ports.py                      # VectorStorePort, EmbedderPort, LLMPort,
-│                                      # DocumentLoaderPort, ChunkerPort
+│   ├── models.py                     # RawDocument, IngestionReport
+│   └── ports.py                      # VectorStorePort, DocumentLoaderPort, ChunkerPort
 │
 ├── services/                         # business logic — depends only on domain/ports
-│   ├── embedding_service/
-│   ├── ranking_service/
+│   ├── retrieval_service/            # hybrid similarity search + single-doc lookup
 │   ├── ingestion_service/            # + loaders.py, chunking.py
-│   └── generation_service/           # + graph.py, state.py, prompts.py, tools.py, streaming.py
+│   └── generation_service/           # + graph.py, service.py, tools.py, streaming.py, guards/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
-│   ├── pinecone_client.py
-│   ├── embedding_client.py
+│   ├── pinecone_client.py            # hybrid dense+sparse HybridPineconeVectorStore
 │   ├── llm_client.py
-│   └── logging.py
+│   ├── checkpointer.py               # LangGraph checkpointer (CHECKPOINTER_BACKEND)
+│   └── observability.py              # Langfuse tracing config
 │
 ├── api/
 │   ├── schema.py                     # request/response DTOs
-│   └── routers/                      # chat.py, health.py
+│   └── routers/                      # chat.py, health.py, kb.py, settings.py
 │
-└── ui/
-    └── gradio_app.py
+frontend/                              # repo root — separate Vite/React app
+├── src/
+│   ├── api/                          # chat.ts (SSE client), settings.ts
+│   ├── components/                   # ToolBubble, SourcesBubble, MessageContent, layout/
+│   ├── hooks/useChat.ts
+│   └── pages/                        # ChatPage, SettingsPage, NotFoundPage
+└── (Vite build served by nginx in Docker)
 
-infra/                                 # repo root — Docker + Azure, no Python imports
-├── docker/Dockerfile
-└── azure/containerapp.bicep
+infra/                                 # repo root — Docker, no Python imports
+└── docker/                           # Dockerfile.backend, Dockerfile.frontend, nginx.conf
 ```
 
 Enforced by `import-linter` (`pyproject.toml`):
 - `domain` imports nothing else in the project.
 - `services` never imports `adapters` directly — only via injected `Protocol` types.
-- Layering: `api | ui` → `services` → `domain`, one direction only.
+- `api` never imports `adapters` directly (except `container.py`, which is the wiring root).
+- Layering: `api` → `services` → `domain`, one direction only.
 
 ## Services
 
-Four services, each with a narrow, ports-typed constructor:
+Three services, each with a narrow, ports-typed constructor. There is no separate embedding
+service — Pinecone's integrated inference embeds text server-side, so nothing in `rag/` ever
+calls an embedding model directly.
 
 | Service | Responsibility | Depends on |
 |---|---|---|
-| `embedding_service` | `embed_query` / `embed_documents` | `EmbedderPort` |
-| `ranking_service` | similarity search against the vector store | `VectorStorePort` |
-| `ingestion_service` | load → chunk → embed → upsert, source-agnostic | `DocumentLoaderPort`, `ChunkerPort`, `EmbedderPort`, `VectorStorePort` |
-| `generation_service` | owns the LangGraph graph; retrieve → generate, tool calls, streaming | `LLMPort`, `ranking_service` |
+| `retrieval_service` | hybrid (dense+sparse) similarity search, plus single-document lookup by `source_id` | `VectorStorePort` |
+| `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
+| `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
 
-`RerankerPort` was considered and **dropped** — see "Explicitly deferred."
-
-
-
+A `RerankerPort` was considered and dropped — hybrid dense+sparse retrieval was judged to cover
+the same need without a separate reranking pass.
 
 ## Dependency injection
 
 `container.py` is the only place concrete adapters get constructed and injected — pure wiring, no
-FastAPI/Gradio imports:
+FastAPI/React imports. It's an async context manager so the Pinecone index connections it opens
+get torn down deterministically:
 
 ```python
 @dataclass
 class Container:
-    embedding_service: EmbeddingService
-    ranking_service: RankingService
+    ranking_service: RetrievalService
     generation_service: GenerationService
     ingestion_service: IngestionService
 
-def build_container(settings: Settings) -> Container: ...
+
+@asynccontextmanager
+async def build_container(settings: Settings) -> AsyncGenerator[Container]: ...
 ```
 
-`app.py`'s `create_app(container: Container | None = None) -> FastAPI` consumes an already-built
-container — this also means tests can pass a `Container` of fakes into a real `FastAPI` app without
-touching `Settings` or any network.
+`ContainerHandle` holds the active `Container`; the FastAPI lifespan swaps it in on startup.
+Routers and the container are built before the lifespan runs, so routers close over the handle
+and resolve `.get()` per-request rather than holding a `Container` directly — this also means
+tests can pass a pre-built `Container` of fakes into `create_app()` without touching `Settings`
+or any network.
 
 ## Conversation state
 
-LangGraph's `MemorySaver` checkpointer, keyed by a client-generated UUID `thread_id`:
-- Gradio generates one per browser session (`gr.State`).
+A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
+`adapters/checkpointer.py` from `Settings.CHECKPOINTER_BACKEND` (currently only `"memory"` →
+`InMemorySaver` is implemented):
+- The frontend generates one per browser session and passes it in every request.
 - A raw API caller generates and passes its own in `ChatRequest.thread_id`.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves it.
 - Known limitation, accepted for now: in-memory state doesn't survive a restart or multiple
-  replicas. Swapping to a persistent checkpointer (e.g. `langgraph-checkpoint-postgres`) later is a
-  one-line change in `build_checkpointer()`, isolated to that adapter.
+  replicas. Swapping to a persistent backend (e.g. `langgraph-checkpoint-postgres`) later means
+  adding a branch to `build_checkpointer()`, isolated to that adapter.
 
 ## Tool calling
 
-`generation_service`'s `search_kb` tool is built as a closure inside `GenerationService.__init__`
-(a `build_search_tool(self._ranking_service)` factory), not a module-level `@tool` function — this
-keeps it consistent with constructor injection everywhere else, since `ranking_service` is a fixed
-dependency of the service instance, not something that varies per request.
+`generation_service`'s `search_kb` tool is built as a closure inside `tools.py`
+(`build_search_tool(ranking_service)`), not a module-level `@tool` function — this keeps it
+consistent with constructor injection everywhere else, since `retrieval_service` is a fixed
+dependency of the service instance, not something that varies per request. (The parameter is
+still named `ranking_service` in code — a naming holdover from before the `ranking_service` →
+`retrieval_service` rename that hasn't been swept through every call site yet.)
+
+## Observability
+
+`adapters/observability.py` wraps a single Langfuse `CallbackHandler`, built lazily and cached,
+active only when `LANGFUSE_ENABLED` is set. `trace_config(name)` returns a LangChain
+`RunnableConfig` with the callback wired in, or `{}` when tracing is off — so callers always pass
+`config=trace_config(...)` with no behavioral change either way. `GenerationService` uses it to
+tag the chat run; `app.py`'s lifespan calls `flush()` on shutdown so short-lived runs aren't lost.
 
 ## Streaming
 
 `generation_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
-vocabulary (`TextDelta`, `ThinkingDelta`, `ToolCallStart`, `ToolCallResult`). Both consumers read the
-same async stream directly:
-- FastAPI's `/chat/stream` turns it into SSE.
-- Gradio's `ChatInterface.fn` is an `async def ... yield` generator — Gradio 6.x supports async
-  generators natively (`inspect.isasyncgenfunction`), so no sync/async bridge is needed. Tool calls
-  and thinking render via Gradio's `metadata={"title": ...}` collapsible-block convention.
+vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `agent` node's chat
+model calls only — `guardrail` and `verify` run their own LLM calls (classification, not an
+answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
+text stream too. Two consumers read the normalized stream:
+- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result`
+  events).
+- The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
+  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
+  (which links to `/api/kb/{filename}`).
 
 ## Ingestion — designed for more sources later
 
@@ -132,24 +177,35 @@ same async stream directly:
 class DocumentLoaderPort(Protocol):
     def load(self) -> Iterable[RawDocument]: ...
 
+
 class ChunkerPort(Protocol):
-    def chunk(self, doc: RawDocument) -> list[Chunk]: ...
+    def chunk(self, document: RawDocument) -> list[Document]: ...
 ```
 
 `MarkdownFileLoader` is the only concrete loader today. Adding a new source (PDF, Confluence, a
-wiki) means writing a new class satisfying `DocumentLoaderPort` and registering it — `IngestionService`,
-chunking, embedding, and the vector store adapter are all untouched. Chunk IDs are deterministic
-(`f"{source_id}::{chunk_index}"`), so re-running `rag ingest` after a doc changes updates existing
-vectors instead of duplicating them. The Pinecone index is created idempotently (check-exists /
-create-if-missing, dimension derived from the embedding model) on first `rag ingest` run — no manual
+wiki) means writing a new class satisfying `DocumentLoaderPort` and registering it —
+`IngestionService`, chunking, and the vector store adapter are all untouched. Two chunkers exist:
+`WholeDocumentChunker` (one chunk per document — wired in by default in `container.py`) and
+`MarkdownHeaderChunker` (splits on `#`/`##`/`###` headings). Both produce `langchain_core.Document`
+chunks directly, with deterministic ids (`f"{source_id}::{chunk_index}"`), so re-running
+`rag ingest` after a doc changes upserts over the existing vectors instead of duplicating them.
+`IngestionService` never calls an embedding model itself — `aadd_documents` upserts raw
+text+metadata records to both the dense and sparse Pinecone indexes, and Pinecone's integrated
+inference embeds them server-side. Both indexes are created idempotently (check-exists /
+create-if-missing, one per configured embedding model) on first `rag ingest` run — no manual
 console step required.
 
 ## API surface
 
-- `POST /chat/stream` — `{message: str, thread_id: str}` → SSE stream of normalized events.
-- `GET /health/live` — always 200 (liveness probe).
-- `GET /health/ready` — cheap Pinecone connectivity check + confirms LLM config is present, no real
-  LLM call (readiness probe) — matches how Azure Container Apps probes work.
+- `POST /api/chat/stream` — `{message: str, thread_id: str}` → SSE stream of normalized events.
+- `GET /api/health/live` — always 200 (liveness probe).
+- `GET /api/health/ready` — deliberately exercises the real retrieval path (a dense+sparse
+  Pinecone query) rather than a bare ping, so "ready" actually means "can serve"; no real LLM
+  call.
+- `GET /api/kb/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
+  the frontend's source citations.
+- `GET /api/settings` — returns `{model, temperature, top_k, system_prompt}` for display in the
+  UI. `temperature` and `top_k` are currently static constants in the router, not yet threaded
+  through the actual generation/retrieval calls they name.
 
-Auth/rate-limiting: **out of scope** for this build. `Settings` carries an unused optional `api_key`
-field as a seam so a minimal API-key check can be added later without redesigning `api/`.
+Auth/rate-limiting: **out of scope** for this build — `Settings` has no auth-related field today.
