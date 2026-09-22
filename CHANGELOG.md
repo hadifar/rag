@@ -1,3 +1,11 @@
+## v0.4.2 (2026-09-22)
+
+### Fix
+
+- issue with precommit bump uv lock
+- resolve merge conflict
+- resolve pre-commit bump issue
+
 ## v0.4.1 (2026-09-22)
 
 ### Fix
