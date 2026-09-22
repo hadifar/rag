@@ -34,7 +34,9 @@ uv run rag serve
 ```bash
 docker compose up --build
 ```
-Starts the API on `http://localhost:8000` and the frontend (nginx) on `http://localhost:3000`. nginx proxies `/api/*` to the `backend` service, so use the frontend URL for the UI.
+Starts the frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to
+the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
+frontend URL for both the UI and the API.
 
 ```bash
 docker compose down   # stop and remove the containers

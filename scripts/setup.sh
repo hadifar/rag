@@ -16,8 +16,8 @@ echo "==> Installing git hooks"
 uv run pre-commit install
 
 if [ ! -f .env ]; then
-    echo "==> Creating .env from .env.example"
-    cp .env.example .env
+    echo "==> Creating .env from .example.env"
+    cp .example.env .env
     echo "    Fill in PINECONE_API_KEY / your LLM provider key before running 'serve' or 'ingest'."
 else
     echo "==> .env already exists, leaving it as-is"

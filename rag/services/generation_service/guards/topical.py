@@ -1,12 +1,3 @@
-"""Scope guardrail: flags questions unrelated to AtlasFlow before a retrieval/
-generation cycle is spent on them.
-
-Classification only decides *whether* to inject an off-topic instruction — the
-actual decline text is still generated (and streamed) by the agent node itself,
-so it goes through the one, already-correct streaming path instead of needing
-a second one.
-"""
-
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.runnables import Runnable
 
