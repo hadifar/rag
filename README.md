@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![pre-commit](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/hadifar/rag/actions/workflows/pre-commit.yml)
 
-A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + Gradio + LangGraph + Pinecone. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
+A ~~production~~ ready to use RAG implementation. Support chatbot over the AtlasFlow knowledge base ([data/](data/)), built on FastAPI + LangGraph + Pinecone, with a React frontend. Architecture: [docs/engineering_design.md](docs/engineering_design.md).
 
 ![Chat UI](docs/images/screenshot.png)
 
@@ -32,10 +32,23 @@ uv run rag serve
 
 ### Docker
 ```bash
-docker compose up
+docker compose up --build
+```
+Starts the API on `http://localhost:8000` and the frontend (nginx) on `http://localhost:3000`. nginx proxies `/api/*` to the `backend` service, so use the frontend URL for the UI.
+
+```bash
+docker compose down   # stop and remove the containers
 ```
 
-Once running: UI at `http://localhost:8000/ui`
+If nginx fails with `host not found in upstream "backend"`, the backend container has exited. Check `docker compose logs backend`, and rebuild with `docker compose build --no-cache backend` if the image is stale.
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev   # UI at http://localhost:5173, proxies API calls to :8000
+```
+See [frontend/README.md](frontend/README.md).
 
 ## Coding style
 Follows PEP 20 and the [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md).

@@ -1,0 +1,19 @@
+# VCS / CI / editor / agent config
+.git
+.github
+.claude
+.vscode
+
+# Python
+.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.import_linter_cache
+
+# Node
+**/node_modules
+**/dist
+
+# Secrets are passed at runtime via env_file, never baked into an image
+*.env
