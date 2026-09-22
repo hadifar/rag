@@ -17,12 +17,26 @@ bash scripts/setup.sh
 Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
 
 **You must have a folder (`~/data/`) with .md files**
+
+If running via Docker (below), also create the Postgres init password Docker Compose expects,
+gitignored and never read by the app itself:
+```bash
+mkdir -p .secrets
+openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
+```
+Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
+directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
+
 ## Running
 
 ### Python (uv)
 ```bash
 uv run python -m rag serve
 ```
+If `.env` has `CHECKPOINTER_BACKEND=postgres`, a Postgres instance must be reachable at
+`DATABASE_URL` — either `docker compose up -d postgres` (published on `localhost:5432`; adjust
+`DATABASE_URL`'s host to `localhost` when running the app outside Docker) or set
+`CHECKPOINTER_BACKEND=memory` for a dependency-free local run.
 
 ### CLI
 ```bash
@@ -34,9 +48,12 @@ uv run rag serve
 ```bash
 docker compose up --build
 ```
-Starts the frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to
-the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
-frontend URL for both the UI and the API.
+Starts `postgres` (checkpointer storage, published on `localhost:5432`), `backend`, and the
+frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to the host,
+only reachable inside the compose network. nginx proxies `/api/*` to it, so use the frontend URL
+for both the UI and the API.
+
+Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup) above.
 
 ```bash
 docker compose down   # stop and remove the containers

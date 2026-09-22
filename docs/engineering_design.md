@@ -40,7 +40,8 @@ turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_AT
 | Observability | Langfuse tracing (`adapters/observability.py`), toggled by `LANGFUSE_ENABLED` |
 | Config | `pydantic` + `pydantic-settings` (`.env` overrides, no code defaults for secrets) |
 | CLI | Typer (`rag.cli:app`) |
-| Deployment | Docker Compose — separate `backend` (FastAPI/uvicorn) and `frontend` (nginx serving the Vite build, proxying `/api/*`) containers |
+| Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer storage) |
+| Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` |
 
 ## Layout
@@ -132,14 +133,16 @@ or any network.
 ## Conversation state
 
 A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
-`adapters/checkpointer.py` from `Settings.CHECKPOINTER_BACKEND` (currently only `"memory"` →
-`InMemorySaver` is implemented):
+`adapters/checkpointer.py`'s `open_checkpointer()` (an async context manager, mirroring
+`open_vector_store()`) from `Settings.CHECKPOINTER_BACKEND`:
 - The frontend generates one per browser session and passes it in every request.
 - A raw API caller generates and passes its own in `ChatRequest.thread_id`.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves it.
-- Known limitation, accepted for now: in-memory state doesn't survive a restart or multiple
-  replicas. Swapping to a persistent backend (e.g. `langgraph-checkpoint-postgres`) later means
-  adding a branch to `build_checkpointer()`, isolated to that adapter.
+- `"memory"` (default) → `InMemorySaver`, for local dev; doesn't survive a restart or multiple
+  replicas.
+- `"postgres"` → `AsyncPostgresSaver`, reading `Settings.DATABASE_URL`; `checkpointer.setup()`
+  runs on connect (idempotent schema migration). Durable across restarts and safe for multiple
+  backend replicas.
 
 ## Tool calling
 
@@ -194,6 +197,52 @@ text+metadata records to both the dense and sparse Pinecone indexes, and Pinecon
 inference embeds them server-side. Both indexes are created idempotently (check-exists /
 create-if-missing, one per configured embedding model) on first `rag ingest` run — no manual
 console step required.
+
+## Secrets management
+
+**Local dev** — all secrets live in `.env` (gitignored, never committed), loaded by
+`pydantic-settings`. The one exception is the `postgres` container's own init password: it's
+passed via a Docker Compose secret file (`.secrets/postgres_password.txt`, also gitignored,
+referenced in `docker-compose.yml`'s `secrets:` block) rather than an env var, so it never has to
+round-trip through `Settings` at all — the app connects to Postgres using `DATABASE_URL` (which
+already contains the same password), not `POSTGRES_PASSWORD`.
+
+**Prod (Azure App Service)** — secrets are stored in Azure Key Vault and exposed to the app as
+*Key Vault references* in App Service's Application Settings. App Service resolves these (via the
+app's system-assigned Managed Identity — no credentials stored anywhere) into plain env vars
+before the container starts, so `Settings` needs no code changes: it already reads config from
+`os.environ` via `pydantic-settings`.
+
+Setup, once per environment:
+
+```bash
+# 1. Create the Key Vault
+az keyvault create --name <vault-name> --resource-group <rg> --location <region>
+
+# 2. Store each secret
+az keyvault secret set --vault-name <vault-name> --name database-url --value "<postgresql://...>"
+az keyvault secret set --vault-name <vault-name> --name openai-api-key --value "<...>"
+az keyvault secret set --vault-name <vault-name> --name pinecone-api-key --value "<...>"
+# ...repeat for LANGFUSE_SECRET_KEY, etc.
+
+# 3. Give the App Service a system-assigned identity
+az webapp identity assign --name <app-name> --resource-group <rg>
+
+# 4. Grant that identity read access to secrets (RBAC — "Key Vault Secrets User" role)
+az role assignment create \
+  --role "Key Vault Secrets User" \
+  --assignee <principal-id-from-step-3> \
+  --scope $(az keyvault show --name <vault-name> --query id -o tsv)
+
+# 5. Point Application Settings at the Key Vault secrets
+az webapp config appsettings set --name <app-name> --resource-group <rg> --settings \
+  DATABASE_URL="@Microsoft.KeyVault(SecretUri=https://<vault-name>.vault.azure.net/secrets/database-url/)" \
+  OPENAI_API_KEY="@Microsoft.KeyVault(SecretUri=https://<vault-name>.vault.azure.net/secrets/openai-api-key/)"
+```
+
+Known limitation: App Service caches resolved Key Vault references and refreshes them
+periodically (not instantly), so rotating a secret's value in the Vault requires restarting the
+app to pick it up immediately.
 
 ## API surface
 
