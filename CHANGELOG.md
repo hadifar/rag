@@ -1,3 +1,31 @@
+## v0.4.0 (2026-09-22)
+
+### Feat
+
+- add postgress for checkpointer
+- add rate limit to nginx
+- add mock session to the sidebar
+- nav item ui updated
+- layout updated & Typing added
+- typing input added to chatui
+- drop gradio
+- react v1
+
+### Fix
+
+- frontend auto-bump included
+- add api/ to kb route in react
+- setting values comes from api
+- update docker & docker compse
+- drop gitflow hook with remote version
+- add adapter contract for import lint
+
+### Refactor
+
+- drop unnecessary docstring
+- replace local loads with pinecone
+- reaname ranking to retrieval
+
 ## v0.3.0 (2026-09-15)
 
 ### Feat
