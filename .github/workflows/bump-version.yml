@@ -29,6 +29,12 @@ jobs:
       # synced via pyproject.toml's pre_bump_hooks — do it here on the runner instead.
       - uses: astral-sh/setup-uv@v10.1.0
 
+      # commitizen-action's container runs as root and writes to .git during its own commit,
+      # leaving .git internals (e.g. COMMIT_EDITMSG) root-owned — reclaim them before the
+      # runner's own user (not root) tries to commit again below.
+      - name: Reclaim workspace ownership from the commitizen-action container
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
       - name: Sync uv.lock with the bumped version
         run: |
           uv lock
