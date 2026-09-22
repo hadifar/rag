@@ -1,3 +1,9 @@
+## v0.4.3 (2026-09-22)
+
+### Fix
+
+- update precommit-gitguard to version 0.1.3 and adjust fetch-depth in pre-commit workflow
+
 ## v0.4.2 (2026-09-22)
 
 ### Fix
