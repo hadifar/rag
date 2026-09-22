@@ -40,6 +40,6 @@ def create_app(
     app = FastAPI(title="RAG", lifespan=_build_lifespan(handle, settings))
     app.include_router(build_chat_router(handle), prefix="/api/chat")
     app.include_router(build_health_router(handle), prefix="/api/health")
-    app.include_router(build_kb_router(settings), prefix="/api/kb")
+    app.include_router(build_kb_router(handle), prefix="/api/kb")
     app.include_router(build_settings_router(settings), prefix="/api/settings")
     return app

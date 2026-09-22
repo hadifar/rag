@@ -1,12 +1,12 @@
 from rag.adapters.pinecone_client import open_vector_store
-from rag.services.ranking_service.service import RankingService
+from rag.services.retrieval_service.service import RetrievalService
 
 
 async def _top_source_ids(
     integration_settings, query: str, top_k: int = 3
 ) -> set[str | None]:
     async with open_vector_store(integration_settings) as vector_store:
-        results = await RankingService(vector_store=vector_store).search(
+        results = await RetrievalService(vector_store=vector_store).search(
             query, top_k=top_k
         )
     return {doc.metadata.get("source_id") for doc, _score in results}

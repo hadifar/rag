@@ -87,6 +87,31 @@ class HybridPineconeVectorStore:
         combined = _dedup_hits(dense_response.result.hits + sparse_response.result.hits)
         return [(_to_document(hit), hit.score) for hit in combined[:k]]
 
+    async def aget_document(self, source_id: str) -> Document | None:
+        """Reassembles a document from its chunks by source_id, not by guessing chunk
+        ids — works whether the chunker produced one record (WholeDocumentChunker) or
+        many (MarkdownHeaderChunker). Both indexes hold identical fields (aadd_documents
+        upserts the same records to each), so a plain metadata lookup on the dense index
+        is enough; this is a lookup, not a ranked search.
+        """
+        response = await self._dense_index.fetch_by_metadata(
+            filter={"source_id": source_id}, namespace=self._namespace
+        )
+        if not response.vectors:
+            return None
+
+        chunks = sorted(
+            response.vectors.values(),
+            key=lambda v: (v.metadata or {}).get("chunk_index", 0),
+        )
+        text = "\n\n".join(
+            (chunk.metadata or {}).get(_TEXT_FIELD, "") for chunk in chunks
+        )
+        metadata = {
+            k: v for k, v in (chunks[0].metadata or {}).items() if k != _TEXT_FIELD
+        }
+        return Document(page_content=text, metadata=metadata)
+
 
 def _dedup_hits(hits: Iterable[Hit]) -> list[Hit]:
     seen: set[str] = set()

@@ -15,6 +15,7 @@ class VectorStorePort(Protocol):
     async def aadd_documents(
         self, documents: list[Document], *, ids: list[str]
     ) -> list[str]: ...
+    async def aget_document(self, source_id: str) -> Document | None: ...
 
 
 class DocumentLoaderPort(Protocol):
