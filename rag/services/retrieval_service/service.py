@@ -9,3 +9,6 @@ class RetrievalService:
 
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
         return await self._vector_store.asimilarity_search_with_score(query, k=top_k)
+
+    async def get_document(self, source_id: str) -> Document | None:
+        return await self._vector_store.aget_document(source_id)
