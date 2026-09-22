@@ -7,7 +7,7 @@ export function SourcesBubble({ names }: SourcesContent) {
       <ul>
         {names.map((name) => (
           <li key={name}>
-            <a href={`/kb/${name}`} target="_blank" rel="noreferrer">
+            <a href={`/api/kb/${name}`} target="_blank" rel="noreferrer">
               {name}
             </a>
           </li>
