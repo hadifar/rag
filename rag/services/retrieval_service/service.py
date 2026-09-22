@@ -3,7 +3,7 @@ from langchain_core.documents import Document
 from rag.domain.ports import VectorStorePort
 
 
-class RankingService:
+class RetrievalService:
     def __init__(self, vector_store: VectorStorePort):
         self._vector_store = vector_store
 

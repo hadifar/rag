@@ -10,12 +10,12 @@ from rag.config import Settings
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
-from rag.services.ranking_service.service import RankingService
+from rag.services.retrieval_service.service import RetrievalService
 
 
 @dataclass
 class Container:
-    ranking_service: RankingService
+    ranking_service: RetrievalService
     generation_service: GenerationService
     ingestion_service: IngestionService
 
@@ -26,7 +26,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
     exit — see rag.adapters.pinecone_client.open_vector_store.
     """
     async with open_vector_store(settings) as vector_store:
-        ranking_service = RankingService(vector_store=vector_store)
+        ranking_service = RetrievalService(vector_store=vector_store)
 
         generation_service = GenerationService(
             llm=build_llm(settings),

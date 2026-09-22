@@ -8,7 +8,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from rag.services.generation_service.graph import build_graph
 from rag.services.generation_service.streaming import StreamEvent, stream_events
 from rag.services.generation_service.tools import build_search_tool
-from rag.services.ranking_service.service import RankingService
+from rag.services.retrieval_service.service import RetrievalService
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
@@ -19,7 +19,7 @@ class GenerationService:
     def __init__(
         self,
         llm: BaseChatModel,
-        ranking_service: RankingService,
+        ranking_service: RetrievalService,
         checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
