@@ -53,6 +53,9 @@ update_changelog_on_bump = true
 major_version_zero = true
 version_provider = "pep621"
 version_files = ["frontend/package.json:version"]
+# Keeps uv.lock's embedded project version in sync with pyproject.toml — runs before the bump
+# commit is created, so `git add uv.lock` here lands in that same commit.
+pre_bump_hooks = ["uv lock", "git add uv.lock"]
 
 [tool.pyright]
 typeCheckingMode = "basic"

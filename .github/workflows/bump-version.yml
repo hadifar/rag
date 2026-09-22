@@ -18,6 +18,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # pyproject.toml's pre_bump_hooks (uv lock + git add) run before commitizen creates the
+      # bump commit, so uv.lock lands in the same commit — needs uv on PATH first.
+      - uses: astral-sh/setup-uv@v10.1.0
+
       - name: Bump version and push tag
         uses: commitizen-tools/commitizen-action@0.27.1
         with:
