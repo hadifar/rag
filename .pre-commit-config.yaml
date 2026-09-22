@@ -21,7 +21,7 @@ repos:
   # Keeps uv.lock in sync with pyproject.toml — auto-fixes locally (rerun `git add` + commit),
   # like ruff --fix below.
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: v0.12.17
+    rev: 0.12.17
     hooks:
       - id: uv-lock
         stages: [pre-commit]
