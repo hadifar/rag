@@ -1,11 +1,3 @@
-"""Groundedness check: does the final answer actually follow from the retrieved
-context, or does it contain claims the search results don't support?
-
-Reuses the retrieved context already sitting in message history (ToolMessage
-content from the search_kb calls this turn) instead of threading it through
-GraphState separately.
-"""
-
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
@@ -17,7 +9,7 @@ VERIFIER_PROMPT = (
 )
 
 REVISION_INSTRUCTION = (
-    "Your previous answer wasn't fully supported by the retrieved context. Revise it to "
+    "Your previous answer wasn't fully supported by the retrieved context. Revise it (e.g., by rephrasing query) to "
     "state only what the context actually supports, or say you don't know."
 )
 
