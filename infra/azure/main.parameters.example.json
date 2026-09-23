@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "appName": { "value": "rag-chatbot" },
+    "keyVaultName": { "value": "rag-chatbot-kv" },
+    "acrName": { "value": "ragchatbotacr" },
+    "acrSku": { "value": "Basic" },
+    "containerImageName": { "value": "rag-backend:<tag>" },
+    "appServicePlanSku": { "value": "B1" },
+
+    "pineconeDenseIndexName": { "value": "<dense-index-name>" },
+    "pineconeSparseIndexName": { "value": "<sparse-index-name>" },
+    "pineconeCloud": { "value": "aws" },
+    "pineconeRegion": { "value": "us-east-1" },
+    "pineconeDenseModel": { "value": "<dense-model>" },
+    "pineconeSparseModel": { "value": "<sparse-model>" },
+    "pineconeNamespace": { "value": "<namespace>" },
+
+    "langfuseEnabled": { "value": true },
+    "langfuseHost": { "value": "https://cloud.langfuse.com" }
+  }
+}
