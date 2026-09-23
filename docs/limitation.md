@@ -18,7 +18,6 @@
 ## Security
 
 - No authentication on any endpoint (`/chat/stream`, `/kb/*`, `/ui`)
-- No CORS/security headers configured
 - Dockerfile runs as root, uses a mutable base image tag, single-stage build
 
 ## Reliability
