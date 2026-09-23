@@ -6,10 +6,13 @@ server {
     index index.html;
 
     # Same paths the Vite dev server proxies (see frontend/vite.config.ts).
+    # BACKEND_URL is env-substituted at container start (nginx:alpine's built-in
+    # /etc/nginx/templates/*.template handling) — docker-compose.yml's backend
+    # service on one side, the backend Web App's hostname (main.bicep) on the other.
     location /api/ {
         limit_req zone=chat burst=5 nodelay;
         limit_req_status 429;
-        proxy_pass http://backend:8000;
+        proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header Connection "";

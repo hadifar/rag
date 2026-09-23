@@ -81,8 +81,9 @@ frontend/                              # repo root — separate Vite/React app
 │   └── pages/                        # ChatPage, SettingsPage, NotFoundPage
 └── (Vite build served by nginx in Docker)
 
-infra/                                 # repo root — Docker, no Python imports
-└── docker/                           # Dockerfile.backend, Dockerfile.frontend, nginx.conf
+infra/                                 # repo root — Docker + Azure infra, no Python imports
+├── docker/                            # Dockerfile.backend, Dockerfile.frontend, nginx.conf.template
+└── azure/                             # main.bicep — see docs/infra.md
 ```
 
 Enforced by `import-linter` (`pyproject.toml`):
@@ -211,34 +212,13 @@ already contains the same password), not `POSTGRES_PASSWORD`.
 *Key Vault references* in App Service's Application Settings. App Service resolves these (via the
 app's system-assigned Managed Identity — no credentials stored anywhere) into plain env vars
 before the container starts, so `Settings` needs no code changes: it already reads config from
-`os.environ` via `pydantic-settings`.
+`os.environ` via `pydantic-settings`. Registry access (`AcrPull`/`AcrPush`) follows the same
+no-stored-credentials pattern.
 
-Setup, once per environment:
-
-```bash
-# 1. Create the Key Vault
-az keyvault create --name <vault-name> --resource-group <rg> --location <region>
-
-# 2. Store each secret
-az keyvault secret set --vault-name <vault-name> --name database-url --value "<postgresql://...>"
-az keyvault secret set --vault-name <vault-name> --name openai-api-key --value "<...>"
-az keyvault secret set --vault-name <vault-name> --name pinecone-api-key --value "<...>"
-# ...repeat for LANGFUSE_SECRET_KEY, etc.
-
-# 3. Give the App Service a system-assigned identity
-az webapp identity assign --name <app-name> --resource-group <rg>
-
-# 4. Grant that identity read access to secrets (RBAC — "Key Vault Secrets User" role)
-az role assignment create \
-  --role "Key Vault Secrets User" \
-  --assignee <principal-id-from-step-3> \
-  --scope $(az keyvault show --name <vault-name> --query id -o tsv)
-
-# 5. Point Application Settings at the Key Vault secrets
-az webapp config appsettings set --name <app-name> --resource-group <rg> --settings \
-  DATABASE_URL="@Microsoft.KeyVault(SecretUri=https://<vault-name>.vault.azure.net/secrets/database-url/)" \
-  OPENAI_API_KEY="@Microsoft.KeyVault(SecretUri=https://<vault-name>.vault.azure.net/secrets/openai-api-key/)"
-```
+This whole setup — Key Vault, RBAC role assignments, App Service, Container Registry — is
+codified in [infra/azure/main.bicep](../infra/azure/main.bicep); see
+[docs/infra.md](infra.md) for how to validate, preview, and deploy it. Provision/update by
+running that template, not by hand.
 
 Known limitation: App Service caches resolved Key Vault references and refreshes them
 periodically (not instantly), so rotating a secret's value in the Vault requires restarting the
