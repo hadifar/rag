@@ -81,8 +81,9 @@ frontend/                              # repo root — separate Vite/React app
 │   └── pages/                        # ChatPage, SettingsPage, NotFoundPage
 └── (Vite build served by nginx in Docker)
 
-infra/                                 # repo root — Docker, no Python imports
-└── docker/                           # Dockerfile.backend, Dockerfile.frontend, nginx.conf
+infra/                                 # repo root — Docker + Azure infra, no Python imports
+├── docker/                            # Dockerfile.backend, Dockerfile.frontend, nginx.conf.template
+└── azure/                             # main.bicep — see docs/infra.md
 ```
 
 Enforced by `import-linter` (`pyproject.toml`):

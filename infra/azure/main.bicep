@@ -1,15 +1,23 @@
 // Codifies the "Prod (Azure App Service)" setup steps from docs/engineering_design.md's
 // Secrets management section: Key Vault + Managed Identity + RBAC + App Service for
 // Containers, with app config wired through Key Vault references instead of stored
-// credentials. Provisions the App Service itself too, since a Managed Identity has
-// nothing to attach to otherwise. Also provisions an Azure Container Registry and
-// grants the Web App's identity AcrPull — no registry admin credentials stored
-// anywhere, same pattern as Key Vault access.
+// credentials. Provisions two Web Apps (backend + frontend, sharing one Linux App
+// Service Plan) since a Managed Identity has nothing to attach to otherwise. Also
+// provisions an Azure Container Registry, grants both Web Apps' identities AcrPull,
+// and grants a CI service principal AcrPush (see ciServicePrincipalObjectId) — no
+// registry admin credentials stored anywhere, same pattern as Key Vault access.
 //
-// Out of scope, supplied as inputs rather than provisioned here: actually building
-// and pushing an image to the registry (not wired into CI yet — see
-// docs/limitation.md) and the Postgres server behind DATABASE_URL (not yet decided
-// whether that's Azure Database for PostgreSQL or something else).
+// Out of scope, supplied as inputs rather than provisioned here: the CI service
+// principal itself (its Azure AD app registration + GitHub OIDC federated
+// credential are set up once, outside this template) and the Postgres server
+// behind DATABASE_URL (not yet decided whether that's Azure Database for
+// PostgreSQL or something else).
+//
+// Known gap: infra/docker/nginx.conf hardcodes `proxy_pass http://backend:8000`,
+// which only resolves inside the docker-compose network. The frontend Web App
+// provisioned here won't be able to reach the backend Web App until nginx.conf's
+// upstream is made configurable (e.g. env-substituted at container start) and
+// pointed at the backend's actual hostname — not yet done.
 
 targetScope = 'resourceGroup'
 
@@ -28,8 +36,14 @@ param acrName string
 @description('Container Registry SKU.')
 param acrSku string = 'Basic'
 
-@description('Image repository:tag within the registry, e.g. "rag-backend:1.2.3" — resolved against the provisioned ACR\'s login server, not a full registry URL.')
-param containerImageName string
+@description('Backend image repository:tag within the registry, e.g. "rag-backend:1.2.3" — resolved against the provisioned ACR\'s login server, not a full registry URL.')
+param backendContainerImageName string
+
+@description('Frontend image repository:tag within the registry, e.g. "rag-frontend:1.2.3".')
+param frontendContainerImageName string
+
+@description('Object ID (not client/app ID) of the CI service principal that builds and pushes images — grants it AcrPush on the registry. From `az ad sp show --id <appId> --query id -o tsv`.')
+param ciServicePrincipalObjectId string
 
 @description('Linux App Service Plan SKU.')
 param appServicePlanSku string = 'B1'
@@ -63,6 +77,7 @@ param langfuseHost string = 'https://cloud.langfuse.com'
 
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
 
 var secretsToStore = [
   { name: 'database-url', value: databaseUrl }
@@ -119,8 +134,8 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
-resource webApp 'Microsoft.Web/sites@2023-12-01' = {
-  name: appName
+resource backendWebApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: '${appName}-backend'
   location: location
   kind: 'app,linux,container'
   identity: {
@@ -129,7 +144,24 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: appServicePlan.id
     siteConfig: {
-      linuxFxVersion: 'DOCKER|${containerRegistry.properties.loginServer}/${containerImageName}'
+      linuxFxVersion: 'DOCKER|${containerRegistry.properties.loginServer}/${backendContainerImageName}'
+      acrUseManagedIdentityCreds: true
+      alwaysOn: true
+    }
+  }
+}
+
+resource frontendWebApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: '${appName}-frontend'
+  location: location
+  kind: 'app,linux,container'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      linuxFxVersion: 'DOCKER|${containerRegistry.properties.loginServer}/${frontendContainerImageName}'
       acrUseManagedIdentityCreds: true
       alwaysOn: true
     }
@@ -137,31 +169,61 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 // "Key Vault Secrets User" — read-only access to secret values, granted to the
-// Web App's system-assigned identity (no credentials stored anywhere).
+// backend Web App's system-assigned identity (no credentials stored anywhere).
+// Only the backend reads Key Vault secrets — the frontend is a static/nginx
+// container with no config of its own.
 resource keyVaultSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, webApp.id, keyVaultSecretsUserRoleId)
+  name: guid(keyVault.id, backendWebApp.id, keyVaultSecretsUserRoleId)
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       keyVaultSecretsUserRoleId
     )
-    principalId: webApp.identity.principalId
+    principalId: backendWebApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-// "AcrPull" — lets the Web App pull images from the registry via its identity,
-// same no-stored-credentials pattern as Key Vault access above.
-resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, webApp.id, acrPullRoleId)
+// "AcrPull" — lets each Web App pull its image from the registry via its own
+// identity, same no-stored-credentials pattern as Key Vault access above.
+resource backendAcrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, backendWebApp.id, acrPullRoleId)
   scope: containerRegistry
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       acrPullRoleId
     )
-    principalId: webApp.identity.principalId
+    principalId: backendWebApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource frontendAcrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, frontendWebApp.id, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      acrPullRoleId
+    )
+    principalId: frontendWebApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// "AcrPush" — lets the CI service principal (GitHub OIDC identity) push images it
+// builds, without a registry admin password.
+resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, ciServicePrincipalObjectId, acrPushRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      acrPushRoleId
+    )
+    principalId: ciServicePrincipalObjectId
     principalType: 'ServicePrincipal'
   }
 }
@@ -170,7 +232,7 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 // before the container starts, via the identity granted above — Settings needs no
 // code changes, it already reads config from os.environ.
 resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
-  parent: webApp
+  parent: backendWebApp
   name: 'appsettings'
   properties: {
     // Must match the port rag.config.Settings.PORT defaults to / the app binds.
@@ -200,7 +262,20 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   ]
 }
 
-output webAppName string = webApp.name
-output webAppHostName string = webApp.properties.defaultHostName
+// Tells nginx.conf.template where to proxy /api/* — no Key Vault access needed,
+// the frontend has no secrets of its own. WEBSITES_PORT is omitted: nginx already
+// listens on 80, App Service's default assumption for Linux containers.
+resource frontendAppSettings 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: frontendWebApp
+  name: 'appsettings'
+  properties: {
+    BACKEND_URL: 'https://${backendWebApp.properties.defaultHostName}'
+  }
+}
+
+output backendWebAppName string = backendWebApp.name
+output backendWebAppHostName string = backendWebApp.properties.defaultHostName
+output frontendWebAppName string = frontendWebApp.name
+output frontendWebAppHostName string = frontendWebApp.properties.defaultHostName
 output keyVaultUri string = keyVault.properties.vaultUri
 output acrLoginServer string = containerRegistry.properties.loginServer

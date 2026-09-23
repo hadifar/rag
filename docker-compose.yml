@@ -32,6 +32,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.frontend
+    environment:
+      BACKEND_URL: http://backend:8000
     depends_on:
       - backend
     ports:
