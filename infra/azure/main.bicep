@@ -1,24 +1,3 @@
-// Codifies the "Prod (Azure App Service)" setup steps from docs/engineering_design.md's
-// Secrets management section: Key Vault + Managed Identity + RBAC + App Service for
-// Containers, with app config wired through Key Vault references instead of stored
-// credentials. Provisions two Web Apps (backend + frontend, sharing one Linux App
-// Service Plan) since a Managed Identity has nothing to attach to otherwise. Also
-// provisions an Azure Container Registry, grants both Web Apps' identities AcrPull,
-// and grants a CI service principal AcrPush (see ciServicePrincipalObjectId) — no
-// registry admin credentials stored anywhere, same pattern as Key Vault access.
-//
-// Out of scope, supplied as inputs rather than provisioned here: the CI service
-// principal itself (its Azure AD app registration + GitHub OIDC federated
-// credential are set up once, outside this template) and the Postgres server
-// behind DATABASE_URL (not yet decided whether that's Azure Database for
-// PostgreSQL or something else).
-//
-// Known gap: infra/docker/nginx.conf hardcodes `proxy_pass http://backend:8000`,
-// which only resolves inside the docker-compose network. The frontend Web App
-// provisioned here won't be able to reach the backend Web App until nginx.conf's
-// upstream is made configurable (e.g. env-substituted at container start) and
-// pointed at the backend's actual hostname — not yet done.
-
 targetScope = 'resourceGroup'
 
 @description('Base name used to derive resource names (e.g. "rag-chatbot").')

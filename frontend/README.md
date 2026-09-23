@@ -17,7 +17,9 @@ npm run preview  # serve the production build
 npm run lint     # oxlint
 ```
 
-The dev server proxies `/chat`, `/kb` and `/health` to the backend at `http://localhost:8000` (see [vite.config.ts](vite.config.ts)), so start the backend first.
+The dev server proxies `/api` (covering `/api/chat`, `/api/health`, `/api/kb`, `/api/settings`) to
+the backend at `http://localhost:8000` (see [vite.config.ts](vite.config.ts)), so start the
+backend first.
 
 ## Structure
 
