@@ -43,23 +43,3 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         yield Container(ranking_service, generation_service, ingestion_service)
-
-
-class ContainerHandle:
-    """Holds the active Container; the FastAPI lifespan swaps it in on startup.
-
-    Routers and the Gradio UI are built once, before the lifespan runs (Gradio's
-    mount_gradio_app and APIRouter both need their handlers up front), so they close
-    over this handle and resolve `.get()` per-request rather than holding a Container
-    directly.
-    """
-
-    def __init__(self, container: Container | None = None) -> None:
-        self.container = container
-
-    def get(self) -> Container:
-        if self.container is None:
-            raise RuntimeError(
-                "Container not initialized — app lifespan hasn't started"
-            )
-        return self.container
