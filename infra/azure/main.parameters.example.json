@@ -9,7 +9,7 @@
     "backendContainerImageName": { "value": "rag-backend:<tag>" },
     "frontendContainerImageName": { "value": "rag-frontend:<tag>" },
     "ciServicePrincipalObjectId": { "value": "<ci-service-principal-object-id>" },
-    "appServicePlanSku": { "value": "B1" },
+    "appServicePlanSku": { "value": "S1" },
 
     "pineconeDenseIndexName": { "value": "<dense-index-name>" },
     "pineconeSparseIndexName": { "value": "<sparse-index-name>" },

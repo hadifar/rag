@@ -236,5 +236,3 @@ app to pick it up immediately.
 - `GET /api/settings` — returns `{model, temperature, top_k, system_prompt}` for display in the
   UI. `temperature` and `top_k` are currently static constants in the router, not yet threaded
   through the actual generation/retrieval calls they name.
-
-Auth/rate-limiting: **out of scope** for this build — `Settings` has no auth-related field today.

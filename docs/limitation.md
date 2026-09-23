@@ -30,3 +30,14 @@
 
 ## Config & ops
 - Single-process assumption throughout — won't survive multiple workers/replicas without a persistent checkpointer
+
+## Infra & deployment
+
+- CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to
+  `master` doesn't build/push automatically
+- Nothing deploys automatically either — `infra/azure/main.bicep` must be applied by hand
+  (`az deployment group create`); no deploy gate in CI
+- No continuous-deployment hook from the registry to the Web Apps — after pushing a new image,
+  they need a manual `az webapp restart` to actually pull it
+- The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still
+  undecided whether that's Azure Database for PostgreSQL or something else
