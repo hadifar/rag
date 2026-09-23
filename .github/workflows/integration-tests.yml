@@ -1,0 +1,37 @@
+name: integration-tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run integration tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_DENSE_INDEX_NAME: ${{ vars.PINECONE_DENSE_INDEX_NAME }}
+          PINECONE_SPARSE_INDEX_NAME: ${{ vars.PINECONE_SPARSE_INDEX_NAME }}
+          PINECONE_CLOUD: ${{ vars.PINECONE_CLOUD }}
+          PINECONE_REGION: ${{ vars.PINECONE_REGION }}
+          PINECONE_DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
+          PINECONE_SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
+          PINECONE_NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
+          LANGFUSE_ENABLED: "false"
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
+        run: uv run pytest tests/integration

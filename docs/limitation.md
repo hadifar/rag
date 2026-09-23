@@ -31,9 +31,7 @@
 - Guardrail + verifier each add a full extra LLM call per turn, with no way to disable either
 
 ## Testing & CI
-
-- Few integration tests
-- CI only runs `pre-commit` and a version-bump job — no test run, no Docker build/push, no deploy gate
+- CI only runs `pre-commit` and a version-bump job — no Docker build/push, no deploy gate
 
 ## Config & ops
 

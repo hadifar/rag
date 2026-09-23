@@ -8,6 +8,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
     async with build_container(integration_settings) as container:
         answer = ""
         tool_calls = []
+
         async for event in container.generation_service.stream_chat(
             message, thread_id=str(uuid.uuid4())
         ):
@@ -15,6 +16,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
                 answer += event.text
             elif isinstance(event, ToolCallStart):
                 tool_calls.append(event.name)
+
         return answer, tool_calls
 
 
