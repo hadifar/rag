@@ -1,3 +1,10 @@
+## v0.5.0 (2026-09-23)
+
+### Feat
+
+- implement CI workflow for building and pushing Docker images, update Azure Bicep configuration, and enhance nginx setup
+- add rff rank fusion
+
 ## v0.4.4 (2026-09-22)
 
 ### Fix
