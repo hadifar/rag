@@ -10,13 +10,11 @@
 
 ## Retrieval
 
-- Dense+sparse fusion is plain concatenation + id-dedup, no score normalization
 - Single fixed Pinecone namespace — no per-tenant/workspace isolation
 - No reranker
 
 ## Conversation & session state
 
-- `MemorySaver` is the only checkpointer — conversation history is lost on restart and invisible across replicas
 - `thread_id` is a client-supplied free string with no ownership check
 
 ## Security
