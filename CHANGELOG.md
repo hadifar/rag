@@ -1,3 +1,67 @@
+## v0.4.4 (2026-09-22)
+
+### Fix
+
+- add sudo chown to bump
+
+## v0.4.3 (2026-09-22)
+
+### Fix
+
+- update precommit-gitguard to version 0.1.3 and adjust fetch-depth in pre-commit workflow
+
+## v0.4.2 (2026-09-22)
+
+### Fix
+
+- issue with precommit bump uv lock
+- resolve merge conflict
+- resolve pre-commit bump issue
+
+## v0.4.1 (2026-09-22)
+
+### Fix
+
+- update uv.lock
+
+## v0.4.0 (2026-09-22)
+
+### Feat
+
+- add postgress for checkpointer
+- add rate limit to nginx
+- add mock session to the sidebar
+- nav item ui updated
+- layout updated & Typing added
+- typing input added to chatui
+- drop gradio
+- react v1
+
+### Fix
+
+- frontend auto-bump included
+- add api/ to kb route in react
+- setting values comes from api
+- update docker & docker compse
+- drop gitflow hook with remote version
+- add adapter contract for import lint
+
+### Refactor
+
+- drop unnecessary docstring
+- replace local loads with pinecone
+- reaname ranking to retrieval
+
+## v0.3.0 (2026-09-15)
+
+### Feat
+
+- new sessioin btn added to ui & memorysaver replace with InMemorySaver
+
+### Fix
+
+- only consider 3 topk
+
 ## v0.2.1 (2026-09-15)
 
 ### Fix

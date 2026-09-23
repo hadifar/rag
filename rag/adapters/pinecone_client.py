@@ -84,8 +84,21 @@ class HybridPineconeVectorStore:
                 namespace=self._namespace, query={"inputs": {"text": query}, "top_k": k}
             ),
         )
-        combined = _dedup_hits(dense_response.result.hits + sparse_response.result.hits)
-        return [(_to_document(hit), hit.score) for hit in combined[:k]]
+        hits_by_id = {
+            hit.id: hit
+            for hit in (*sparse_response.result.hits, *dense_response.result.hits)
+        }
+        fused_scores = _reciprocal_rank_fusion(
+            [
+                [hit.id for hit in dense_response.result.hits],
+                [hit.id for hit in sparse_response.result.hits],
+            ]
+        )
+        ranked_ids = sorted(fused_scores, key=fused_scores.__getitem__, reverse=True)
+        return [
+            (_to_document(hits_by_id[doc_id]), fused_scores[doc_id])
+            for doc_id in ranked_ids[:k]
+        ]
 
     async def aget_document(self, source_id: str) -> Document | None:
         """Reassembles a document from its chunks by source_id, not by guessing chunk
@@ -113,14 +126,14 @@ class HybridPineconeVectorStore:
         return Document(page_content=text, metadata=metadata)
 
 
-def _dedup_hits(hits: Iterable[Hit]) -> list[Hit]:
-    seen: set[str] = set()
-    deduped = []
-    for hit in hits:
-        if hit.id not in seen:
-            seen.add(hit.id)
-            deduped.append(hit)
-    return deduped
+def _reciprocal_rank_fusion(
+    rankings: Iterable[Iterable[str]], k: int = 5
+) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        for rank, doc_id in enumerate(ranking, start=1):
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+    return scores
 
 
 def _to_document(hit: Hit) -> Document:
