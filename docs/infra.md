@@ -6,8 +6,7 @@
 `docker-compose.yml` for local dev. `nginx.conf.template`'s `proxy_pass` target is env-substituted
 at container start from `BACKEND_URL` (nginx:alpine's built-in `/etc/nginx/templates/*.template`
 handling), so the same image works against `docker-compose`'s `backend:8000` and against the
-backend Web App's real hostname in Azure. Images aren't built/pushed anywhere by CI yet (see
-[limitation.md](limitation.md)).
+backend Web App's real hostname in Azure.
 
 ## `infra/azure/`
 
@@ -22,7 +21,7 @@ through Key Vault references — no credentials stored anywhere, registry pulls/
 
 Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
 federated credential are one-time setup outside this template) and the Postgres server behind
-`DATABASE_URL`.
+`DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or something else.
 
 **Validate locally, without deploying:**
 
