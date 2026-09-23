@@ -2,20 +2,27 @@
 
 ## `infra/docker/`
 
-`Dockerfile.backend`, `Dockerfile.frontend`, and `nginx.conf` — built by `docker-compose.yml`
-for local dev. Not yet built/pushed anywhere by CI (see [limitation.md](limitation.md)).
+`Dockerfile.backend`, `Dockerfile.frontend`, and `nginx.conf.template` — built by
+`docker-compose.yml` for local dev. `nginx.conf.template`'s `proxy_pass` target is env-substituted
+at container start from `BACKEND_URL` (nginx:alpine's built-in `/etc/nginx/templates/*.template`
+handling), so the same image works against `docker-compose`'s `backend:8000` and against the
+backend Web App's real hostname in Azure. Images aren't built/pushed anywhere by CI yet (see
+[limitation.md](limitation.md)).
 
 ## `infra/azure/`
 
 `main.bicep` provisions the "Prod (Azure App Service)" setup described in
 [engineering_design.md](engineering_design.md#secrets-management): a Key Vault, an Azure
-Container Registry, an App Service for Containers with a system-assigned Managed Identity, RBAC
-role assignments granting that identity read access to the vault (`Key Vault Secrets User`) and
-pull access to the registry (`AcrPull`), and App Settings wired through Key Vault references —
-no credentials stored on the resource itself, registry pulls included.
+Container Registry, and two App Service for Containers Web Apps (backend + frontend, sharing one
+Linux App Service Plan), each with its own system-assigned Managed Identity. RBAC role
+assignments grant the backend's identity read access to the vault (`Key Vault Secrets User`),
+both Web Apps' identities pull access to the registry (`AcrPull`), and a separate `AcrPush` grant
+for a CI service principal (`ciServicePrincipalObjectId`). The backend's App Settings are wired
+through Key Vault references — no credentials stored anywhere, registry pulls/pushes included.
 
-Not provisioned: actually building and pushing an image to the registry (nothing in CI does that
-yet) and the Postgres server behind `DATABASE_URL`.
+Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
+federated credential are one-time setup outside this template) and the Postgres server behind
+`DATABASE_URL`.
 
 **Validate locally, without deploying:**
 
@@ -30,11 +37,15 @@ az bicep lint --file infra/azure/main.bicep                          # static an
 az deployment group what-if \
   --resource-group <rg> \
   --template-file infra/azure/main.bicep \
-  --parameters infra/azure/main.parameters.example.json \
+  --parameters infra/azure/main.parameters.local.json \
   --parameters databaseUrl=<...> openAiApiKey=<...> pineconeApiKey=<...> \
                langfusePublicKey=<...> langfuseSecretKey=<...>
 ```
 
+`main.parameters.local.json` (gitignored) holds your real, deployment-specific values —
+`main.parameters.example.json` stays a placeholder template in git; copy it to create your own
+local file.
+
 **Deploy:** same command with `az deployment group create` in place of `what-if`. Pass the five
-secure params on the command line or via env-var substitution — never add them to
-`infra/azure/main.parameters.example.json`, since that file is committed.
+secure params on the command line or via env-var substitution — never add them to either
+parameters file that's committed.
