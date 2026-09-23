@@ -1,7 +1,8 @@
 # Engineering Design — RAG Chatbot
 
-A retrieval-augmented chatbot over a static markdown knowledge base (`~/data/`), with a FastAPI
-backend and a separate React frontend.
+A retrieval-augmented chatbot over a static markdown knowledge base (the repo's `data/` — gitignored,
+you provide your own `.md` files; see [docs/setup.md](setup.md)), with a FastAPI backend and a
+separate React frontend.
 
 ```mermaid
 graph TD
@@ -86,11 +87,7 @@ infra/                                 # repo root — Docker + Azure infra, no 
 └── azure/                             # main.bicep — see docs/infra.md
 ```
 
-Enforced by `import-linter` (`pyproject.toml`):
-- `domain` imports nothing else in the project.
-- `services` never imports `adapters` directly — only via injected `Protocol` types.
-- `api` never imports `adapters` directly (except `container.py`, which is the wiring root).
-- Layering: `api` → `services` → `domain`, one direction only.
+
 
 ## Services
 
@@ -104,8 +101,7 @@ calls an embedding model directly.
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
 | `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
 
-A `RerankerPort` was considered and dropped — hybrid dense+sparse retrieval was judged to cover
-the same need without a separate reranking pass.
+
 
 ## Dependency injection
 
@@ -215,8 +211,9 @@ before the container starts, so `Settings` needs no code changes: it already rea
 `os.environ` via `pydantic-settings`. Registry access (`AcrPull`/`AcrPush`) follows the same
 no-stored-credentials pattern.
 
-This whole setup — Key Vault, RBAC role assignments, App Service, Container Registry — is
-codified in [infra/azure/main.bicep](../infra/azure/main.bicep); see
+This whole setup — Key Vault, RBAC role assignments, App Service, Container Registry, and the VNet
++ Private Endpoint that keep the backend off the public internet (see [docs/infra.md](infra.md#infraazure))
+— is codified in [infra/azure/main.bicep](../infra/azure/main.bicep); see
 [docs/infra.md](infra.md) for how to validate, preview, and deploy it. Provision/update by
 running that template, not by hand.
 

@@ -1,6 +1,5 @@
-"""Normalizes LangGraph's astream_events into one small vocabulary that both the
-FastAPI SSE endpoint and the Gradio UI consume directly — one translation point,
-two renderers.
+"""Normalizes LangGraph's astream_events into one small vocabulary that the FastAPI
+SSE endpoint (`/api/chat/stream`) consumes directly.
 """
 
 from collections.abc import AsyncIterator, Mapping

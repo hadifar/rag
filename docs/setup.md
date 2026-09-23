@@ -8,7 +8,10 @@ bash scripts/setup.sh
 ```
 Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
 
-**You must have a folder (`~/data/`) with .md files**
+**You need a `data/` folder in the repo root with your own `.md` files** — it's gitignored, so a
+fresh clone doesn't come with one. `KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at it,
+and `Dockerfile.backend` does `COPY data/ data/`, so it must exist (even if just with a placeholder
+`.md`) before `docker compose up --build`, or the image build fails.
 
 If running via Docker (below), also create the Postgres init password Docker Compose expects,
 gitignored and never read by the app itself:
@@ -51,7 +54,7 @@ Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup)
 docker compose down   # stop and remove the containers
 ```
 
-If nginx fails with `host not found in upstream "backend"`, the backend container has exited. Check `docker compose logs backend`, and rebuild with `docker compose build --no-cache backend` if the image is stale.
+
 
 ### Frontend
 ```bash
