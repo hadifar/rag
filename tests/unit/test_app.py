@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from pydantic import SecretStr
 
+from rag.api.routers.chat import SseEventType
 from rag.app import create_app
 from rag.config import Settings
 from rag.container import Container
@@ -134,7 +135,11 @@ def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> No
         body = "".join(response.iter_text())
 
     events = _parse_sse(body)
-    assert [event for event, _ in events] == ["text", "tool_start", "tool_result"]
+    assert [event for event, _ in events] == [
+        SseEventType.TEXT,
+        SseEventType.TOOL_START,
+        SseEventType.TOOL_RESULT,
+    ]
 
     text_event, tool_start_event, tool_result_event = events
 

@@ -35,6 +35,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # tests/unit is fast and has no external dependencies
+      - id: pytest-unit
+        name: pytest (tests/unit)
+        entry: uv run pytest tests/unit
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       # Keeps frontend/src/types/api.generated.ts in sync with the backend's
       # Pydantic schemas — auto-fixes locally (rerun `git add` + commit), like uv-lock above.
       - id: frontend-api-types
@@ -44,6 +52,8 @@ repos:
         pass_filenames: false
         files: ^(rag/api/schema\.py|rag/api/routers/.*\.py|frontend/src/types/api\.generated\.ts)$
         stages: [pre-commit]
+
+
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
