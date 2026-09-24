@@ -1,9 +1,9 @@
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from rag.api.deps import get_container
+from rag.api.deps import ContainerDep
 from rag.api.schema import ChatRequest
 from rag.services.generation_service.streaming import (
     StreamEvent,
@@ -17,8 +17,10 @@ def build_chat_router() -> APIRouter:
     router = APIRouter()
 
     @router.post("/stream")
-    async def stream(chat_request: ChatRequest, request: Request) -> StreamingResponse:
-        generation_service = get_container(request).generation_service
+    async def stream(
+        chat_request: ChatRequest, container: ContainerDep
+    ) -> StreamingResponse:
+        generation_service = container.generation_service
 
         async def event_stream():
             async for event in generation_service.stream_chat(
