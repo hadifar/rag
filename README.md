@@ -18,8 +18,7 @@ bash scripts/setup.sh
 # fill in .env (see .example.env), then:
 docker compose up --build
 ```
-Full setup (secrets, `.env`, Postgres password) and other ways to run it (bare `uv`, CLI,
-frontend dev server) are in [docs/setup.md](docs/setup.md).
+Full setup (secrets, `.env`, Postgres password) and other ways to run it, are in [docs/setup.md](docs/setup.md).
 
 ## Coding style
 Follows PEP 20 and the [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md).
