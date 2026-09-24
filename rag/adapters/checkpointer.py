@@ -17,8 +17,9 @@ async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpoint
         yield InMemorySaver()
         return
 
-    if not settings.DATABASE_URL:
-        raise ValueError("DATABASE_URL is required when CHECKPOINTER_BACKEND=postgres")
+    assert (
+        settings.DATABASE_URL is not None
+    )  # enforced by Settings._require_database_url
 
     async with AsyncPostgresSaver.from_conn_string(
         settings.DATABASE_URL.get_secret_value()

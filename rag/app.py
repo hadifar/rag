@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from rag.adapters.observability import flush
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
@@ -13,9 +12,7 @@ from rag.container import Container, build_container
 
 
 def _build_lifespan(container: Container | None, settings: Settings):
-    # A pre-built container (tests) owns its own lifecycle; otherwise open one for
-    # the app's lifetime, mirroring the FastAPI lifespan pattern from
-    # https://www.pinecone.io/learn/pinecone-async-fastapi/.
+    # mirroring the FastAPI lifespan pattern from https://www.pinecone.io/learn/pinecone-async-fastapi/.
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if container is not None:
@@ -26,7 +23,6 @@ def _build_lifespan(container: Container | None, settings: Settings):
         async with build_container(settings) as built:
             app.state.container = built
             yield
-        flush()
 
     return lifespan
 
