@@ -21,7 +21,7 @@ async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpoint
         raise ValueError("DATABASE_URL is required when CHECKPOINTER_BACKEND=postgres")
 
     async with AsyncPostgresSaver.from_conn_string(
-        settings.DATABASE_URL
+        settings.DATABASE_URL.get_secret_value()
     ) as checkpointer:
         await checkpointer.setup()
         yield checkpointer
