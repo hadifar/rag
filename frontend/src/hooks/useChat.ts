@@ -1,114 +1,86 @@
 import { useCallback, useRef } from 'react';
-import { useMessages } from '@chatui/core';
+import { useMessageList } from './useMessageList';
 import { streamChat } from '../api/chat';
-import { USER, ASSISTANT } from '../components/avatars';
-import type { ChatStreamEvent, TextContent, ToolContent, SourcesContent } from '../types/chat';
+import type { ChatStreamEvent, ChatMessageInput } from '../types/chat';
 
-const SOURCE_RE = /\[source: ([^\]]+)\]/g;
+function assistantText(text: string): ChatMessageInput {
+  return { type: 'text', content: { text } };
+}
+
+// Show a typing message immediately and return a function that clears it
+// (idempotent — safe to call more than once).
+function showTyping(
+  appendMsg: (msg: ChatMessageInput) => string,
+  deleteMsg: (id: string) => void,
+) {
+  let id: string | null = appendMsg({ type: 'typing' });
+  return () => {
+    if (id !== null) deleteMsg(id);
+    id = null;
+  };
+}
 
 export function useChat() {
-  const { messages, appendMsg, updateMsg, deleteMsg } = useMessages([]);
+  const { messages, appendMsg, updateMsg, deleteMsg } = useMessageList();
   const threadIdRef = useRef(crypto.randomUUID());
-  const abortRef = useRef<AbortController | null>(null);
-
 
   const sendMessage = useCallback(
-    async (type: string, val: string) => {
-      if (type !== 'text' || !val.trim()) return;
+    async (val: string) => {
+      const text = val.trim();
+      if (!text) return;
 
-      appendMsg({
-        type: 'text',
-        content: { text: val } satisfies TextContent,
-        position: 'right',
-        user: USER,
-      });
+      appendMsg({ type: 'text', content: { text }, position: 'right' });
 
-      // Chat's built-in `isTyping` renders a typing Message without going
-      // through renderMessageContent, so it shows nothing. Use a real message.
-      let typingMsgId: string | null = appendMsg({ type: 'typing', user: ASSISTANT });
-      const clearTyping = () => {
-        if (typingMsgId !== null) deleteMsg(typingMsgId);
-        typingMsgId = null;
-      };
+      const clearTyping = showTyping(appendMsg, deleteMsg);
 
       let assistantMsgId: string | null = null;
-      let assistantText = '';
+      let assistantMsgText = '';
       let toolMsgId: string | null = null;
-      const sources = new Set<string>();
 
       const controller = new AbortController();
-      abortRef.current = controller;
 
       const onEvent = (event: ChatStreamEvent) => {
         clearTyping();
         switch (event.type) {
           case 'text':
-            assistantText += event.text;
+            assistantMsgText += event.text;
             if (assistantMsgId === null) {
-              assistantMsgId = appendMsg({
-                type: 'text',
-                content: { text: assistantText } satisfies TextContent,
-                user: ASSISTANT,
-              });
+              assistantMsgId = appendMsg(assistantText(assistantMsgText));
             } else {
-              updateMsg(assistantMsgId, {
-                type: 'text',
-                content: { text: assistantText } satisfies TextContent,
-                user: ASSISTANT,
-              });
+              updateMsg(assistantMsgId, assistantText(assistantMsgText));
             }
             break;
           case 'tool_start':
             toolMsgId = appendMsg({
               type: 'tool',
-              content: {
-                name: event.name,
-                args: event.args,
-                status: 'pending',
-              } satisfies ToolContent,
-              user: ASSISTANT,
+              content: { name: event.name, query: event.query, status: 'pending' },
             });
             break;
           case 'tool_result':
-            for (const match of event.output.matchAll(SOURCE_RE)) {
-              sources.add(match[1]);
-            }
             if (toolMsgId !== null) {
               updateMsg(toolMsgId, {
                 type: 'tool',
-                content: {
-                  name: event.name,
-                  output: event.output,
-                  status: 'done',
-                } satisfies ToolContent,
-                user: ASSISTANT,
+                content: { name: event.name, output: event.output, status: 'done' },
               });
+            }
+            break;
+          case 'sources':
+            if (event.names.length > 0) {
+              appendMsg({ type: 'sources', content: { names: event.names } });
             }
             break;
         }
       };
 
       try {
-        await streamChat(val, threadIdRef.current, onEvent, controller.signal);
+        await streamChat(text, threadIdRef.current, onEvent, controller.signal);
       } catch (err) {
         if (!controller.signal.aborted) {
-          appendMsg({
-            type: 'text',
-            content: {
-              text: `Something went wrong: ${(err as Error).message}`,
-            } satisfies TextContent,
-            user: ASSISTANT,
-          });
+          const message = err instanceof Error ? err.message : String(err);
+          appendMsg(assistantText(`Something went wrong: ${message}`));
         }
       } finally {
         clearTyping();
-        if (sources.size > 0) {
-          appendMsg({
-            type: 'sources',
-            content: { names: [...sources].sort() } satisfies SourcesContent,
-            user: ASSISTANT,
-          });
-        }
       }
     },
     [appendMsg, updateMsg, deleteMsg],

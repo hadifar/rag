@@ -3,8 +3,6 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
-/* Minimal reset, kept in the base layer so unlayered @chatui/core styles and
-   Tailwind utilities both take precedence over it. */
 @layer base {
   button {
     background: transparent;
@@ -57,7 +55,7 @@ body {
 }
 
 /* Focus visible ring — consistent across interactive elements */
-:focus-visible {
+/* :focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
-}
+} */

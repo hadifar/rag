@@ -11,7 +11,13 @@ from rag.api.routers.chat import SseEventType
 from rag.app import create_app
 from rag.config import Settings
 from rag.container import Container
-from rag.domain.events import StreamEvent, TextDelta, ToolCallResult, ToolCallStart
+from rag.domain.events import (
+    SourcesReady,
+    StreamEvent,
+    TextDelta,
+    ToolCallResult,
+    ToolCallStart,
+)
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
@@ -32,8 +38,9 @@ class _StubGenerationService:
         self, message: str, thread_id: str
     ) -> AsyncIterator[StreamEvent]:
         yield TextDelta(text=f"echo: {message}")
-        yield ToolCallStart(name="search", args={"query": message})
+        yield ToolCallStart(name="search", query=message)
         yield ToolCallResult(name="search", output="stub result")
+        yield SourcesReady(sources=["doc-a", "doc-b"])
 
 
 def _stub_settings() -> Settings:
@@ -139,17 +146,18 @@ def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> No
         SseEventType.TEXT,
         SseEventType.TOOL_START,
         SseEventType.TOOL_RESULT,
+        SseEventType.SOURCES,
     ]
 
-    text_event, tool_start_event, tool_result_event = events
+    text_event, tool_start_event, tool_result_event, sources_event = events
 
     # frontend: onEvent({ type: 'text', text: ev.data }) — raw, unparsed data.
     assert text_event[1] == "echo: hi"
 
-    # frontend: const { name, args } = JSON.parse(ev.data)
+    # frontend: const { name, query } = JSON.parse(ev.data)
     assert json.loads(tool_start_event[1]) == {
         "name": "search",
-        "args": {"query": "hi"},
+        "query": "hi",
     }
 
     # frontend: const { name, output } = JSON.parse(ev.data)
@@ -157,3 +165,6 @@ def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> No
         "name": "search",
         "output": "stub result",
     }
+
+    # frontend: const { names } = JSON.parse(ev.data)
+    assert json.loads(sources_event[1]) == {"names": ["doc-a", "doc-b"]}
