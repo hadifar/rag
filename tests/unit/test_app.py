@@ -38,7 +38,7 @@ class _StubGenerationService:
         self, message: str, thread_id: str
     ) -> AsyncIterator[StreamEvent]:
         yield TextDelta(text=f"echo: {message}")
-        yield ToolCallStart(name="search", args={"query": message})
+        yield ToolCallStart(name="search", query=message)
         yield ToolCallResult(name="search", output="stub result")
         yield SourcesReady(sources=["doc-a", "doc-b"])
 
@@ -154,10 +154,10 @@ def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> No
     # frontend: onEvent({ type: 'text', text: ev.data }) — raw, unparsed data.
     assert text_event[1] == "echo: hi"
 
-    # frontend: const { name, args } = JSON.parse(ev.data)
+    # frontend: const { name, query } = JSON.parse(ev.data)
     assert json.loads(tool_start_event[1]) == {
         "name": "search",
-        "args": {"query": "hi"},
+        "query": "hi",
     }
 
     # frontend: const { name, output } = JSON.parse(ev.data)

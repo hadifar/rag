@@ -46,9 +46,9 @@ def _to_sse(event: StreamEvent) -> str:
     match event:
         case TextDelta(text=text):
             return _format(SseEventType.TEXT, text)
-        case ToolCallStart(name=name, args=args):
+        case ToolCallStart(name=name, query=query):
             return _format(
-                SseEventType.TOOL_START, json.dumps({"name": name, "args": args})
+                SseEventType.TOOL_START, json.dumps({"name": name, "query": query})
             )
         case ToolCallResult(name=name, output=output):
             return _format(

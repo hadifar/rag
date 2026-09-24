@@ -48,7 +48,8 @@ def _parse_event(raw_event: Mapping[str, Any]) -> StreamEvent | None:
 
     if kind == "on_tool_start":
         return ToolCallStart(
-            name=raw_event["name"], args=raw_event["data"].get("input", {})
+            name=raw_event["name"],
+            query=raw_event["data"].get("input", {}).get("query", ""),
         )
 
     if kind == "on_tool_end":
