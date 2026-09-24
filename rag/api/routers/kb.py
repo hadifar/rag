@@ -5,7 +5,7 @@ from rag.api.deps import ContainerDep
 
 
 def build_kb_router() -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(tags=["kb"])
 
     @router.get("/{filename}")
     async def get_document(filename: str, container: ContainerDep) -> PlainTextResponse:

@@ -10,7 +10,7 @@ DEFAULT_TOP_K = 4
 
 
 def build_settings_router(settings: Settings) -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(tags=["settings"])
 
     @router.get("")
     async def get_settings() -> SettingsResponse:

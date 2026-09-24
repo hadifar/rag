@@ -14,7 +14,7 @@ from rag.services.generation_service.streaming import (
 
 
 def build_chat_router() -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(tags=["chat"])
 
     @router.post("/stream")
     async def stream(

@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    message: str
     thread_id: str
+    message: str = Field(min_length=1, max_length=8196)
 
 
 class SettingsResponse(BaseModel):
@@ -11,3 +11,7 @@ class SettingsResponse(BaseModel):
     temperature: float
     top_k: int
     system_prompt: str
+
+
+class HealthResponse(BaseModel):
+    status: str
