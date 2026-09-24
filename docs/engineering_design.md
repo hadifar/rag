@@ -32,15 +32,11 @@ turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_AT
 
 | Concern | Choice |
 |---|---|
-| Language / runtime | Python ≥3.12, managed with `uv` |
-| Backend framework | FastAPI (`/api/chat`, `/api/health`, `/api/kb`, `/api/settings`) |
-| Frontend | React 19 + TypeScript + Vite, Tailwind CSS, `@chatui/core`; talks to the backend over SSE via `@microsoft/fetch-event-source` |
-| Orchestration | LangGraph |
-| LLM | `langchain-openai` — `ChatOpenAI` (model configurable via `OPENAI_MODEL`, e.g. `gpt-4o-mini`), streaming enabled |
-| Retrieval | Hybrid search against two Pinecone-managed indexes (dense + sparse) via the `pinecone` SDK's async client directly — **no client-side embedding step**; Pinecone hosts the embedding models (`PINECONE_DENSE_MODEL` / `PINECONE_SPARSE_MODEL`) |
-| Observability | Langfuse tracing (`adapters/observability.py`), toggled by `LANGFUSE_ENABLED` |
-| Config | `pydantic` + `pydantic-settings` (`.env` overrides, no code defaults for secrets) |
-| CLI | Typer (`rag.cli:app`) |
+| Language | Python ≥3.12, managed with `uv` |
+| Backend framework | FastAPI, LangGraph |
+| Frontend | React 19 + TypeScript + Vite, Tailwind CSS, `@chatui/core` |
+| Retrieval | Hybrid search via the `pinecone` SDK's async client directly — Pinecone hosts the embedding models |
+| Observability | `logging` (default) or `langfuse` |
 | Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer storage) |
 | Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` |
@@ -121,11 +117,6 @@ class Container:
 async def build_container(settings: Settings) -> AsyncGenerator[Container]: ...
 ```
 
-`ContainerHandle` holds the active `Container`; the FastAPI lifespan swaps it in on startup.
-Routers and the container are built before the lifespan runs, so routers close over the handle
-and resolve `.get()` per-request rather than holding a `Container` directly — this also means
-tests can pass a pre-built `Container` of fakes into `create_app()` without touching `Settings`
-or any network.
 
 ## Conversation state
 
@@ -152,11 +143,18 @@ still named `ranking_service` in code — a naming holdover from before the `ran
 
 ## Observability
 
-`adapters/observability.py` wraps a single Langfuse `CallbackHandler`, built lazily and cached,
-active only when `LANGFUSE_ENABLED` is set. `trace_config(name)` returns a LangChain
-`RunnableConfig` with the callback wired in, or `{}` when tracing is off — so callers always pass
-`config=trace_config(...)` with no behavioral change either way. `GenerationService` uses it to
-tag the chat run; `app.py`'s lifespan calls `flush()` on shutdown so short-lived runs aren't lost.
+`adapters/observability.py` exposes `open_trace_config(settings)`, an async context manager
+(opened in `container.py` alongside the vector store and checkpointer) that yields a
+`trace_config(name)` callable returning a LangChain `RunnableConfig` with the backend's callback
+wired in — so callers always pass `config=trace_config(...)` with no behavioral branching.
+`GenerationService` uses it to tag the chat run. The backend is picked by
+`Settings.OBSERVABILITY_BACKEND`:
+
+- `"logging"` (default) — `_LoggingCallbackHandler` logs LLM/tool start/end events through the
+  standard `logging` module; zero extra infra.
+- `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `LANGFUSE_PUBLIC_KEY` /
+  `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` (validated in `config.py`). On teardown, the context
+  manager's `finally` calls `get_client().flush()` so short-lived runs aren't lost.
 
 ## Streaming
 
