@@ -1,7 +1,8 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
@@ -9,6 +10,7 @@ from rag.api.routers.kb import build_kb_router
 from rag.api.routers.settings import build_settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
+from rag.domain.errors import DocumentNotFoundError, RagError
 
 
 def _build_lifespan(container: Container | None, settings: Settings):
@@ -27,6 +29,19 @@ def _build_lifespan(container: Container | None, settings: Settings):
     return lifespan
 
 
+def _register_error_handlers(app: FastAPI) -> None:
+
+    @app.exception_handler(DocumentNotFoundError)
+    async def _handle_not_found(
+        request: Request, exc: DocumentNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(RagError)
+    async def _handle_rag_error(request: Request, exc: RagError) -> JSONResponse:
+        return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+
 def create_app(
     container: Container | None = None, settings: Settings | None = None
 ) -> FastAPI:
@@ -37,4 +52,5 @@ def create_app(
     app.include_router(build_health_router(), prefix="/api/health")
     app.include_router(build_kb_router(), prefix="/api/kb")
     app.include_router(build_settings_router(settings), prefix="/api/settings")
+    _register_error_handlers(app)
     return app
