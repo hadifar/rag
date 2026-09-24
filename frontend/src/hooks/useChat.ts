@@ -4,8 +4,6 @@ import { streamChat } from '../api/chat';
 import { USER, ASSISTANT } from '../components/avatars';
 import type { ChatStreamEvent, TextContent, ToolContent, SourcesContent } from '../types/chat';
 
-const SOURCE_RE = /\[source: ([^\]]+)\]/g;
-
 export function useChat() {
   const { messages, appendMsg, updateMsg, deleteMsg } = useMessages([]);
   const threadIdRef = useRef(crypto.randomUUID());
@@ -34,7 +32,6 @@ export function useChat() {
       let assistantMsgId: string | null = null;
       let assistantText = '';
       let toolMsgId: string | null = null;
-      const sources = new Set<string>();
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -70,9 +67,6 @@ export function useChat() {
             });
             break;
           case 'tool_result':
-            for (const match of event.output.matchAll(SOURCE_RE)) {
-              sources.add(match[1]);
-            }
             if (toolMsgId !== null) {
               updateMsg(toolMsgId, {
                 type: 'tool',
@@ -81,6 +75,15 @@ export function useChat() {
                   output: event.output,
                   status: 'done',
                 } satisfies ToolContent,
+                user: ASSISTANT,
+              });
+            }
+            break;
+          case 'sources':
+            if (event.names.length > 0) {
+              appendMsg({
+                type: 'sources',
+                content: { names: event.names } satisfies SourcesContent,
                 user: ASSISTANT,
               });
             }
@@ -102,13 +105,6 @@ export function useChat() {
         }
       } finally {
         clearTyping();
-        if (sources.size > 0) {
-          appendMsg({
-            type: 'sources',
-            content: { names: [...sources].sort() } satisfies SourcesContent,
-            user: ASSISTANT,
-          });
-        }
       }
     },
     [appendMsg, updateMsg, deleteMsg],

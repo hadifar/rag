@@ -24,4 +24,14 @@ class ToolCallResult:
     output: str
 
 
-StreamEvent = TextDelta | ToolCallStart | ToolCallResult
+@dataclass
+class SourcesReady:
+    """The deduplicated sources used across the whole turn, once the graph run
+    finishes — not tied to any single tool call, since search_kb may run more than
+    once per turn.
+    """
+
+    sources: list[str]
+
+
+StreamEvent = TextDelta | ToolCallStart | ToolCallResult | SourcesReady

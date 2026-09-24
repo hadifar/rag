@@ -43,6 +43,11 @@ export function streamChat(
           onEvent({ type: 'tool_result', name, output });
           break;
         }
+        case 'sources': {
+          const { names } = JSON.parse(ev.data);
+          onEvent({ type: 'sources', names });
+          break;
+        }
       }
     },
     onerror(err) {

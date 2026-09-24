@@ -6,13 +6,20 @@ from fastapi.responses import StreamingResponse
 
 from rag.api.deps import ContainerDep
 from rag.api.schema import ChatRequest
-from rag.domain.events import StreamEvent, TextDelta, ToolCallResult, ToolCallStart
+from rag.domain.events import (
+    SourcesReady,
+    StreamEvent,
+    TextDelta,
+    ToolCallResult,
+    ToolCallStart,
+)
 
 
 class SseEventType(StrEnum):
     TEXT = "text"
     TOOL_START = "tool_start"
     TOOL_RESULT = "tool_result"
+    SOURCES = "sources"
 
 
 def build_chat_router() -> APIRouter:
@@ -47,6 +54,8 @@ def _to_sse(event: StreamEvent) -> str:
             return _format(
                 SseEventType.TOOL_RESULT, json.dumps({"name": name, "output": output})
             )
+        case SourcesReady(sources=sources):
+            return _format(SseEventType.SOURCES, json.dumps({"names": sources}))
 
 
 def _format(event: SseEventType, data: str) -> str:
