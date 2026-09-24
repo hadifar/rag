@@ -44,10 +44,10 @@ def _stub_settings() -> Settings:
         PINECONE_DENSE_MODEL="dense-model",
         PINECONE_SPARSE_MODEL="sparse-model",
         PINECONE_NAMESPACE="ns",
-        LANGFUSE_ENABLED=False,
         LANGFUSE_PUBLIC_KEY=SecretStr("pk"),
         LANGFUSE_SECRET_KEY=SecretStr("sk"),
         LANGFUSE_HOST="http://localhost",
+        OBSERVABILITY_BACKEND="logging",
     )
 
 

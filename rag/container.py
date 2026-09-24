@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.llm_client import build_llm
-from rag.adapters.observability import trace_config
+from rag.adapters.observability import open_trace_config
 from rag.adapters.pinecone_client import open_vector_store
 from rag.config import Settings
 from rag.services.generation_service.service import GenerationService
@@ -28,6 +28,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
     async with (
         open_vector_store(settings) as vector_store,
         open_checkpointer(settings) as checkpointer,
+        open_trace_config(settings) as trace_config,
     ):
         ranking_service = RetrievalService(vector_store=vector_store)
 
