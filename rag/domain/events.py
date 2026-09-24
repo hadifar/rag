@@ -15,7 +15,7 @@ class TextDelta:
 @dataclass
 class ToolCallStart:
     name: str
-    args: dict
+    query: str
 
 
 @dataclass

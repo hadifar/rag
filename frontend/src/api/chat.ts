@@ -34,8 +34,8 @@ export function streamChat(
           onEvent({ type: 'text', text: ev.data });
           break;
         case 'tool_start': {
-          const { name, args } = JSON.parse(ev.data);
-          onEvent({ type: 'tool_start', name, args });
+          const { name, query } = JSON.parse(ev.data);
+          onEvent({ type: 'tool_start', name, query });
           break;
         }
         case 'tool_result': {

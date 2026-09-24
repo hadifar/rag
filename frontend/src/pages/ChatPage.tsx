@@ -1,23 +1,16 @@
-import Chat from '@chatui/core';
 import { useLocation } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
-import { renderMessageContent } from '../components/MessageContent';
-
-
-import '../App.css';
-
+import { MessageList } from '../components/MessageList';
+import { Composer } from '../components/Composer';
 
 export default function ChatPage() {
   const { key } = useLocation();
   const { messages, sendMessage } = useChat();
 
-  return <Chat
-    key={key}
-    locale="en-US"
-    placeholder="Type a message..."
-    messages={messages}
-    renderMessageContent={renderMessageContent}
-    onSend={sendMessage}
-  />;
-
+  return (
+    <div key={key} className="flex h-full flex-col">
+      <MessageList messages={messages} />
+      <Composer onSend={sendMessage} />
+    </div>
+  );
 }
