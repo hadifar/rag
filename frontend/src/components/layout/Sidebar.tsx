@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
+  HomeIcon,
   PencilSquareIcon,
   Cog6ToothIcon,
   ChevronLeftIcon,
@@ -9,6 +10,8 @@ import {
 } from '@heroicons/react/24/outline';
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
+
+const topLinks: NavItem[] = [{ to: '/', label: 'Home', Icon: HomeIcon }];
 
 // TODO: replace with real sessions from the backend.
 const MOCK_SESSIONS = [
@@ -62,7 +65,7 @@ export default function Sidebar() {
 
   const startNewChat = () => {
     setActiveSession(null);
-    navigate('/');
+    navigate('/chat');
   };
 
   return (
@@ -109,8 +112,15 @@ export default function Sidebar() {
         </div>
       )}
 
+      {/* Home */}
+      <div className="px-2 pt-4 shrink-0 space-y-0.5">
+        {topLinks.map((link) => (
+          <SidebarLink key={link.to} {...link} isCollapsed={isCollapsed} />
+        ))}
+      </div>
+
       {/* New chat */}
-      <div className="px-2 pt-4 shrink-0">
+      <div className="px-2 pt-2 shrink-0">
         <button
           onClick={startNewChat}
           title={isCollapsed ? 'New chat' : undefined}

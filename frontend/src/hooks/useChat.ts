@@ -12,6 +12,7 @@ export function useChat() {
 
   const sendMessage = useCallback(
     async (type: string, val: string) => {
+
       if (type !== 'text' || !val.trim()) return;
 
       appendMsg({

@@ -22,9 +22,8 @@ class Container:
 
 @asynccontextmanager
 async def build_container(settings: Settings) -> AsyncGenerator[Container]:
-    """Opens the vector store connection for the caller's scope and tears it down on
-    exit — see rag.adapters.pinecone_client.open_vector_store.
-    """
+    """Opens connections and tears it down on exit."""
+
     async with (
         open_vector_store(settings) as vector_store,
         open_checkpointer(settings) as checkpointer,
