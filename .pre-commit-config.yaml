@@ -35,6 +35,16 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Keeps frontend/src/types/api.generated.ts in sync with the backend's
+      # Pydantic schemas — auto-fixes locally (rerun `git add` + commit), like uv-lock above.
+      - id: frontend-api-types
+        name: frontend API types match backend schema
+        entry: bash scripts/generate_frontend_types.sh
+        language: system
+        pass_filenames: false
+        files: ^(rag/api/schema\.py|rag/api/routers/.*\.py|frontend/src/types/api\.generated\.ts)$
+        stages: [pre-commit]
+
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
