@@ -6,13 +6,16 @@ from langchain_core.documents import Document
 from pinecone import AsyncIndex, Hit, IndexModel, Pinecone, PineconeAsyncio
 
 from rag.config import Settings
+from rag.domain.errors import VectorStoreConfigurationError
 
 _TEXT_FIELD = "text"
 
 
 def _require_host(description: IndexModel) -> str:
     if not description.host:
-        raise RuntimeError(f"Pinecone index {description.name!r} has no host")
+        raise VectorStoreConfigurationError(
+            f"Pinecone index {description.name!r} has no host"
+        )
     return description.host
 
 
