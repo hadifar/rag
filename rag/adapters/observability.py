@@ -24,8 +24,8 @@ def _handler() -> CallbackHandler | None:
     from langfuse.langchain import CallbackHandler
 
     Langfuse(
-        public_key=settings.LANGFUSE_PUBLIC_KEY,
-        secret_key=settings.LANGFUSE_SECRET_KEY,
+        public_key=settings.LANGFUSE_PUBLIC_KEY.get_secret_value(),
+        secret_key=settings.LANGFUSE_SECRET_KEY.get_secret_value(),
         host=settings.LANGFUSE_HOST,
     )
     return CallbackHandler()

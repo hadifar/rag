@@ -1,5 +1,8 @@
-from fastapi import Request
+from typing import Annotated
 
+from fastapi import Depends, Request
+
+from rag.config import Settings, get_settings
 from rag.container import Container
 
 
@@ -9,3 +12,8 @@ def get_container(request: Request) -> Container:
     if container is None:
         raise RuntimeError("Container not initialized — app lifespan hasn't started")
     return container
+
+
+ContainerDep = Annotated[Container, Depends(get_container)]
+
+SettingsDep = Annotated[Settings, Depends(get_settings)]

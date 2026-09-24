@@ -4,6 +4,7 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
+from pydantic import SecretStr
 
 from rag.app import create_app
 from rag.config import Settings
@@ -33,9 +34,9 @@ class _StubGenerationService:
 
 def _stub_settings() -> Settings:
     return Settings(
-        OPENAI_API_KEY="test-key",
+        OPENAI_API_KEY=SecretStr("test-key"),
         OPENAI_MODEL="gpt-4o-mini",
-        PINECONE_API_KEY="test-key",
+        PINECONE_API_KEY=SecretStr("test-key"),
         PINECONE_DENSE_INDEX_NAME="dense",
         PINECONE_SPARSE_INDEX_NAME="sparse",
         PINECONE_CLOUD="aws",
@@ -44,8 +45,8 @@ def _stub_settings() -> Settings:
         PINECONE_SPARSE_MODEL="sparse-model",
         PINECONE_NAMESPACE="ns",
         LANGFUSE_ENABLED=False,
-        LANGFUSE_PUBLIC_KEY="pk",
-        LANGFUSE_SECRET_KEY="sk",
+        LANGFUSE_PUBLIC_KEY=SecretStr("pk"),
+        LANGFUSE_SECRET_KEY=SecretStr("sk"),
         LANGFUSE_HOST="http://localhost",
     )
 
