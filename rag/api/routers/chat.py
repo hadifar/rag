@@ -1,16 +1,18 @@
 import json
+from enum import StrEnum
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from rag.api.deps import ContainerDep
 from rag.api.schema import ChatRequest
-from rag.services.generation_service.streaming import (
-    StreamEvent,
-    TextDelta,
-    ToolCallResult,
-    ToolCallStart,
-)
+from rag.domain.events import StreamEvent, TextDelta, ToolCallResult, ToolCallStart
+
+
+class SseEventType(StrEnum):
+    TEXT = "text"
+    TOOL_START = "tool_start"
+    TOOL_RESULT = "tool_result"
 
 
 def build_chat_router() -> APIRouter:
@@ -36,12 +38,16 @@ def build_chat_router() -> APIRouter:
 def _to_sse(event: StreamEvent) -> str:
     match event:
         case TextDelta(text=text):
-            return _format("text", text)
+            return _format(SseEventType.TEXT, text)
         case ToolCallStart(name=name, args=args):
-            return _format("tool_start", json.dumps({"name": name, "args": args}))
+            return _format(
+                SseEventType.TOOL_START, json.dumps({"name": name, "args": args})
+            )
         case ToolCallResult(name=name, output=output):
-            return _format("tool_result", json.dumps({"name": name, "output": output}))
+            return _format(
+                SseEventType.TOOL_RESULT, json.dumps({"name": name, "output": output})
+            )
 
 
-def _format(event: str, data: str) -> str:
-    return f"event: {event}\ndata: {data}\n\n"
+def _format(event: SseEventType, data: str) -> str:
+    return f"event: {event.value}\ndata: {data}\n\n"

@@ -1,33 +1,14 @@
-"""Normalizes LangGraph's astream_events into one small vocabulary that the FastAPI
-SSE endpoint (`/api/chat/stream`) consumes directly.
+"""Normalizes LangGraph's astream_events into rag.domain.events.StreamEvent, the
+vocabulary the FastAPI SSE endpoint (`/api/chat/stream`) consumes directly.
 """
 
 from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 
-
-@dataclass
-class TextDelta:
-    text: str
-
-
-@dataclass
-class ToolCallStart:
-    name: str
-    args: dict
-
-
-@dataclass
-class ToolCallResult:
-    name: str
-    output: str
-
-
-StreamEvent = TextDelta | ToolCallStart | ToolCallResult
+from rag.domain.events import StreamEvent, TextDelta, ToolCallResult, ToolCallStart
 
 # Only the agent node's tokens are the user-facing answer — guardrail's and verify's
 # own LLM calls (classification, not an answer) run through this same graph and would

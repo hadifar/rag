@@ -156,6 +156,10 @@ activemq-data/
 # Docker Compose secrets (docker-compose.yml)
 /.secrets/
 
+# Intermediate OpenAPI dump used to regenerate frontend/src/types/api.generated.ts
+# (see scripts/generate_frontend_types.sh) — the generated .ts file is what's committed.
+/openapi.json
+
 # Bicep deployment params with real (non-secret but deployment-specific) values —
 # infra/azure/main.parameters.example.json stays a placeholder template.
 infra/azure/*.local.json
