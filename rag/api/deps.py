@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from rag.config import Settings, get_settings
 from rag.container import Container
 
 
@@ -14,3 +15,5 @@ def get_container(request: Request) -> Container:
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]
+
+SettingsDep = Annotated[Settings, Depends(get_settings)]
