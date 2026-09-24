@@ -13,8 +13,8 @@ from pydantic import SecretStr
 from rag.app import create_app
 from rag.config import Settings
 
-_PLACEHOLDER_SETTINGS = Settings(  # pyright: ignore[reportCallIssue]
-    _env_file=None,  # ignore the real .env — only the schema shape matters here
+_PLACEHOLDER_SETTINGS = Settings(
+    _env_file=None,  # pyright: ignore[reportCallIssue] — ignore the real .env, only the schema shape matters here
     OPENAI_API_KEY=SecretStr("placeholder"),
     OPENAI_MODEL="placeholder",
     PINECONE_API_KEY=SecretStr("placeholder"),

@@ -5,8 +5,9 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from rag.domain.events import StreamEvent
 from rag.services.generation_service.graph import build_graph
-from rag.services.generation_service.streaming import StreamEvent, stream_events
+from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
 from rag.services.retrieval_service.service import RetrievalService
 

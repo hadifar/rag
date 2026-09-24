@@ -5,12 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from rag.api.deps import ContainerDep
 from rag.api.schema import ChatRequest
-from rag.services.generation_service.streaming import (
-    StreamEvent,
-    TextDelta,
-    ToolCallResult,
-    ToolCallStart,
-)
+from rag.domain.events import StreamEvent, TextDelta, ToolCallResult, ToolCallStart
 
 
 def build_chat_router() -> APIRouter:
