@@ -1,6 +1,6 @@
 # Frontend
 
-React + TypeScript chat UI for the RAG backend, built with Vite, [`@chatui/core`](https://github.com/alibaba/ChatUI), Tailwind CSS v4 and React Router.
+React + TypeScript chat UI for the RAG backend, built with Vite, Tailwind CSS v4 and React Router.
 
 ## Install
 
@@ -28,19 +28,25 @@ src/
 ├── api/          # network calls (chat.ts streams SSE from /chat/stream)
 ├── components/
 │   ├── layout/   # AppLayout, Sidebar (new chat, recent sessions, settings)
-│   └── ...       # chat message renderers (tool, sources, avatars)
-├── hooks/        # useChat: message state and streaming logic
-├── pages/        # ChatPage, SettingsPage, NotFoundPage
-├── types/        # shared types (chat events, Settings)
+│   └── ...       # MessageList, Composer, and the tool/sources/typing bubbles it renders
+├── hooks/        # useMessageList (message list state), useChat (streaming + message assembly)
+├── pages/        # HomePage, ChatPage, SettingsPage, NotFoundPage
+├── types/        # shared types (chat messages/events, Settings)
 ├── App.tsx       # router
 └── main.tsx      # entry point
 ```
 
-Routes: `/` (chat) and `/settings`. Any other path shows the 404 page.
+Routes: `/` (home), `/chat`, `/settings`. Any other path shows the 404 page.
 
 ## Notes
 
-- **Styling:** Tailwind is loaded without its preflight reset, so it doesn't override `@chatui/core` styles. A small button/link reset lives in `@layer base` in [src/index.css](src/index.css). Chat bubble styles are in [src/App.css](src/App.css).
-- **Typing indicator:** it is a real `typing` message added in `useChat`, because `@chatui/core`'s `isTyping` prop doesn't go through `renderMessageContent`.
-- **New chat:** `ChatPage` is keyed on `location.key`, so navigating to `/` again remounts it with a fresh conversation and thread id.
-- **Placeholders:** the recent sessions list in the sidebar is mock data, and the Settings page is a static template with no API yet.
+- **Chat UI:** built in-house on plain Tailwind components (`MessageList`, `Composer`,
+  `ToolBubble`, `SourcesBubble`, `TypingIndicator`) — no chat UI library. The frontend is a pure
+  presenter: `useChat` assembles messages from the backend's SSE events, and the tool bubble
+  renders whatever `query`/`output` the backend already computed rather than inspecting raw args.
+- **Typing indicator:** a real `typing` message appended in `useChat` and removed once the first
+  real event for that turn arrives.
+- **New chat:** `ChatPage` is keyed on `location.key`, so navigating to `/chat` again remounts it
+  with a fresh conversation and thread id.
+- **Placeholders:** the recent sessions list in the sidebar is mock data, and the Settings page is
+  a static template with no write API yet.

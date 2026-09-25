@@ -34,7 +34,7 @@ turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_AT
 |---|---|
 | Language | Python ≥3.12, managed with `uv` |
 | Backend framework | FastAPI, LangGraph |
-| Frontend | React 19 + TypeScript + Vite, Tailwind CSS, `@chatui/core` |
+| Frontend | React 19 + TypeScript + Vite, Tailwind CSS |
 | Retrieval | Hybrid search via the `pinecone` SDK's async client directly — Pinecone hosts the embedding models |
 | Observability | `logging` (default) or `langfuse` |
 | Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer storage) |
@@ -73,9 +73,9 @@ rag/
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), settings.ts
-│   ├── components/                   # ToolBubble, SourcesBubble, MessageContent, layout/
-│   ├── hooks/useChat.ts
-│   └── pages/                        # ChatPage, SettingsPage, NotFoundPage
+│   ├── components/                   # MessageList, Composer, ToolBubble, SourcesBubble, layout/
+│   ├── hooks/                        # useMessageList, useChat
+│   └── pages/                        # HomePage, ChatPage, SettingsPage, NotFoundPage
 └── (Vite build served by nginx in Docker)
 
 infra/                                 # repo root — Docker + Azure infra, no Python imports
