@@ -12,6 +12,8 @@ export function TextBubble({ text, position }: TextBubbleProps) {
   }
 
   return (
-    <p className="max-w-[480px] whitespace-pre-wrap text-sm leading-6 text-slate-800">{text}</p>
+    <p className="max-w-[480px] whitespace-pre-wrap px-3 text-sm leading-6 text-slate-800">
+      {text}
+    </p>
   );
 }
