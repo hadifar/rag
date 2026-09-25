@@ -2,4 +2,5 @@ export * from './chat';
 
 import type { components } from './api.generated';
 
-export type Settings = components['schemas']['SettingsResponse'];
+// All backend request/response schemas, keyed by name (e.g. Schemas['ChatRequest']).
+export type Schemas = components['schemas'];

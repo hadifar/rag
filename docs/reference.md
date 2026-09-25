@@ -1,32 +1,8 @@
-# Engineering Design — RAG Chatbot
+# Reference — What Exists Today
 
-A retrieval-augmented chatbot over a static markdown knowledge base (the repo's `data/` — gitignored,
-you provide your own `.md` files; see [docs/setup.md](setup.md)), with a FastAPI backend and a
-separate React frontend.
-
-```mermaid
-graph TD
-    __start__((start)) --> guardrail(guardrail)
-    guardrail(guardrail) --> agent(agent)
-    agent(agent) -.-> tools(tools)
-    agent(agent) -.-> verify(verify)
-    tools(tools) --> agent(agent)
-    verify(verify) -.->|ungrounded| agent(agent)
-    verify(verify) -.->|grounded| __end__((end))
-
-    classDef default fill:#f2f0ff,line-height:1.2
-    classDef first fill-opacity:0
-    classDef last fill:#bfb6fc
-    class __start__ first
-    class __end__ last
-```
-
-`guardrail` classifies the message as in/out of scope for AtlasFlow (adding an off-topic
-instruction rather than short-circuiting, so the decline text is still generated — and
-streamed — by `agent`). `agent` calls the LLM (bound to `search_kb`); `tools_condition` routes
-to `tools` on a tool call or on to `verify` otherwise. `tools` always loops back to `agent`.
-`verify` checks the final answer against retrieved context (`is_grounded`) and either ends the
-turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
+As-built description of the current system: what's implemented and how it behaves. For diagrams
+of how pieces connect, see [architecture.md](architecture.md). For rules to follow when
+*extending* any of this, see [conventions.md](conventions.md).
 
 ## Tech stack
 
@@ -34,12 +10,12 @@ turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_AT
 |---|---|
 | Language | Python ≥3.12, managed with `uv` |
 | Backend framework | FastAPI, LangGraph |
-| Frontend | React 19 + TypeScript + Vite, Tailwind CSS, `@chatui/core` |
+| Frontend | React 19 + TypeScript + Vite, Tailwind CSS |
 | Retrieval | Hybrid search via the `pinecone` SDK's async client directly — Pinecone hosts the embedding models |
 | Observability | `logging` (default) or `langfuse` |
 | Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer storage) |
 | Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
-| Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` |
+| Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` — see [enforcement.md](enforcement.md) |
 
 ## Layout
 
@@ -73,17 +49,15 @@ rag/
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), settings.ts
-│   ├── components/                   # ToolBubble, SourcesBubble, MessageContent, layout/
-│   ├── hooks/useChat.ts
-│   └── pages/                        # ChatPage, SettingsPage, NotFoundPage
+│   ├── components/                   # MessageList, Composer, ToolBubble, SourcesBubble, layout/
+│   ├── hooks/                        # useChat
+│   └── pages/                        # HomePage, ChatPage, SettingsPage, NotFoundPage
 └── (Vite build served by nginx in Docker)
 
 infra/                                 # repo root — Docker + Azure infra, no Python imports
 ├── docker/                            # Dockerfile.backend, Dockerfile.frontend, nginx.conf.template
 └── azure/                             # main.bicep — see docs/infra.md
 ```
-
-
 
 ## Services
 
@@ -96,27 +70,6 @@ calls an embedding model directly.
 | `retrieval_service` | hybrid (dense+sparse) similarity search, plus single-document lookup by `source_id` | `VectorStorePort` |
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
 | `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
-
-
-
-## Dependency injection
-
-`container.py` is the only place concrete adapters get constructed and injected — pure wiring, no
-FastAPI/React imports. It's an async context manager so the Pinecone index connections it opens
-get torn down deterministically:
-
-```python
-@dataclass
-class Container:
-    ranking_service: RetrievalService
-    generation_service: GenerationService
-    ingestion_service: IngestionService
-
-
-@asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container]: ...
-```
-
 
 ## Conversation state
 
@@ -132,14 +85,18 @@ A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
   runs on connect (idempotent schema migration). Durable across restarts and safe for multiple
   backend replicas.
 
-## Tool calling
+## Streaming
 
-`generation_service`'s `search_kb` tool is built as a closure inside `tools.py`
-(`build_search_tool(ranking_service)`), not a module-level `@tool` function — this keeps it
-consistent with constructor injection everywhere else, since `retrieval_service` is a fixed
-dependency of the service instance, not something that varies per request. (The parameter is
-still named `ranking_service` in code — a naming holdover from before the `ranking_service` →
-`retrieval_service` rename that hasn't been swept through every call site yet.)
+`generation_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
+vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `agent` node's chat
+model calls only — `guardrail` and `verify` run their own LLM calls (classification, not an
+answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
+text stream too. Two consumers read the normalized stream:
+- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result`
+  events).
+- The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
+  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
+  (which links to `/api/kb/{filename}`).
 
 ## Observability
 
@@ -155,43 +112,6 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 - `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `LANGFUSE_PUBLIC_KEY` /
   `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` (validated in `config.py`). On teardown, the context
   manager's `finally` calls `get_client().flush()` so short-lived runs aren't lost.
-
-## Streaming
-
-`generation_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
-vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `agent` node's chat
-model calls only — `guardrail` and `verify` run their own LLM calls (classification, not an
-answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
-text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result`
-  events).
-- The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
-  (which links to `/api/kb/{filename}`).
-
-## Ingestion — designed for more sources later
-
-```python
-class DocumentLoaderPort(Protocol):
-    def load(self) -> Iterable[RawDocument]: ...
-
-
-class ChunkerPort(Protocol):
-    def chunk(self, document: RawDocument) -> list[Document]: ...
-```
-
-`MarkdownFileLoader` is the only concrete loader today. Adding a new source (PDF, Confluence, a
-wiki) means writing a new class satisfying `DocumentLoaderPort` and registering it —
-`IngestionService`, chunking, and the vector store adapter are all untouched. Two chunkers exist:
-`WholeDocumentChunker` (one chunk per document — wired in by default in `container.py`) and
-`MarkdownHeaderChunker` (splits on `#`/`##`/`###` headings). Both produce `langchain_core.Document`
-chunks directly, with deterministic ids (`f"{source_id}::{chunk_index}"`), so re-running
-`rag ingest` after a doc changes upserts over the existing vectors instead of duplicating them.
-`IngestionService` never calls an embedding model itself — `aadd_documents` upserts raw
-text+metadata records to both the dense and sparse Pinecone indexes, and Pinecone's integrated
-inference embeds them server-side. Both indexes are created idempotently (check-exists /
-create-if-missing, one per configured embedding model) on first `rag ingest` run — no manual
-console step required.
 
 ## Secrets management
 

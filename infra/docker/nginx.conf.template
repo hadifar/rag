@@ -9,8 +9,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     # style-src/font-src allow Google Fonts (src/index.css's @import) and
-    # 'unsafe-inline' for style covers React's style={{...}} usage and whatever
-    # @chatui/core injects at runtime
+    # 'unsafe-inline' for style covers React's style={{...}} usage (Sidebar's icons)
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 
     # Same paths the Vite dev server proxies (see frontend/vite.config.ts).
