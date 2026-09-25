@@ -31,7 +31,8 @@ Basic/Free/Shared).
 
 Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
 federated credential are one-time setup outside this template) and the Postgres server behind
-`DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or something else.
+`CHECKPOINTER__DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or
+something else.
 
 **Validate locally, without deploying:**
 
@@ -48,13 +49,15 @@ az deployment group what-if \
   --mode Complete \
   --template-file infra/azure/main.bicep \
   --parameters infra/azure/main.parameters.local.json \
-  --parameters databaseUrl=<...> openAiApiKey=<...> pineconeApiKey=<...> \
+  --parameters databaseUrl=<...> llmApiKey=<...> pineconeApiKey=<...> \
                langfusePublicKey=<...> langfuseSecretKey=<...>
 ```
 
 `main.parameters.local.json` (gitignored) holds your real, deployment-specific values —
 `main.parameters.example.json` stays a placeholder template in git; copy it to create your own
-local file.
+local file. `llmApiKey` works for either `llmProvider` — an OpenAI key for `"openai"`, an Azure
+OpenAI key for `"azure_openai"` (which also needs `azureOpenAiEndpoint`/`azureOpenAiDeployment`/
+`azureOpenAiApiVersion` set in your parameters file).
 
 **Deploy:** same command with `az deployment group create` in place of `what-if`. Pass the five
 secure params on the command line or via env-var substitution — never add them to either

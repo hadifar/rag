@@ -118,8 +118,6 @@ export interface components {
             temperature: number;
             /** Top K */
             top_k: number;
-            /** System Prompt */
-            system_prompt: string;
         };
         /** ValidationError */
         ValidationError: {

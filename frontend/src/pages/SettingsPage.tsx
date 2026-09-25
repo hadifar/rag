@@ -6,7 +6,7 @@ const inputCls =
   'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-normal text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition';
 const labelCls = 'flex flex-col gap-1.5 text-sm font-medium text-slate-700';
 
-const EMPTY: Schemas['SettingsResponse'] = { model: '', temperature: 0, top_k: 4, system_prompt: '' };
+const EMPTY: Schemas['SettingsResponse'] = { model: '', temperature: 0, top_k: 4 };
 
 export default function SettingsPage() {
   const [form, setForm] = useState<Schemas['SettingsResponse']>(EMPTY);
@@ -65,14 +65,7 @@ export default function SettingsPage() {
         />
       </label>
 
-      <label className={labelCls}>
-        System prompt
-        <textarea
-          className={inputCls}
-          rows={6} value={form.system_prompt}
-          onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
-        />
-      </label>
+
 
       <div className="flex items-center gap-3">
         <button

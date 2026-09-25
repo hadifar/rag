@@ -5,20 +5,21 @@ import json
 from pydantic import SecretStr
 
 from rag.app import create_app
-from rag.config import Settings
+from rag.config import OpenAILLM, PineconeConfig, Settings
 
 _PLACEHOLDER_SETTINGS = Settings(
     _env_file=None,  # pyright: ignore[reportCallIssue] — ignore the real .env, only the schema shape matters here
-    OPENAI_API_KEY=SecretStr("placeholder"),
-    OPENAI_MODEL="placeholder",
-    PINECONE_API_KEY=SecretStr("placeholder"),
-    PINECONE_DENSE_INDEX_NAME="placeholder",
-    PINECONE_SPARSE_INDEX_NAME="placeholder",
-    PINECONE_CLOUD="placeholder",
-    PINECONE_REGION="placeholder",
-    PINECONE_DENSE_MODEL="placeholder",
-    PINECONE_SPARSE_MODEL="placeholder",
-    PINECONE_NAMESPACE="placeholder",
+    LLM=OpenAILLM(API_KEY=SecretStr("placeholder"), MODEL="placeholder"),
+    PINECONE=PineconeConfig(
+        API_KEY=SecretStr("placeholder"),
+        DENSE_INDEX_NAME="placeholder",
+        SPARSE_INDEX_NAME="placeholder",
+        CLOUD="placeholder",
+        REGION="placeholder",
+        DENSE_MODEL="placeholder",
+        SPARSE_MODEL="placeholder",
+        NAMESPACE="placeholder",
+    ),
 )
 
 

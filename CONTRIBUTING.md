@@ -30,7 +30,7 @@ uv run pytest
 
 Runs both suites:
 - `tests/unit` — fast, no external dependencies (FastAPI wired up with stub services via `create_app(container=...)`).
-- `tests/integration` — against real Pinecone/OpenAI, requires `PINECONE_API_KEY`/`OPENAI_API_KEY` in `.env` (see `tests/integration/conftest.py`); skips with a clear reason if they're missing.
+- `tests/integration` — against real Pinecone/OpenAI, requires `PINECONE__API_KEY`/`LLM__API_KEY` in `.env` (see `tests/integration/conftest.py`); skips with a clear reason if they're missing.
 
 Run just one: `uv run pytest tests/unit` or `uv run pytest tests/integration`.
 

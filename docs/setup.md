@@ -6,7 +6,7 @@ git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 ```
-Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
+Then fill in `.env` (see .example.env) `LLM__API_KEY`, `PINECONE__API_KEY`, etc.
 
 **You need a `data/` folder in the repo root with your own `.md` files** — it's gitignored, so a
 fresh clone doesn't come with one. `KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at it,
@@ -19,7 +19,7 @@ gitignored and never read by the app itself:
 mkdir -p .secrets
 openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
 ```
-Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
+Then make sure `.env`'s `CHECKPOINTER__DATABASE_URL` uses that same password (the app connects with it
 directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
 
 ## Running
@@ -28,10 +28,10 @@ directly; `.secrets/postgres_password.txt` is only used to initialize the `postg
 ```bash
 uv run python -m rag serve
 ```
-If `.env` has `CHECKPOINTER_BACKEND=postgres`, a Postgres instance must be reachable at
-`DATABASE_URL` — either `docker compose up -d postgres` (published on `localhost:5432`; adjust
-`DATABASE_URL`'s host to `localhost` when running the app outside Docker) or set
-`CHECKPOINTER_BACKEND=memory` for a dependency-free local run.
+If `.env` has `CHECKPOINTER__BACKEND=postgres`, a Postgres instance must be reachable at
+`CHECKPOINTER__DATABASE_URL` — either `docker compose up -d postgres` (published on
+`localhost:5432`; adjust its host to `localhost` when running the app outside Docker) or set
+`CHECKPOINTER__BACKEND=memory` for a dependency-free local run.
 
 ### CLI
 ```bash

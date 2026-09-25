@@ -6,7 +6,7 @@
 - `WholeDocumentChunker` puts an entire file into one record — no size-aware chunking for docs past the embedding model's input limit
 - `MarkdownHeaderChunker` exists and is arguably the better default, but nothing wires it up — `container.py` hardcodes `WholeDocumentChunker`, so the better chunker is dead code with no way to select it
 - Only local markdown is supported — no PDF, Confluence, wiki, etc. loaders
-- No embedding-model versioning: changing `PINECONE_DENSE_MODEL`/`PINECONE_SPARSE_MODEL` leaves old vectors from the previous model silently mixed in with new ones, with no re-embed/migration path
+- No embedding-model versioning: changing `PINECONE__DENSE_MODEL`/`PINECONE__SPARSE_MODEL` leaves old vectors from the previous model silently mixed in with new ones, with no re-embed/migration path
 - `ensure_indexes()` runs on every app boot (not just `rag ingest`), so the backend's Pinecone API key needs index-*creation* rights just to start serving traffic — broader than a request-serving process should need, and a bad fit for least-privilege
 
 ## Retrieval
@@ -59,4 +59,4 @@
 - No continuous-deployment hook from the registry to the Web Apps — after pushing a new image, they need a manual `az webapp restart` to actually pull it
 
 ## Infra & deployment
-- The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
+- The Postgres server behind `CHECKPOINTER__DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else

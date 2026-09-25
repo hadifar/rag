@@ -80,20 +80,37 @@ root_package = "rag"
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.api"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.container", "rag.app", "rag.cli"]
 
 [[tool.importlinter.contracts]]
-name = "services do not import adapters directly"
+name = "services do not import adapters or entrypoints directly"
 type = "forbidden"
 source_modules = ["rag.services"]
-forbidden_modules = ["rag.adapters"]
+forbidden_modules = ["rag.adapters", "rag.container", "rag.app", "rag.cli"]
 
 [[tool.importlinter.contracts]]
-name = "api does not import adapters directly"
+name = "only the composition root constructs adapters"
 type = "forbidden"
-source_modules = ["rag.api"]
+source_modules = ["rag.api", "rag.app", "rag.cli"]
 forbidden_modules = ["rag.adapters"]
 ignore_imports = ["rag.container -> rag.adapters.**"]
+
+[[tool.importlinter.contracts]]
+name = "api does not import entrypoints"
+type = "forbidden"
+source_modules = ["rag.api"]
+forbidden_modules = ["rag.app", "rag.cli"]
+
+[[tool.importlinter.contracts]]
+name = "only deps reaches services and the container directly"
+type = "forbidden"
+source_modules = ["rag.api"]
+forbidden_modules = ["rag.container", "rag.services"]
+allow_indirect_imports = "true"
+ignore_imports = [
+    "rag.api.deps -> rag.container",
+    "rag.api.deps -> rag.services.**",
+]
 
 [[tool.importlinter.contracts]]
 name = "layering"
