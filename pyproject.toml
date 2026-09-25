@@ -1,6 +1,6 @@
 [project]
 name = "RAG"
-version = "0.5.1"
+version = "0.6.0"
 description = "A prod ready RAG service"
 readme = "README.md"
 license = "MIT"

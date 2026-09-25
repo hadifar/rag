@@ -1,3 +1,39 @@
+## v0.6.0 (2026-09-25)
+
+### Feat
+
+- assistant message renders code, md, etc
+- add HomePage component and update routing; modify sidebar navigation and NotFoundPage link
+- add pre-commit hook for unit tests to catch contract breaks early
+- refactor event handling by centralizing event definitions in rag.domain.events
+- create a contract between pydantic & typescript types to ensure consistency
+- add baselogger as an onother option for observablity
+- add async rule
+
+### Fix
+
+- composer font is aligned with reset of the app
+- adjust assistant left padding
+- drop stall coreui docs & configs
+- tool results by default is collapsed
+- add resources to graph state
+- add headers to nginx to avoid attacks
+- enhance backend security by implementing network isolation and updating service plan SKU
+
+### Refactor
+
+- export single Schemas alias instaed of handpick names
+- enhance chat types and streamline streamChat function
+- streamline API calls with centralized URL and JSON post handling
+- improve user/assistant text bubble
+- drop chatui
+- add error handler (domain.errors)
+- use secretStr instead of plain str
+- use deps for settings
+- add tag to apirouter & return healthresponse for health api
+- modernize dependency injection in FastAPI routers
+- update stal docs & drop ContinaerHandle class & use fastapi app.state
+
 ## v0.5.1 (2026-09-23)
 
 ### Fix
