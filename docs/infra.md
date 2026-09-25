@@ -31,7 +31,8 @@ Basic/Free/Shared).
 
 Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
 federated credential are one-time setup outside this template) and the Postgres server behind
-`DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or something else.
+`CHECKPOINTER__DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or
+something else.
 
 **Validate locally, without deploying:**
 

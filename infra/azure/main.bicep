@@ -333,13 +333,13 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   properties: {
     // Must match the port rag.config.Settings.PORT defaults to / the app binds.
     WEBSITES_PORT: '8000'
-    CHECKPOINTER_BACKEND: 'postgres'
+    CHECKPOINTER__BACKEND: 'postgres'
 
-    DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
+    CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
     OPENAI_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/openai-api-key/)'
     PINECONE_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
-    LANGFUSE_PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
-    LANGFUSE_SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
+    OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
+    OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
 
     OPENAI_MODEL: openAiModel
     PINECONE_DENSE_INDEX_NAME: pineconeDenseIndexName
@@ -349,8 +349,10 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     PINECONE_DENSE_MODEL: pineconeDenseModel
     PINECONE_SPARSE_MODEL: pineconeSparseModel
     PINECONE_NAMESPACE: pineconeNamespace
-    LANGFUSE_ENABLED: string(langfuseEnabled)
-    LANGFUSE_HOST: langfuseHost
+    // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
+    // this flag had no actual effect — it now genuinely selects the backend.
+    OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'
+    OBSERVABILITY__HOST: langfuseHost
   }
   dependsOn: [
     keyVaultSecretsUserRoleAssignment

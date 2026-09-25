@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
 from rag.app import create_app
-from rag.config import Settings
+from rag.config import LoggingObservability, Settings
 from rag.container import Container
 from rag.domain.events import (
     SourcesReady,
@@ -56,10 +56,7 @@ def _stub_settings() -> Settings:
         PINECONE_DENSE_MODEL="dense-model",
         PINECONE_SPARSE_MODEL="sparse-model",
         PINECONE_NAMESPACE="ns",
-        LANGFUSE_PUBLIC_KEY=SecretStr("pk"),
-        LANGFUSE_SECRET_KEY=SecretStr("sk"),
-        LANGFUSE_HOST="http://localhost",
-        OBSERVABILITY_BACKEND="logging",
+        OBSERVABILITY=LoggingObservability(),
     )
 
 

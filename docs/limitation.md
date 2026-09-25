@@ -59,4 +59,4 @@
 - No continuous-deployment hook from the registry to the Web Apps — after pushing a new image, they need a manual `az webapp restart` to actually pull it
 
 ## Infra & deployment
-- The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
+- The Postgres server behind `CHECKPOINTER__DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else

@@ -19,7 +19,7 @@ gitignored and never read by the app itself:
 mkdir -p .secrets
 openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
 ```
-Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
+Then make sure `.env`'s `CHECKPOINTER__DATABASE_URL` uses that same password (the app connects with it
 directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
 
 ## Running
@@ -28,10 +28,10 @@ directly; `.secrets/postgres_password.txt` is only used to initialize the `postg
 ```bash
 uv run python -m rag serve
 ```
-If `.env` has `CHECKPOINTER_BACKEND=postgres`, a Postgres instance must be reachable at
-`DATABASE_URL` — either `docker compose up -d postgres` (published on `localhost:5432`; adjust
-`DATABASE_URL`'s host to `localhost` when running the app outside Docker) or set
-`CHECKPOINTER_BACKEND=memory` for a dependency-free local run.
+If `.env` has `CHECKPOINTER__BACKEND=postgres`, a Postgres instance must be reachable at
+`CHECKPOINTER__DATABASE_URL` — either `docker compose up -d postgres` (published on
+`localhost:5432`; adjust its host to `localhost` when running the app outside Docker) or set
+`CHECKPOINTER__BACKEND=memory` for a dependency-free local run.
 
 ### CLI
 ```bash

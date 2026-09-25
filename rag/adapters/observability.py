@@ -1,12 +1,12 @@
 import logging
 from collections.abc import AsyncGenerator, Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 
-from rag.config import Settings
+from rag.config import LangfuseObservability, LoggingObservability, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -37,30 +37,27 @@ def _logging_trace_config(name: str | None = None) -> RunnableConfig:
 
 
 @asynccontextmanager
-async def _open_logging(settings: Settings) -> AsyncGenerator[TraceConfig]:
+async def _open_logging(config: LoggingObservability) -> AsyncGenerator[TraceConfig]:
     yield _logging_trace_config
 
 
 @asynccontextmanager
-async def _open_langfuse(settings: Settings) -> AsyncGenerator[TraceConfig]:
+async def _open_langfuse(config: LangfuseObservability) -> AsyncGenerator[TraceConfig]:
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
 
-    assert settings.LANGFUSE_PUBLIC_KEY is not None
-    assert settings.LANGFUSE_SECRET_KEY is not None
-
     Langfuse(
-        public_key=settings.LANGFUSE_PUBLIC_KEY.get_secret_value(),
-        secret_key=settings.LANGFUSE_SECRET_KEY.get_secret_value(),
-        host=settings.LANGFUSE_HOST,
+        public_key=config.PUBLIC_KEY.get_secret_value(),
+        secret_key=config.SECRET_KEY.get_secret_value(),
+        host=config.HOST,
     )
     handler = CallbackHandler()
 
     def trace_config(name: str | None = None) -> RunnableConfig:
-        config: RunnableConfig = {"callbacks": [handler]}
+        cfg: RunnableConfig = {"callbacks": [handler]}
         if name is not None:
-            config["run_name"] = name
-        return config
+            cfg["run_name"] = name
+        return cfg
 
     try:
         yield trace_config
@@ -70,13 +67,12 @@ async def _open_langfuse(settings: Settings) -> AsyncGenerator[TraceConfig]:
         get_client().flush()
 
 
-_BACKENDS: dict[str, Callable[[Settings], AbstractAsyncContextManager[TraceConfig]]] = {
-    "logging": _open_logging,
-    "langfuse": _open_langfuse,
-}
-
-
 @asynccontextmanager
 async def open_trace_config(settings: Settings) -> AsyncGenerator[TraceConfig]:
-    async with _BACKENDS[settings.OBSERVABILITY_BACKEND](settings) as trace_config:
-        yield trace_config
+    match settings.OBSERVABILITY:
+        case LoggingObservability() as config:
+            async with _open_logging(config) as trace_config:
+                yield trace_config
+        case LangfuseObservability() as config:
+            async with _open_langfuse(config) as trace_config:
+                yield trace_config

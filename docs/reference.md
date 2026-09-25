@@ -39,7 +39,7 @@ rag/
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
 │   ├── pinecone_client.py            # hybrid dense+sparse HybridPineconeVectorStore
 │   ├── llm_client.py
-│   ├── checkpointer.py               # LangGraph checkpointer (CHECKPOINTER_BACKEND)
+│   ├── checkpointer.py               # LangGraph checkpointer (Settings.CHECKPOINTER)
 │   └── observability.py              # Langfuse tracing config
 │
 ├── api/
@@ -75,13 +75,14 @@ calls an embedding model directly.
 
 A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
 `adapters/checkpointer.py`'s `open_checkpointer()` (an async context manager, mirroring
-`open_vector_store()`) from `Settings.CHECKPOINTER_BACKEND`:
+`open_vector_store()`) from `Settings.CHECKPOINTER`, a discriminated union selected by
+`CHECKPOINTER__BACKEND`:
 - The frontend generates one per browser session and passes it in every request.
 - A raw API caller generates and passes its own in `ChatRequest.thread_id`.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves it.
 - `"memory"` (default) → `InMemorySaver`, for local dev; doesn't survive a restart or multiple
   replicas.
-- `"postgres"` → `AsyncPostgresSaver`, reading `Settings.DATABASE_URL`; `checkpointer.setup()`
+- `"postgres"` → `AsyncPostgresSaver`, reading `CHECKPOINTER__DATABASE_URL`; `checkpointer.setup()`
   runs on connect (idempotent schema migration). Durable across restarts and safe for multiple
   backend replicas.
 
@@ -104,14 +105,15 @@ text stream too. Two consumers read the normalized stream:
 (opened in `container.py` alongside the vector store and checkpointer) that yields a
 `trace_config(name)` callable returning a LangChain `RunnableConfig` with the backend's callback
 wired in — so callers always pass `config=trace_config(...)` with no behavioral branching.
-`GenerationService` uses it to tag the chat run. The backend is picked by
-`Settings.OBSERVABILITY_BACKEND`:
+`GenerationService` uses it to tag the chat run. The backend is a discriminated union,
+`Settings.OBSERVABILITY`, selected by `OBSERVABILITY__BACKEND`:
 
 - `"logging"` (default) — `_LoggingCallbackHandler` logs LLM/tool start/end events through the
   standard `logging` module; zero extra infra.
-- `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `LANGFUSE_PUBLIC_KEY` /
-  `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` (validated in `config.py`). On teardown, the context
-  manager's `finally` calls `get_client().flush()` so short-lived runs aren't lost.
+- `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `OBSERVABILITY__PUBLIC_KEY` /
+  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservability`
+  model in `config.py` — missing one fails at startup). On teardown, the context manager's
+  `finally` calls `get_client().flush()` so short-lived runs aren't lost.
 
 ## Secrets management
 
@@ -119,8 +121,8 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 `pydantic-settings`. The one exception is the `postgres` container's own init password: it's
 passed via a Docker Compose secret file (`.secrets/postgres_password.txt`, also gitignored,
 referenced in `docker-compose.yml`'s `secrets:` block) rather than an env var, so it never has to
-round-trip through `Settings` at all — the app connects to Postgres using `DATABASE_URL` (which
-already contains the same password), not `POSTGRES_PASSWORD`.
+round-trip through `Settings` at all — the app connects to Postgres using
+`CHECKPOINTER__DATABASE_URL` (which already contains the same password), not `POSTGRES_PASSWORD`.
 
 **Prod (Azure App Service)** — secrets are stored in Azure Key Vault and exposed to the app as
 *Key Vault references* in App Service's Application Settings. App Service resolves these (via the

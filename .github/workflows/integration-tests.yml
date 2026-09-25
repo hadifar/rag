@@ -30,8 +30,4 @@ jobs:
           PINECONE_DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
           PINECONE_SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
           PINECONE_NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
-          LANGFUSE_ENABLED: "false"
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
         run: uv run pytest tests/integration
