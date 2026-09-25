@@ -4,13 +4,13 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { apiUrl, jsonPost } from './base';
-import type { ChatRequest } from '../types';
+import type { Schemas } from '../types';
 import type { ChatStreamEvent } from '../types/chat';
 
-export interface StreamChatArgs extends ChatRequest {
+export type StreamChatArgs = Schemas['ChatRequest'] & {
   onEvent: (event: ChatStreamEvent) => void;
   signal?: AbortSignal;
-}
+};
 
 export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
 
