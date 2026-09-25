@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ChatMessage } from '../types/chat';
+import { TextBubble } from './TextBubble';
 import { ToolBubble } from './ToolBubble';
 import { SourcesBubble } from './SourcesBubble';
 import { TypingIndicator } from './TypingIndicator';
@@ -10,17 +11,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       return <TypingIndicator />;
 
     case 'text':
-      return message.position === 'right' ? (
-        <div className="max-w-[480px] rounded-2xl rounded-tr-sm bg-slate-100 px-4 py-3">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
-            {message.content.text}
-          </p>
-        </div>
-      ) : (
-        <p className="max-w-[480px] whitespace-pre-wrap text-sm leading-6 text-slate-800">
-          {message.content.text}
-        </p>
-      );
+      return <TextBubble {...message.content} position={message.position} />;
 
     case 'tool':
       return <ToolBubble {...message.content} />;
