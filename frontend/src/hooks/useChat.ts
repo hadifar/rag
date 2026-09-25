@@ -100,7 +100,7 @@ export function useChat() {
       };
 
       try {
-        await streamChat(text, threadIdRef.current, onEvent, controller.signal);
+        await streamChat({ message: text, threadId: threadIdRef.current, onEvent, signal: controller.signal });
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);

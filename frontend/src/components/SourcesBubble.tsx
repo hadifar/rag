@@ -1,3 +1,4 @@
+import { kbSourceUrl } from '../api/kb';
 import type { SourcesContent } from '../types/chat';
 
 export function SourcesBubble({ names }: SourcesContent) {
@@ -8,7 +9,7 @@ export function SourcesBubble({ names }: SourcesContent) {
         {names.map((name) => (
           <li key={name}>
             <a
-              href={`/api/kb/${name}`}
+              href={kbSourceUrl(name)}
               target="_blank"
               rel="noreferrer"
               className="text-indigo-600 hover:underline"
