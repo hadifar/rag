@@ -2,7 +2,6 @@ from fastapi import APIRouter
 
 from rag.api.deps import SettingsDep
 from rag.api.schema import SettingsResponse
-from rag.services.generation_service.graph import SYSTEM_PROMPT
 
 # TODO: later change default model
 # Static for now
@@ -21,7 +20,6 @@ def build_settings_router(settings: SettingsDep) -> APIRouter:
             model=DEFAULT_MODEL,
             temperature=DEFAULT_TEMPERATURE,
             top_k=DEFAULT_TOP_K,
-            system_prompt=SYSTEM_PROMPT,
         )
 
     return router

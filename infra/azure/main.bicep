@@ -358,17 +358,17 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
 
       CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
-      PINECONE_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
+      PINECONE__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
       OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
       OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
 
-      PINECONE_DENSE_INDEX_NAME: pineconeDenseIndexName
-      PINECONE_SPARSE_INDEX_NAME: pineconeSparseIndexName
-      PINECONE_CLOUD: pineconeCloud
-      PINECONE_REGION: pineconeRegion
-      PINECONE_DENSE_MODEL: pineconeDenseModel
-      PINECONE_SPARSE_MODEL: pineconeSparseModel
-      PINECONE_NAMESPACE: pineconeNamespace
+      PINECONE__DENSE_INDEX_NAME: pineconeDenseIndexName
+      PINECONE__SPARSE_INDEX_NAME: pineconeSparseIndexName
+      PINECONE__CLOUD: pineconeCloud
+      PINECONE__REGION: pineconeRegion
+      PINECONE__DENSE_MODEL: pineconeDenseModel
+      PINECONE__SPARSE_MODEL: pineconeSparseModel
+      PINECONE__NAMESPACE: pineconeNamespace
       // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
       // this flag had no actual effect — it now genuinely selects the backend.
       OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'

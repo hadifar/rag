@@ -29,6 +29,17 @@ class PostgresCheckpointer(BaseModel):
     DATABASE_URL: SecretStr
 
 
+class PineconeConfig(BaseModel):
+    API_KEY: SecretStr
+    DENSE_INDEX_NAME: str
+    SPARSE_INDEX_NAME: str
+    CLOUD: str
+    REGION: str
+    DENSE_MODEL: str
+    SPARSE_MODEL: str
+    NAMESPACE: str
+
+
 class LoggingObservability(BaseModel):
     BACKEND: Literal["logging"] = "logging"
 
@@ -59,16 +70,7 @@ class Settings(BaseSettings):
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
     LLM: LLMConfig
-
-    PINECONE_API_KEY: SecretStr
-    PINECONE_DENSE_INDEX_NAME: str
-    PINECONE_SPARSE_INDEX_NAME: str
-    PINECONE_CLOUD: str
-    PINECONE_REGION: str
-    PINECONE_DENSE_MODEL: str
-    PINECONE_SPARSE_MODEL: str
-    PINECONE_NAMESPACE: str
-
+    PINECONE: PineconeConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()
     CHECKPOINTER: CheckpointerConfig = MemoryCheckpointer()
 

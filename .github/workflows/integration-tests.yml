@@ -23,12 +23,12 @@ jobs:
           LLM__BACKEND: openai
           LLM__API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LLM__MODEL: ${{ vars.OPENAI_MODEL }}
-          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          PINECONE_DENSE_INDEX_NAME: ${{ vars.PINECONE_DENSE_INDEX_NAME }}
-          PINECONE_SPARSE_INDEX_NAME: ${{ vars.PINECONE_SPARSE_INDEX_NAME }}
-          PINECONE_CLOUD: ${{ vars.PINECONE_CLOUD }}
-          PINECONE_REGION: ${{ vars.PINECONE_REGION }}
-          PINECONE_DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
-          PINECONE_SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
-          PINECONE_NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
+          PINECONE__API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE__DENSE_INDEX_NAME: ${{ vars.PINECONE_DENSE_INDEX_NAME }}
+          PINECONE__SPARSE_INDEX_NAME: ${{ vars.PINECONE_SPARSE_INDEX_NAME }}
+          PINECONE__CLOUD: ${{ vars.PINECONE_CLOUD }}
+          PINECONE__REGION: ${{ vars.PINECONE_REGION }}
+          PINECONE__DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
+          PINECONE__SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
+          PINECONE__NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
         run: uv run pytest tests/integration
