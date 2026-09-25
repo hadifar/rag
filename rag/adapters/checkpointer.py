@@ -1,5 +1,5 @@
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
@@ -9,20 +9,32 @@ from rag.config import Settings
 
 
 @asynccontextmanager
-async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpointSaver]:
-    """Opens the checkpointer connection for the caller's scope and tears it down on
-    exit — mirrors rag.adapters.pinecone_client.open_vector_store.
-    """
-    if settings.CHECKPOINTER_BACKEND == "memory":
-        yield InMemorySaver()
-        return
+async def _open_memory(settings: Settings) -> AsyncGenerator[BaseCheckpointSaver]:
+    yield InMemorySaver()
 
-    assert (
-        settings.DATABASE_URL is not None
-    )  # enforced by Settings._require_database_url
+
+@asynccontextmanager
+async def _open_postgres(settings: Settings) -> AsyncGenerator[BaseCheckpointSaver]:
+
+    assert settings.DATABASE_URL is not None
 
     async with AsyncPostgresSaver.from_conn_string(
         settings.DATABASE_URL.get_secret_value()
     ) as checkpointer:
         await checkpointer.setup()
+        yield checkpointer
+
+
+_BACKENDS: dict[
+    str, Callable[[Settings], AbstractAsyncContextManager[BaseCheckpointSaver]]
+] = {
+    "memory": _open_memory,
+    "postgres": _open_postgres,
+}
+
+
+@asynccontextmanager
+async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpointSaver]:
+    """Opens the checkpointer connection for the caller's scope and tears it down on exit"""
+    async with _BACKENDS[settings.CHECKPOINTER_BACKEND](settings) as checkpointer:
         yield checkpointer

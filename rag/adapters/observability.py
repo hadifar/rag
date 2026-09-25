@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -9,6 +9,8 @@ from langchain_core.runnables import RunnableConfig
 from rag.config import Settings
 
 logger = logging.getLogger(__name__)
+
+TraceConfig = Callable[[str | None], RunnableConfig]
 
 
 class _LoggingCallbackHandler(BaseCallbackHandler):
@@ -35,9 +37,12 @@ def _logging_trace_config(name: str | None = None) -> RunnableConfig:
 
 
 @asynccontextmanager
-async def _open_langfuse(
-    settings: Settings,
-) -> AsyncGenerator[Callable[[str | None], RunnableConfig]]:
+async def _open_logging(settings: Settings) -> AsyncGenerator[TraceConfig]:
+    yield _logging_trace_config
+
+
+@asynccontextmanager
+async def _open_langfuse(settings: Settings) -> AsyncGenerator[TraceConfig]:
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
 
@@ -65,14 +70,13 @@ async def _open_langfuse(
         get_client().flush()
 
 
-@asynccontextmanager
-async def open_trace_config(
-    settings: Settings,
-) -> AsyncGenerator[Callable[[str | None], RunnableConfig]]:
+_BACKENDS: dict[str, Callable[[Settings], AbstractAsyncContextManager[TraceConfig]]] = {
+    "logging": _open_logging,
+    "langfuse": _open_langfuse,
+}
 
-    match settings.OBSERVABILITY_BACKEND:
-        case "logging":
-            yield _logging_trace_config
-        case "langfuse":
-            async with _open_langfuse(settings) as trace_config:
-                yield trace_config
+
+@asynccontextmanager
+async def open_trace_config(settings: Settings) -> AsyncGenerator[TraceConfig]:
+    async with _BACKENDS[settings.OBSERVABILITY_BACKEND](settings) as trace_config:
+        yield trace_config
