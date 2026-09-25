@@ -11,7 +11,7 @@ backend Web App's real hostname in Azure.
 ## `infra/azure/`
 
 `main.bicep` provisions the "Prod (Azure App Service)" setup described in
-[engineering_design.md](engineering_design.md#secrets-management): a Key Vault, an Azure
+[reference.md](reference.md#secrets-management): a Key Vault, an Azure
 Container Registry, and two App Service for Containers Web Apps (backend + frontend, sharing one
 Linux App Service Plan), each with its own system-assigned Managed Identity. RBAC role
 assignments grant the backend's identity read access to the vault (`Key Vault Secrets User`),
