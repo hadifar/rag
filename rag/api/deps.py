@@ -2,7 +2,6 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from rag.config import Settings, get_settings
 from rag.container import Container
 from rag.services.generation_service.service import GenerationService
 from rag.services.retrieval_service.service import RetrievalService
@@ -30,5 +29,3 @@ def get_generation_service(container: ContainerDep) -> GenerationService:
 RankingServiceDep = Annotated[RetrievalService, Depends(get_ranking_service)]
 
 GenerationServiceDep = Annotated[GenerationService, Depends(get_generation_service)]
-
-SettingsDep = Annotated[Settings, Depends(get_settings)]

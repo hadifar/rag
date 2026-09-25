@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from rag.api.deps import SettingsDep
 from rag.api.schema import SettingsResponse
+from rag.config import Settings
 
 # TODO: later change default model
 # Static for now
@@ -10,7 +10,7 @@ DEFAULT_TOP_K = 4
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
-def build_settings_router(settings: SettingsDep) -> APIRouter:
+def build_settings_router(settings: Settings) -> APIRouter:
     router = APIRouter(tags=["settings"])
 
     @router.get("")
