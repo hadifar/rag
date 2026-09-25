@@ -25,9 +25,14 @@ jobs:
           changelog: true
           push: true
 
-      # commitizen-action runs in its own Docker container with no uv, so uv.lock can't be
-      # synced via pyproject.toml's pre_bump_hooks — do it here on the runner instead.
+      # commitizen-action runs in its own Docker container with no uv/node, so derived files
+      # can't be synced via pyproject.toml's pre_bump_hooks — do it here on the runner instead.
       - uses: astral-sh/setup-uv@v10.1.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       # commitizen-action's container runs as root and writes to .git during its own commit,
       # leaving .git internals (e.g. COMMIT_EDITMSG) root-owned — reclaim them before the
@@ -35,13 +40,22 @@ jobs:
       - name: Reclaim workspace ownership from the commitizen-action container
         run: sudo chown -R "$(id -u):$(id -g)" .
 
-      - name: Sync uv.lock with the bumped version
+      # frontend/package.json's version is set directly here — not via commitizen's
+      # `version_files`, which patches a file by finding its OLD version string and replacing
+      # it. Once that file's version ever drifted from pyproject.toml's (which it did,
+      # permanently, the first time they were set independently), that string-match can never
+      # succeed again, so it silently stops updating forever. Writing it unconditionally with
+      # `npm version` every bump makes drift structurally impossible instead of relying on the
+      # two files staying byte-for-byte in sync between runs.
+      - name: Sync derived files with the bumped version
         run: |
           uv lock
-          if ! git diff --quiet uv.lock; then
+          new_version="$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)"
+          npm --prefix frontend version "$new_version" --no-git-tag-version --allow-same-version
+          if ! git diff --quiet uv.lock frontend/package.json; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add uv.lock
-            git commit -m "chore: sync uv.lock after version bump [skip ci]"
+            git add uv.lock frontend/package.json
+            git commit -m "chore: sync uv.lock and frontend/package.json after version bump [skip ci]"
             git push
           fi

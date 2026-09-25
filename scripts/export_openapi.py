@@ -1,7 +1,4 @@
-"""Dump the API's OpenAPI schema to stdout.
-Used to generate frontend TypeScript types from the backend's Pydantic
-models (see scripts/generate_frontend_types.sh), so the two stay in sync.
-"""
+"""Used to generate frontend TypeScript types from the backend's Pydantic"""
 
 import json
 
