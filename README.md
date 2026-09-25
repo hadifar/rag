@@ -20,7 +20,7 @@ docker compose up --build
 Full setup and other ways to run it, are in [docs/setup.md](docs/setup.md).
 
 ## Docs
-See [docs/README.md](docs/README.md).
+See [docs/README.md](docs/README.md) & [docs/](docs/).
 
 ## Contribution
 See [CONTRIBUTING.md](CONTRIBUTING.md).
