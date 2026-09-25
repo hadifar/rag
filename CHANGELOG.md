@@ -1,3 +1,20 @@
+## v0.7.0 (2026-09-25)
+
+### Feat
+
+- add openai_azure option as llm provider
+
+### Fix
+
+- fastapi code review-setting issue
+- add more import-linter
+
+### Refactor
+
+- move pinecone to its own config
+- update configuration
+- use callable[str|none] for adapters
+
 ## v0.6.0 (2026-09-25)
 
 ### Feat
