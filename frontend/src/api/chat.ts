@@ -4,20 +4,19 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { apiUrl, jsonPost } from './base';
+import type { ChatRequest } from '../types';
 import type { ChatStreamEvent } from '../types/chat';
 
-export interface StreamChatArgs {
-  message: string;
-  threadId: string;
+export interface StreamChatArgs extends ChatRequest {
   onEvent: (event: ChatStreamEvent) => void;
   signal?: AbortSignal;
 }
 
-export function streamChat({ message, threadId, onEvent, signal }: StreamChatArgs): Promise<void> {
+export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
 
   return fetchEventSource(apiUrl('chat/stream'), {
 
-    ...jsonPost({ message, thread_id: threadId }),
+    ...jsonPost(request),
     signal,
     openWhenHidden: true, // Keep the stream alive in a backgrounded tab
 

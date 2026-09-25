@@ -6,9 +6,7 @@ function assistantText(text: string): ChatMessageInput {
   return { type: 'text', content: { text } };
 }
 
-// Accumulates one streamed assistant turn into message-list operations.
-// Kept separate from the typing indicator and the fetch lifecycle below so
-// each concern can be read (and changed) on its own.
+
 function createStreamHandler(
   appendMsg: (msg: ChatMessageInput) => string,
   updateMsg: (id: string, msg: ChatMessageInput) => void,
@@ -100,7 +98,7 @@ export function useChat() {
       };
 
       try {
-        await streamChat({ message: text, threadId: threadIdRef.current, onEvent, signal: controller.signal });
+        await streamChat({ message: text, thread_id: threadIdRef.current, onEvent, signal: controller.signal });
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);
