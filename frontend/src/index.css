@@ -12,6 +12,12 @@
     color: inherit;
     cursor: pointer;
   }
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
   a {
     color: inherit;
     text-decoration: none;
