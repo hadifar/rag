@@ -10,7 +10,6 @@ class SettingsResponse(BaseModel):
     model: str
     temperature: float
     top_k: int
-    system_prompt: str
 
 
 class HealthResponse(BaseModel):

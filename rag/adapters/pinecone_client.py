@@ -23,27 +23,27 @@ def ensure_indexes(settings: Settings) -> None:
     """Idempotent: creates the dense/sparse indexes (Pinecone-embedded, no client-side
     embedding model) only if missing.
     """
-    pc = Pinecone(api_key=settings.PINECONE_API_KEY.get_secret_value())
+    pc = Pinecone(api_key=settings.PINECONE.API_KEY.get_secret_value())
 
-    if not pc.has_index(settings.PINECONE_DENSE_INDEX_NAME):
+    if not pc.has_index(settings.PINECONE.DENSE_INDEX_NAME):
         pc.create_index_for_model(
-            name=settings.PINECONE_DENSE_INDEX_NAME,
-            cloud=settings.PINECONE_CLOUD,
-            region=settings.PINECONE_REGION,
+            name=settings.PINECONE.DENSE_INDEX_NAME,
+            cloud=settings.PINECONE.CLOUD,
+            region=settings.PINECONE.REGION,
             embed={
-                "model": settings.PINECONE_DENSE_MODEL,
+                "model": settings.PINECONE.DENSE_MODEL,
                 "field_map": {"text": _TEXT_FIELD},
             },
         )
 
-    sparse_name = settings.PINECONE_SPARSE_INDEX_NAME
+    sparse_name = settings.PINECONE.SPARSE_INDEX_NAME
     if not pc.has_index(sparse_name):
         pc.create_index_for_model(
             name=sparse_name,
-            cloud=settings.PINECONE_CLOUD,
-            region=settings.PINECONE_REGION,
+            cloud=settings.PINECONE.CLOUD,
+            region=settings.PINECONE.REGION,
             embed={
-                "model": settings.PINECONE_SPARSE_MODEL,
+                "model": settings.PINECONE.SPARSE_MODEL,
                 "field_map": {"text": _TEXT_FIELD},
             },
         )
@@ -154,11 +154,11 @@ async def open_vector_store(
     """
     ensure_indexes(settings)
     async with PineconeAsyncio(
-        api_key=settings.PINECONE_API_KEY.get_secret_value()
+        api_key=settings.PINECONE.API_KEY.get_secret_value()
     ) as pc:
         dense_description, sparse_description = await asyncio.gather(
-            pc.describe_index(settings.PINECONE_DENSE_INDEX_NAME),
-            pc.describe_index(settings.PINECONE_SPARSE_INDEX_NAME),
+            pc.describe_index(settings.PINECONE.DENSE_INDEX_NAME),
+            pc.describe_index(settings.PINECONE.SPARSE_INDEX_NAME),
         )
         dense_host = _require_host(dense_description)
         sparse_host = _require_host(sparse_description)
@@ -169,5 +169,5 @@ async def open_vector_store(
             yield HybridPineconeVectorStore(
                 dense_index=dense_index,
                 sparse_index=sparse_index,
-                namespace=settings.PINECONE_NAMESPACE,
+                namespace=settings.PINECONE.NAMESPACE,
             )

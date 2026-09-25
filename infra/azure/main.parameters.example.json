@@ -11,6 +11,8 @@
     "ciServicePrincipalObjectId": { "value": "<ci-service-principal-object-id>" },
     "appServicePlanSku": { "value": "S1" },
 
+    "llmProvider": { "value": "openai" },
+
     "pineconeDenseIndexName": { "value": "<dense-index-name>" },
     "pineconeSparseIndexName": { "value": "<sparse-index-name>" },
     "pineconeCloud": { "value": "<cloud>" },

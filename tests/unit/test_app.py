@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
 from rag.app import create_app
-from rag.config import Settings
+from rag.config import LoggingObservability, OpenAILLM, PineconeConfig, Settings
 from rag.container import Container
 from rag.domain.events import (
     SourcesReady,
@@ -46,20 +46,18 @@ class _StubGenerationService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        OPENAI_API_KEY=SecretStr("test-key"),
-        OPENAI_MODEL="gpt-4o-mini",
-        PINECONE_API_KEY=SecretStr("test-key"),
-        PINECONE_DENSE_INDEX_NAME="dense",
-        PINECONE_SPARSE_INDEX_NAME="sparse",
-        PINECONE_CLOUD="aws",
-        PINECONE_REGION="us-east-1",
-        PINECONE_DENSE_MODEL="dense-model",
-        PINECONE_SPARSE_MODEL="sparse-model",
-        PINECONE_NAMESPACE="ns",
-        LANGFUSE_PUBLIC_KEY=SecretStr("pk"),
-        LANGFUSE_SECRET_KEY=SecretStr("sk"),
-        LANGFUSE_HOST="http://localhost",
-        OBSERVABILITY_BACKEND="logging",
+        LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
+        PINECONE=PineconeConfig(
+            API_KEY=SecretStr("test-key"),
+            DENSE_INDEX_NAME="dense",
+            SPARSE_INDEX_NAME="sparse",
+            CLOUD="aws",
+            REGION="us-east-1",
+            DENSE_MODEL="dense-model",
+            SPARSE_MODEL="sparse-model",
+            NAMESPACE="ns",
+        ),
+        OBSERVABILITY=LoggingObservability(),
     )
 
 

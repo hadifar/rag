@@ -24,38 +24,38 @@ rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
 ├── cli.py                            # Typer: `rag serve`, `rag ingest`
 ├── config.py                         # Settings (pydantic-settings)
-├── container.py                      # composition root — async context manager, builds Container
+├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, routers
 │
-├── domain/                           # zero framework imports — pure contracts + models
-│   ├── models.py                     # RawDocument, IngestionReport
-│   └── ports.py                      # VectorStorePort, DocumentLoaderPort, ChunkerPort
+├── domain/                           # zero imports — pure contracts + models
+│   ├── models.py
+│   └── ports.py
 │
 ├── services/                         # business logic — depends only on domain/ports
-│   ├── retrieval_service/            # hybrid similarity search + single-doc lookup
-│   ├── ingestion_service/            # + loaders.py, chunking.py
-│   └── generation_service/           # + graph.py, service.py, tools.py, streaming.py, guards/
+│   ├── retrieval_service/
+│   ├── ingestion_service/
+│   └── generation_service/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
-│   ├── pinecone_client.py            # hybrid dense+sparse HybridPineconeVectorStore
+│   ├── pinecone_client.py
 │   ├── llm_client.py
-│   ├── checkpointer.py               # LangGraph checkpointer (CHECKPOINTER_BACKEND)
-│   └── observability.py              # Langfuse tracing config
+│   ├── checkpointer.py
+│   └── observability.py
 │
 ├── api/
 │   ├── schema.py                     # request/response DTOs
-│   └── routers/                      # chat.py, health.py, kb.py, settings.py
+│   └── routers/                      # chat.py, health.py, etc.
 │
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), settings.ts
-│   ├── components/                   # MessageList, Composer, ToolBubble, SourcesBubble, layout/
-│   ├── hooks/                        # useChat
-│   └── pages/                        # HomePage, ChatPage, SettingsPage, NotFoundPage
+│   ├── components/                   # ui component
+│   ├── hooks/                        # hooks
+│   └── pages/                        # ui pages
 └── (Vite build served by nginx in Docker)
 
-infra/                                 # repo root — Docker + Azure infra, no Python imports
-├── docker/                            # Dockerfile.backend, Dockerfile.frontend, nginx.conf.template
+infra/                                 # Docker + Azure, no Python
+├── docker/                            # *.Docker
 └── azure/                             # main.bicep — see docs/infra.md
 ```
 
@@ -71,17 +71,33 @@ calls an embedding model directly.
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
 | `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
 
+## LLM provider
+
+`adapters/llm_client.py`'s `build_llm(settings)` returns a `BaseChatModel`, picked by matching
+on `Settings.LLM`, a discriminated union selected by `LLM__BACKEND`:
+
+- `"openai"` — `ChatOpenAI`, requiring `LLM__API_KEY` / `LLM__MODEL`.
+- `"azure_openai"` — `AzureChatOpenAI`, requiring `LLM__API_KEY` / `LLM__ENDPOINT` /
+  `LLM__DEPLOYMENT` / `LLM__API_VERSION`.
+
+[infra/azure/main.bicep](../infra/azure/main.bicep)'s `llmProvider` param selects between the two
+at deploy time — see [docs/infra.md](infra.md) for the parameters each one needs.
+
+`GenerationService` and everything downstream only ever see the generic `BaseChatModel`
+interface, so neither know or care which backend is selected.
+
 ## Conversation state
 
 A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
 `adapters/checkpointer.py`'s `open_checkpointer()` (an async context manager, mirroring
-`open_vector_store()`) from `Settings.CHECKPOINTER_BACKEND`:
+`open_vector_store()`) from `Settings.CHECKPOINTER`, a discriminated union selected by
+`CHECKPOINTER__BACKEND`:
 - The frontend generates one per browser session and passes it in every request.
 - A raw API caller generates and passes its own in `ChatRequest.thread_id`.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves it.
 - `"memory"` (default) → `InMemorySaver`, for local dev; doesn't survive a restart or multiple
   replicas.
-- `"postgres"` → `AsyncPostgresSaver`, reading `Settings.DATABASE_URL`; `checkpointer.setup()`
+- `"postgres"` → `AsyncPostgresSaver`, reading `CHECKPOINTER__DATABASE_URL`; `checkpointer.setup()`
   runs on connect (idempotent schema migration). Durable across restarts and safe for multiple
   backend replicas.
 
@@ -104,14 +120,15 @@ text stream too. Two consumers read the normalized stream:
 (opened in `container.py` alongside the vector store and checkpointer) that yields a
 `trace_config(name)` callable returning a LangChain `RunnableConfig` with the backend's callback
 wired in — so callers always pass `config=trace_config(...)` with no behavioral branching.
-`GenerationService` uses it to tag the chat run. The backend is picked by
-`Settings.OBSERVABILITY_BACKEND`:
+`GenerationService` uses it to tag the chat run. The backend is a discriminated union,
+`Settings.OBSERVABILITY`, selected by `OBSERVABILITY__BACKEND`:
 
 - `"logging"` (default) — `_LoggingCallbackHandler` logs LLM/tool start/end events through the
   standard `logging` module; zero extra infra.
-- `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `LANGFUSE_PUBLIC_KEY` /
-  `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` (validated in `config.py`). On teardown, the context
-  manager's `finally` calls `get_client().flush()` so short-lived runs aren't lost.
+- `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `OBSERVABILITY__PUBLIC_KEY` /
+  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservability`
+  model in `config.py` — missing one fails at startup). On teardown, the context manager's
+  `finally` calls `get_client().flush()` so short-lived runs aren't lost.
 
 ## Secrets management
 
@@ -119,8 +136,8 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 `pydantic-settings`. The one exception is the `postgres` container's own init password: it's
 passed via a Docker Compose secret file (`.secrets/postgres_password.txt`, also gitignored,
 referenced in `docker-compose.yml`'s `secrets:` block) rather than an env var, so it never has to
-round-trip through `Settings` at all — the app connects to Postgres using `DATABASE_URL` (which
-already contains the same password), not `POSTGRES_PASSWORD`.
+round-trip through `Settings` at all — the app connects to Postgres using
+`CHECKPOINTER__DATABASE_URL` (which already contains the same password), not `POSTGRES_PASSWORD`.
 
 **Prod (Azure App Service)** — secrets are stored in Azure Key Vault and exposed to the app as
 *Key Vault references* in App Service's Application Settings. App Service resolves these (via the
