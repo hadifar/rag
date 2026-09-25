@@ -6,6 +6,20 @@ from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class OpenAILLM(BaseModel):
+    BACKEND: Literal["openai"] = "openai"
+    API_KEY: SecretStr
+    MODEL: str
+
+
+class AzureOpenAILLM(BaseModel):
+    BACKEND: Literal["azure_openai"] = "azure_openai"
+    API_KEY: SecretStr
+    ENDPOINT: str
+    DEPLOYMENT: str
+    API_VERSION: str
+
+
 class MemoryCheckpointer(BaseModel):
     BACKEND: Literal["memory"] = "memory"
 
@@ -13,11 +27,6 @@ class MemoryCheckpointer(BaseModel):
 class PostgresCheckpointer(BaseModel):
     BACKEND: Literal["postgres"] = "postgres"
     DATABASE_URL: SecretStr
-
-
-CheckpointerConfig = Annotated[
-    MemoryCheckpointer | PostgresCheckpointer, Field(discriminator="BACKEND")
-]
 
 
 class LoggingObservability(BaseModel):
@@ -31,8 +40,14 @@ class LangfuseObservability(BaseModel):
     HOST: str
 
 
+LLMConfig = Annotated[OpenAILLM | AzureOpenAILLM, Field(discriminator="BACKEND")]
+
 ObservabilityConfig = Annotated[
     LoggingObservability | LangfuseObservability, Field(discriminator="BACKEND")
+]
+
+CheckpointerConfig = Annotated[
+    MemoryCheckpointer | PostgresCheckpointer, Field(discriminator="BACKEND")
 ]
 
 
@@ -43,8 +58,7 @@ class Settings(BaseSettings):
 
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
-    OPENAI_API_KEY: SecretStr
-    OPENAI_MODEL: str
+    LLM: LLMConfig
 
     PINECONE_API_KEY: SecretStr
     PINECONE_DENSE_INDEX_NAME: str

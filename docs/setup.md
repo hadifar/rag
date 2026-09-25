@@ -6,7 +6,7 @@ git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 ```
-Then fill in `.env` (see .example.env) `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.
+Then fill in `.env` (see .example.env) `LLM__API_KEY`, `PINECONE_API_KEY`, etc.
 
 **You need a `data/` folder in the repo root with your own `.md` files** — it's gitignored, so a
 fresh clone doesn't come with one. `KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at it,

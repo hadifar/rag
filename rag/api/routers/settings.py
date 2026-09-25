@@ -4,9 +4,11 @@ from rag.api.deps import SettingsDep
 from rag.api.schema import SettingsResponse
 from rag.services.generation_service.graph import SYSTEM_PROMPT
 
-# Static for now — not yet threaded through the generation/ranking calls they name.
+# TODO: later change default model
+# Static for now
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_TOP_K = 4
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def build_settings_router(settings: SettingsDep) -> APIRouter:
@@ -14,8 +16,9 @@ def build_settings_router(settings: SettingsDep) -> APIRouter:
 
     @router.get("")
     async def get_settings() -> SettingsResponse:
+
         return SettingsResponse(
-            model=settings.OPENAI_MODEL,
+            model=DEFAULT_MODEL,
             temperature=DEFAULT_TEMPERATURE,
             top_k=DEFAULT_TOP_K,
             system_prompt=SYSTEM_PROMPT,

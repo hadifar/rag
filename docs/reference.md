@@ -71,6 +71,21 @@ calls an embedding model directly.
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
 | `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
 
+## LLM provider
+
+`adapters/llm_client.py`'s `build_llm(settings)` returns a `BaseChatModel`, picked by matching
+on `Settings.LLM`, a discriminated union selected by `LLM__BACKEND`:
+
+- `"openai"` — `ChatOpenAI`, requiring `LLM__API_KEY` / `LLM__MODEL`.
+- `"azure_openai"` — `AzureChatOpenAI`, requiring `LLM__API_KEY` / `LLM__ENDPOINT` /
+  `LLM__DEPLOYMENT` / `LLM__API_VERSION`.
+
+[infra/azure/main.bicep](../infra/azure/main.bicep)'s `llmProvider` param selects between the two
+at deploy time — see [docs/infra.md](infra.md) for the parameters each one needs.
+
+`GenerationService` and everything downstream only ever see the generic `BaseChatModel`
+interface, so neither know or care which backend is selected.
+
 ## Conversation state
 
 A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by

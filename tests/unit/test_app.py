@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
 from rag.app import create_app
-from rag.config import LoggingObservability, Settings
+from rag.config import LoggingObservability, OpenAILLM, Settings
 from rag.container import Container
 from rag.domain.events import (
     SourcesReady,
@@ -46,8 +46,7 @@ class _StubGenerationService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        OPENAI_API_KEY=SecretStr("test-key"),
-        OPENAI_MODEL="gpt-4o-mini",
+        LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
         PINECONE_API_KEY=SecretStr("test-key"),
         PINECONE_DENSE_INDEX_NAME="dense",
         PINECONE_SPARSE_INDEX_NAME="sparse",

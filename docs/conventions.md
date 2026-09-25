@@ -64,15 +64,16 @@ a new tool: a `build_*_tool(dependency)` closure, so the tool keeps getting its 
 constructor injection like every other service, rather than reaching for a global or
 re-instantiating a client per call.
 
-## Adding a new observability or checkpointer backend: extend the discriminated union
+## Adding a new LLM, observability, or checkpointer backend: extend the discriminated union
 
-Both `adapters/observability.py`'s `open_trace_config` and `adapters/checkpointer.py`'s
-`open_checkpointer` pick their concrete implementation by pattern-matching on a `Settings` field
-that's a discriminated union (`OBSERVABILITY`, `CHECKPOINTER` — each backend is its own Pydantic
-model, keyed by a `BACKEND` literal, populated straight from nested env vars like
-`OBSERVABILITY__PUBLIC_KEY`), so callers never branch on backend themselves — they just call
-`trace_config(name)` or use the checkpointer object. A new backend is a new model class in
-`config.py` plus a new `case` in the adapter, not a new code path exposed to callers.
+`adapters/llm_client.py`'s `build_llm`, `adapters/observability.py`'s `open_trace_config`, and
+`adapters/checkpointer.py`'s `open_checkpointer` all pick their concrete implementation by
+pattern-matching on a `Settings` field that's a discriminated union (`LLM`, `OBSERVABILITY`,
+`CHECKPOINTER` — each backend is its own Pydantic model, keyed by a `BACKEND` literal, populated
+straight from nested env vars like `OBSERVABILITY__PUBLIC_KEY`), so callers never branch on
+backend themselves — they just call `trace_config(name)`, use the checkpointer object, or (for
+`LLM`) get back a plain `BaseChatModel`. A new backend is a new model class in `config.py` plus a
+new `case` in the adapter, not a new code path exposed to callers.
 
 ## Adding a new secret
 

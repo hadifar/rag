@@ -39,8 +39,9 @@ param privateEndpointSubnetPrefix string = '10.20.1.0/24'
 @secure()
 param databaseUrl string
 
+@description('Works for either llmProvider — an OpenAI key for "openai", an Azure OpenAI key for "azure_openai".')
 @secure()
-param openAiApiKey string
+param llmApiKey string
 
 @secure()
 param pineconeApiKey string
@@ -51,8 +52,15 @@ param langfusePublicKey string
 @secure()
 param langfuseSecretKey string
 
+@description('Selects rag/config.py:LLMConfig\'s backend — keep in sync with that Literal.')
+@allowed(['openai', 'azure_openai'])
+param llmProvider string = 'openai'
+
 @description('Non-secret app config — see rag/config.py:Settings for the full field list.')
 param openAiModel string = 'gpt-4o-mini'
+param azureOpenAiEndpoint string = ''
+param azureOpenAiDeployment string = ''
+param azureOpenAiApiVersion string = '2024-05-01-preview'
 param pineconeDenseIndexName string
 param pineconeSparseIndexName string
 param pineconeCloud string
@@ -69,11 +77,23 @@ var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
 
 var secretsToStore = [
   { name: 'database-url', value: databaseUrl }
-  { name: 'openai-api-key', value: openAiApiKey }
+  { name: 'llm-api-key', value: llmApiKey }
   { name: 'pinecone-api-key', value: pineconeApiKey }
   { name: 'langfuse-public-key', value: langfusePublicKey }
   { name: 'langfuse-secret-key', value: langfuseSecretKey }
 ]
+
+var llmAppSettings = llmProvider == 'azure_openai'
+  ? {
+      LLM__BACKEND: 'azure_openai'
+      LLM__ENDPOINT: azureOpenAiEndpoint
+      LLM__DEPLOYMENT: azureOpenAiDeployment
+      LLM__API_VERSION: azureOpenAiApiVersion
+    }
+  : {
+      LLM__BACKEND: 'openai'
+      LLM__MODEL: openAiModel
+    }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
@@ -330,30 +350,32 @@ resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: backendWebApp
   name: 'appsettings'
-  properties: {
-    // Must match the port rag.config.Settings.PORT defaults to / the app binds.
-    WEBSITES_PORT: '8000'
-    CHECKPOINTER__BACKEND: 'postgres'
+  properties: union(
+    {
+      // Must match the port rag.config.Settings.PORT defaults to / the app binds.
+      WEBSITES_PORT: '8000'
+      CHECKPOINTER__BACKEND: 'postgres'
 
-    CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
-    OPENAI_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/openai-api-key/)'
-    PINECONE_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
-    OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
-    OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
+      CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
+      LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
+      PINECONE_API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
+      OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
+      OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
 
-    OPENAI_MODEL: openAiModel
-    PINECONE_DENSE_INDEX_NAME: pineconeDenseIndexName
-    PINECONE_SPARSE_INDEX_NAME: pineconeSparseIndexName
-    PINECONE_CLOUD: pineconeCloud
-    PINECONE_REGION: pineconeRegion
-    PINECONE_DENSE_MODEL: pineconeDenseModel
-    PINECONE_SPARSE_MODEL: pineconeSparseModel
-    PINECONE_NAMESPACE: pineconeNamespace
-    // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
-    // this flag had no actual effect — it now genuinely selects the backend.
-    OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'
-    OBSERVABILITY__HOST: langfuseHost
-  }
+      PINECONE_DENSE_INDEX_NAME: pineconeDenseIndexName
+      PINECONE_SPARSE_INDEX_NAME: pineconeSparseIndexName
+      PINECONE_CLOUD: pineconeCloud
+      PINECONE_REGION: pineconeRegion
+      PINECONE_DENSE_MODEL: pineconeDenseModel
+      PINECONE_SPARSE_MODEL: pineconeSparseModel
+      PINECONE_NAMESPACE: pineconeNamespace
+      // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
+      // this flag had no actual effect — it now genuinely selects the backend.
+      OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'
+      OBSERVABILITY__HOST: langfuseHost
+    },
+    llmAppSettings
+  )
   dependsOn: [
     keyVaultSecretsUserRoleAssignment
     keyVaultSecrets
