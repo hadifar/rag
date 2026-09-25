@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
+from rag.api.deps import SettingsDep
 from rag.api.schema import SettingsResponse
-from rag.config import Settings
 from rag.services.generation_service.graph import SYSTEM_PROMPT
 
 # Static for now — not yet threaded through the generation/ranking calls they name.
@@ -9,8 +9,8 @@ DEFAULT_TEMPERATURE = 0.2
 DEFAULT_TOP_K = 4
 
 
-def build_settings_router(settings: Settings) -> APIRouter:
-    router = APIRouter()
+def build_settings_router(settings: SettingsDep) -> APIRouter:
+    router = APIRouter(tags=["settings"])
 
     @router.get("")
     async def get_settings() -> SettingsResponse:

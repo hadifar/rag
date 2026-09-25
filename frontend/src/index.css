@@ -3,8 +3,6 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
-/* Minimal reset, kept in the base layer so unlayered @chatui/core styles and
-   Tailwind utilities both take precedence over it. */
 @layer base {
   button {
     background: transparent;
@@ -14,6 +12,12 @@
     color: inherit;
     cursor: pointer;
   }
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
   a {
     color: inherit;
     text-decoration: none;
@@ -22,7 +26,6 @@
 
 :root {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  color-scheme: light dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -54,10 +57,4 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-/* Focus visible ring — consistent across interactive elements */
-:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: 2px;
 }

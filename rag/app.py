@@ -1,45 +1,56 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-from rag.adapters.observability import flush
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
 from rag.api.routers.settings import build_settings_router
 from rag.config import Settings, get_settings
-from rag.container import Container, ContainerHandle, build_container
+from rag.container import Container, build_container
+from rag.domain.errors import DocumentNotFoundError, RagError
 
 
-def _build_lifespan(handle: ContainerHandle, settings: Settings):
-    # A pre-built container (tests) owns its own lifecycle; otherwise open one for
-    # the app's lifetime, mirroring the FastAPI lifespan pattern from
-    # https://www.pinecone.io/learn/pinecone-async-fastapi/.
+def _build_lifespan(container: Container | None, settings: Settings):
+    # mirroring the FastAPI lifespan pattern from https://www.pinecone.io/learn/pinecone-async-fastapi/.
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        if handle.container is not None:
+        if container is not None:
+            app.state.container = container
             yield
             return
 
         async with build_container(settings) as built:
-            handle.container = built
+            app.state.container = built
             yield
-            handle.container = None
-        flush()
 
     return lifespan
+
+
+def _register_error_handlers(app: FastAPI) -> None:
+
+    @app.exception_handler(DocumentNotFoundError)
+    async def _handle_not_found(
+        request: Request, exc: DocumentNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(RagError)
+    async def _handle_rag_error(request: Request, exc: RagError) -> JSONResponse:
+        return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 def create_app(
     container: Container | None = None, settings: Settings | None = None
 ) -> FastAPI:
     settings = settings or get_settings()
-    handle = ContainerHandle(container)
 
-    app = FastAPI(title="RAG", lifespan=_build_lifespan(handle, settings))
-    app.include_router(build_chat_router(handle), prefix="/api/chat")
-    app.include_router(build_health_router(handle), prefix="/api/health")
-    app.include_router(build_kb_router(handle), prefix="/api/kb")
+    app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
+    app.include_router(build_chat_router(), prefix="/api/chat")
+    app.include_router(build_health_router(), prefix="/api/health")
+    app.include_router(build_kb_router(), prefix="/api/kb")
     app.include_router(build_settings_router(settings), prefix="/api/settings")
+    _register_error_handlers(app)
     return app

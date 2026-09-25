@@ -15,7 +15,7 @@ def serve(
     port: int = typer.Option(None, help="Override PORT from settings"),
     reload: bool = typer.Option(False, help="Autoreload (dev only)"),
 ) -> None:
-    """Start the FastAPI app (API + Gradio UI mounted on it)."""
+    """Start the FastAPI app."""
     settings = get_settings()
     uvicorn.run(
         "rag.app:create_app",

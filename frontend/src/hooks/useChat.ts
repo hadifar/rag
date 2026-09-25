@@ -1,114 +1,112 @@
-import { useCallback, useRef } from 'react';
-import { useMessages } from '@chatui/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamChat } from '../api/chat';
-import { USER, ASSISTANT } from '../components/avatars';
-import type { ChatStreamEvent, TextContent, ToolContent, SourcesContent } from '../types/chat';
+import type { ChatMessage, ChatStreamEvent, ChatMessageInput } from '../types/chat';
 
-const SOURCE_RE = /\[source: ([^\]]+)\]/g;
+function assistantText(text: string): ChatMessageInput {
+  return { type: 'text', content: { text } };
+}
+
+
+function createStreamHandler(
+  appendMsg: (msg: ChatMessageInput) => string,
+  updateMsg: (id: string, msg: ChatMessageInput) => void,
+) {
+  let assistantMsgId: string | null = null;
+  let assistantMsgText = '';
+  let toolMsgId: string | null = null;
+
+  return (event: ChatStreamEvent) => {
+    switch (event.type) {
+      case 'text':
+        assistantMsgText += event.text;
+        if (assistantMsgId === null) {
+          assistantMsgId = appendMsg(assistantText(assistantMsgText));
+        } else {
+          updateMsg(assistantMsgId, assistantText(assistantMsgText));
+        }
+        break;
+      case 'tool_start':
+        toolMsgId = appendMsg({
+          type: 'tool',
+          content: { name: event.name, query: event.query, status: 'pending' },
+        });
+        break;
+      case 'tool_result':
+        if (toolMsgId !== null) {
+          updateMsg(toolMsgId, {
+            type: 'tool',
+            content: { name: event.name, output: event.output, status: 'done' },
+          });
+        }
+        break;
+      case 'sources':
+        if (event.names.length > 0) {
+          appendMsg({ type: 'sources', content: { names: event.names } });
+        }
+        break;
+    }
+  };
+}
 
 export function useChat() {
-  const { messages, appendMsg, updateMsg, deleteMsg } = useMessages([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const nextId = useRef(0);
   const threadIdRef = useRef(crypto.randomUUID());
   const abortRef = useRef<AbortController | null>(null);
 
+  const appendMsg = useCallback((msg: ChatMessageInput): string => {
+    const id = String(nextId.current++);
+    setMessages((prev) => [...prev, { ...msg, id } as ChatMessage]);
+    return id;
+  }, []);
+
+  const updateMsg = useCallback((id: string, msg: ChatMessageInput) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? ({ ...msg, id } as ChatMessage) : m)));
+  }, []);
+
+  const deleteMsg = useCallback((id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  // Cancel any in-flight stream when the component unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const sendMessage = useCallback(
-    async (type: string, val: string) => {
-      if (type !== 'text' || !val.trim()) return;
+    async (val: string) => {
+      const text = val.trim();
+      if (!text) return;
 
-      appendMsg({
-        type: 'text',
-        content: { text: val } satisfies TextContent,
-        position: 'right',
-        user: USER,
-      });
-
-      // Chat's built-in `isTyping` renders a typing Message without going
-      // through renderMessageContent, so it shows nothing. Use a real message.
-      let typingMsgId: string | null = appendMsg({ type: 'typing', user: ASSISTANT });
-      const clearTyping = () => {
-        if (typingMsgId !== null) deleteMsg(typingMsgId);
-        typingMsgId = null;
-      };
-
-      let assistantMsgId: string | null = null;
-      let assistantText = '';
-      let toolMsgId: string | null = null;
-      const sources = new Set<string>();
-
+      // A new turn supersedes whatever is still streaming.
+      abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
+      appendMsg({ type: 'text', content: { text }, position: 'right' });
+
+      const typingId = appendMsg({ type: 'typing' });
+      let typingCleared = false;
+      const clearTyping = () => {
+        if (typingCleared) return;
+        typingCleared = true;
+        deleteMsg(typingId);
+      };
+
+      const handleStreamEvent = createStreamHandler(appendMsg, updateMsg);
       const onEvent = (event: ChatStreamEvent) => {
         clearTyping();
-        switch (event.type) {
-          case 'text':
-            assistantText += event.text;
-            if (assistantMsgId === null) {
-              assistantMsgId = appendMsg({
-                type: 'text',
-                content: { text: assistantText } satisfies TextContent,
-                user: ASSISTANT,
-              });
-            } else {
-              updateMsg(assistantMsgId, {
-                type: 'text',
-                content: { text: assistantText } satisfies TextContent,
-                user: ASSISTANT,
-              });
-            }
-            break;
-          case 'tool_start':
-            toolMsgId = appendMsg({
-              type: 'tool',
-              content: {
-                name: event.name,
-                args: event.args,
-                status: 'pending',
-              } satisfies ToolContent,
-              user: ASSISTANT,
-            });
-            break;
-          case 'tool_result':
-            for (const match of event.output.matchAll(SOURCE_RE)) {
-              sources.add(match[1]);
-            }
-            if (toolMsgId !== null) {
-              updateMsg(toolMsgId, {
-                type: 'tool',
-                content: {
-                  name: event.name,
-                  output: event.output,
-                  status: 'done',
-                } satisfies ToolContent,
-                user: ASSISTANT,
-              });
-            }
-            break;
-        }
+        handleStreamEvent(event);
       };
 
       try {
-        await streamChat(val, threadIdRef.current, onEvent, controller.signal);
+        await streamChat({ message: text, thread_id: threadIdRef.current, onEvent, signal: controller.signal });
       } catch (err) {
         if (!controller.signal.aborted) {
-          appendMsg({
-            type: 'text',
-            content: {
-              text: `Something went wrong: ${(err as Error).message}`,
-            } satisfies TextContent,
-            user: ASSISTANT,
-          });
+          const message = err instanceof Error ? err.message : String(err);
+          appendMsg(assistantText(`Something went wrong: ${message}`));
         }
       } finally {
         clearTyping();
-        if (sources.size > 0) {
-          appendMsg({
-            type: 'sources',
-            content: { names: [...sources].sort() } satisfies SourcesContent,
-            user: ASSISTANT,
-          });
-        }
+        if (abortRef.current === controller) abortRef.current = null;
       }
     },
     [appendMsg, updateMsg, deleteMsg],

@@ -1,55 +1,78 @@
-from __future__ import annotations
+import logging
+from collections.abc import AsyncGenerator, Callable
+from contextlib import asynccontextmanager
+from typing import Any
 
-from functools import lru_cache
-from typing import TYPE_CHECKING
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables import RunnableConfig
 
-from rag.config import get_settings
+from rag.config import Settings
 
-if TYPE_CHECKING:
-    from langchain_core.runnables import RunnableConfig
-    from langfuse.langchain import CallbackHandler
-
-
-@lru_cache(maxsize=1)
-def _handler() -> CallbackHandler | None:
-    """Build a single Langfuse LangChain callback handler, or None when tracing
-    is disabled. Initializing the Langfuse client wires up the global singleton
-    that the handler (and ``flush()``) reuse.
-    """
-    settings = get_settings()
-    if not settings.LANGFUSE_ENABLED:
-        return None
-
-    from langfuse import Langfuse
-    from langfuse.langchain import CallbackHandler
-
-    Langfuse(
-        public_key=settings.LANGFUSE_PUBLIC_KEY,
-        secret_key=settings.LANGFUSE_SECRET_KEY,
-        host=settings.LANGFUSE_HOST,
-    )
-    return CallbackHandler()
+logger = logging.getLogger(__name__)
 
 
-def trace_config(name: str | None = None) -> RunnableConfig:
-    """LangChain ``config`` that routes a run to Langfuse when tracing is on.
+class _LoggingCallbackHandler(BaseCallbackHandler):
+    """LangChain callback: it's a drop-in trace_config backend with zero extra infra."""
 
-    Returns ``{}`` when Langfuse is not configured, so callers can always pass
-    ``config=trace_config(...)`` to ``.invoke()`` with no behavioral change.
-    """
-    handler = _handler()
-    if handler is None:
-        return {}
-    config: RunnableConfig = {"callbacks": [handler]}
+    def on_llm_start(self, serialized: dict, prompts: list[str], **kwargs: Any) -> None:
+        logger.info("llm_start", extra={"run_id": str(kwargs.get("run_id"))})
+
+    def on_llm_end(self, response: Any, **kwargs: Any) -> None:
+        logger.info("llm_end", extra={"run_id": str(kwargs.get("run_id"))})
+
+    def on_tool_start(self, serialized: dict, input_str: str, **kwargs: Any) -> None:
+        logger.info("tool_start", extra={"tool": serialized.get("name")})
+
+    def on_tool_end(self, output: Any, **kwargs: Any) -> None:
+        logger.info("tool_end", extra={"output": str(output)})
+
+
+def _logging_trace_config(name: str | None = None) -> RunnableConfig:
+    config: RunnableConfig = {"callbacks": [_LoggingCallbackHandler()]}
     if name is not None:
         config["run_name"] = name
     return config
 
 
-def flush() -> None:
-    """Flush buffered traces — call on shutdown so short-lived runs aren't lost."""
-    if not get_settings().LANGFUSE_ENABLED:
-        return
-    from langfuse import get_client
+@asynccontextmanager
+async def _open_langfuse(
+    settings: Settings,
+) -> AsyncGenerator[Callable[[str | None], RunnableConfig]]:
+    from langfuse import Langfuse
+    from langfuse.langchain import CallbackHandler
 
-    get_client().flush()
+    assert settings.LANGFUSE_PUBLIC_KEY is not None
+    assert settings.LANGFUSE_SECRET_KEY is not None
+
+    Langfuse(
+        public_key=settings.LANGFUSE_PUBLIC_KEY.get_secret_value(),
+        secret_key=settings.LANGFUSE_SECRET_KEY.get_secret_value(),
+        host=settings.LANGFUSE_HOST,
+    )
+    handler = CallbackHandler()
+
+    def trace_config(name: str | None = None) -> RunnableConfig:
+        config: RunnableConfig = {"callbacks": [handler]}
+        if name is not None:
+            config["run_name"] = name
+        return config
+
+    try:
+        yield trace_config
+    finally:
+        from langfuse import get_client
+
+        get_client().flush()
+
+
+@asynccontextmanager
+async def open_trace_config(
+    settings: Settings,
+) -> AsyncGenerator[Callable[[str | None], RunnableConfig]]:
+
+    match settings.OBSERVABILITY_BACKEND:
+        case "logging":
+            yield _logging_trace_config
+        case "langfuse":
+            async with _open_langfuse(settings) as trace_config:
+                yield trace_config

@@ -6,13 +6,16 @@ from langchain_core.documents import Document
 from pinecone import AsyncIndex, Hit, IndexModel, Pinecone, PineconeAsyncio
 
 from rag.config import Settings
+from rag.domain.errors import VectorStoreConfigurationError
 
 _TEXT_FIELD = "text"
 
 
 def _require_host(description: IndexModel) -> str:
     if not description.host:
-        raise RuntimeError(f"Pinecone index {description.name!r} has no host")
+        raise VectorStoreConfigurationError(
+            f"Pinecone index {description.name!r} has no host"
+        )
     return description.host
 
 
@@ -20,7 +23,7 @@ def ensure_indexes(settings: Settings) -> None:
     """Idempotent: creates the dense/sparse indexes (Pinecone-embedded, no client-side
     embedding model) only if missing.
     """
-    pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+    pc = Pinecone(api_key=settings.PINECONE_API_KEY.get_secret_value())
 
     if not pc.has_index(settings.PINECONE_DENSE_INDEX_NAME):
         pc.create_index_for_model(
@@ -150,7 +153,9 @@ async def open_vector_store(
     mirrors the FastAPI lifespan pattern from the async-Pinecone article.
     """
     ensure_indexes(settings)
-    async with PineconeAsyncio(api_key=settings.PINECONE_API_KEY) as pc:
+    async with PineconeAsyncio(
+        api_key=settings.PINECONE_API_KEY.get_secret_value()
+    ) as pc:
         dense_description, sparse_description = await asyncio.gather(
             pc.describe_index(settings.PINECONE_DENSE_INDEX_NAME),
             pc.describe_index(settings.PINECONE_SPARSE_INDEX_NAME),

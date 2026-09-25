@@ -24,8 +24,17 @@ param frontendContainerImageName string
 @description('Object ID (not client/app ID) of the CI service principal that builds and pushes images — grants it AcrPush on the registry. From `az ad sp show --id <appId> --query id -o tsv`.')
 param ciServicePrincipalObjectId string
 
-@description('Linux App Service Plan SKU.')
-param appServicePlanSku string = 'B1'
+@description('Linux App Service Plan SKU. Private Endpoints (see backendPrivateEndpoint below) require Standard or higher — Basic/Free/Shared don\'t support them.')
+param appServicePlanSku string = 'S1'
+
+@description('Address space for the VNet that isolates the backend Web App from the public internet.')
+param vnetAddressPrefix string = '10.20.0.0/16'
+
+@description('Subnet the frontend Web App regionally VNet-integrates into (delegated to Microsoft.Web/serverFarms).')
+param integrationSubnetPrefix string = '10.20.0.0/24'
+
+@description('Subnet holding the backend\'s Private Endpoint.')
+param privateEndpointSubnetPrefix string = '10.20.1.0/24'
 
 @secure()
 param databaseUrl string
@@ -101,6 +110,69 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-pr
   }
 }
 
+// Isolates the backend from the public internet: the frontend reaches it only over
+// this VNet (via regional VNet integration + the Private Endpoint below), so the
+// backend's own public hostname stops resolving to anything and nginx's rate
+// limiter — the only rate limiting in this stack — can't be bypassed by hitting the
+// backend directly. See docs/limitation.md "Backend and frontend Web Apps talk to
+// each other over their public hostnames".
+resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
+  name: '${appName}-vnet'
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [vnetAddressPrefix]
+    }
+  }
+
+  resource integrationSubnet 'subnets' = {
+    name: 'integration'
+    properties: {
+      addressPrefix: integrationSubnetPrefix
+      delegations: [
+        {
+          name: 'webapp-delegation'
+          properties: {
+            serviceName: 'Microsoft.Web/serverFarms'
+          }
+        }
+      ]
+    }
+  }
+
+  resource privateEndpointSubnet 'subnets' = {
+    name: 'private-endpoints'
+    properties: {
+      addressPrefix: privateEndpointSubnetPrefix
+      // Private Endpoint NICs land directly in the subnet — no delegation, but
+      // network policies (NSGs/route tables) must be enabled for them to apply.
+      privateEndpointNetworkPolicies: 'Enabled'
+    }
+    dependsOn: [
+      integrationSubnet
+    ]
+  }
+}
+
+// Lets anything integrated into (or linked to) the VNet resolve the backend's
+// defaultHostName to its private endpoint IP instead of the public one.
+resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: 'privatelink.azurewebsites.net'
+  location: 'global'
+}
+
+resource privateDnsZoneVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: privateDnsZone
+  name: '${appName}-vnet-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: vnet.id
+    }
+  }
+}
+
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: '${appName}-plan'
   location: location
@@ -122,11 +194,49 @@ resource backendWebApp 'Microsoft.Web/sites@2023-12-01' = {
   }
   properties: {
     serverFarmId: appServicePlan.id
+    // No public inbound path at all — the Private Endpoint below is the only way in.
+    publicNetworkAccess: 'Disabled'
     siteConfig: {
       linuxFxVersion: 'DOCKER|${containerRegistry.properties.loginServer}/${backendContainerImageName}'
       acrUseManagedIdentityCreds: true
       alwaysOn: true
     }
+  }
+}
+
+// Gives the backend a private IP inside the VNet's private-endpoints subnet; combined
+// with publicNetworkAccess: 'Disabled' above, this is the only network path to it.
+resource backendPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
+  name: '${appName}-backend-pe'
+  location: location
+  properties: {
+    subnet: {
+      id: vnet::privateEndpointSubnet.id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: '${appName}-backend-plsc'
+        properties: {
+          privateLinkServiceId: backendWebApp.id
+          groupIds: ['sites']
+        }
+      }
+    ]
+  }
+}
+
+resource backendPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
+  parent: backendPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'privatelink-azurewebsites-net'
+        properties: {
+          privateDnsZoneId: privateDnsZone.id
+        }
+      }
+    ]
   }
 }
 
@@ -139,8 +249,15 @@ resource frontendWebApp 'Microsoft.Web/sites@2023-12-01' = {
   }
   properties: {
     serverFarmId: appServicePlan.id
+    // Regional VNet integration for outbound calls to the now-private backend.
+    virtualNetworkSubnetId: vnet::integrationSubnet.id
     siteConfig: {
       linuxFxVersion: 'DOCKER|${containerRegistry.properties.loginServer}/${frontendContainerImageName}'
+      // Without this, only RFC1918-destined traffic routes through the VNet, and
+      // the backend's private endpoint IP (10.20.1.x, inside our own RFC1918 range)
+      // would actually still match that — but relying on the address happening to
+      // be private is fragile, so route everything through the VNet explicitly.
+      vnetRouteAllEnabled: true
       acrUseManagedIdentityCreds: true
       alwaysOn: true
     }

@@ -1,3 +1,4 @@
+import operator
 from functools import partial
 from typing import Annotated, NotRequired, TypedDict
 
@@ -8,6 +9,7 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from rag.services.generation_service.guards.groundness import (
@@ -27,7 +29,16 @@ SYSTEM_PROMPT = (
     "documentation before answering. Only answer based on retrieved content, and say you "
     "don't know if the knowledge base doesn't cover it. Cite the source file(s) you used."
 )
+
 FALLBACK_MESSAGE = "I'm having trouble reaching the language model right now. Please try again shortly."
+
+
+class GraphState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+    sources: NotRequired[Annotated[list[str], operator.add]]
+    relevant: NotRequired[bool]
+    grounded: NotRequired[bool]
+    verify_attempts: NotRequired[int]
 
 
 def _fallback_response(_input: object) -> AIMessage:
@@ -43,16 +54,11 @@ def _with_resilience(llm: Runnable) -> Runnable:
     )
 
 
-class GraphState(TypedDict):
-    messages: Annotated[list[BaseMessage], add_messages]
-    relevant: NotRequired[bool]
-    grounded: NotRequired[bool]
-    verify_attempts: NotRequired[int]
-
-
 async def _guardrail(llm: Runnable, state: GraphState) -> dict:
+
     if await is_relevant(llm, state["messages"]):
         return {"relevant": True}
+
     return {
         "relevant": False,
         "messages": [SystemMessage(content=OFF_TOPIC_INSTRUCTION)],
@@ -89,7 +95,7 @@ def _route_after_verify(state: GraphState) -> str:
 
 def build_graph(
     llm: BaseChatModel, tools: list[BaseTool], checkpointer: BaseCheckpointSaver
-) -> Runnable:
+) -> CompiledStateGraph:
     resilient_llm = _with_resilience(llm)
     llm_with_tools = _with_resilience(llm.bind_tools(tools))
 

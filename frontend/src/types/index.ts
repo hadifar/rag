@@ -1,8 +1,6 @@
 export * from './chat';
 
-export type Settings = {
-  model: string;
-  temperature: number;
-  top_k: number;
-  system_prompt: string;
-};
+import type { components } from './api.generated';
+
+// All backend request/response schemas, keyed by name (e.g. Schemas['ChatRequest']).
+export type Schemas = components['schemas'];
