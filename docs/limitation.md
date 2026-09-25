@@ -39,7 +39,6 @@
 - `ChatOpenAI` has no request timeout configured — a hung upstream call can hold a worker (and its Postgres checkpointer connection) open indefinitely rather than failing into the retry/fallback path
 - `/health/ready` does a real embed + hybrid-search round trip on every hit
 - Guardrail + verifier each add a full extra LLM call per turn, with no way to disable either
-- `ChatRequest.message` has no length limit — nothing stops a single request from being arbitrarily large, which fans out into every downstream LLM call in the turn
 
 ## Observability
 - Zero application logging anywhere in `rag/` — no `logging` usage at all. The only signal on failure is whatever uvicorn/App Service captures by default, plus LangChain/LangGraph traces in Langfuse *if* `LANGFUSE_ENABLED=true`

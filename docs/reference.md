@@ -24,38 +24,38 @@ rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
 ├── cli.py                            # Typer: `rag serve`, `rag ingest`
 ├── config.py                         # Settings (pydantic-settings)
-├── container.py                      # composition root — async context manager, builds Container
+├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, routers
 │
-├── domain/                           # zero framework imports — pure contracts + models
-│   ├── models.py                     # RawDocument, IngestionReport
-│   └── ports.py                      # VectorStorePort, DocumentLoaderPort, ChunkerPort
+├── domain/                           # zero imports — pure contracts + models
+│   ├── models.py
+│   └── ports.py
 │
 ├── services/                         # business logic — depends only on domain/ports
-│   ├── retrieval_service/            # hybrid similarity search + single-doc lookup
-│   ├── ingestion_service/            # + loaders.py, chunking.py
-│   └── generation_service/           # + graph.py, service.py, tools.py, streaming.py, guards/
+│   ├── retrieval_service/
+│   ├── ingestion_service/
+│   └── generation_service/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
-│   ├── pinecone_client.py            # hybrid dense+sparse HybridPineconeVectorStore
+│   ├── pinecone_client.py
 │   ├── llm_client.py
-│   ├── checkpointer.py               # LangGraph checkpointer (Settings.CHECKPOINTER)
-│   └── observability.py              # Langfuse tracing config
+│   ├── checkpointer.py
+│   └── observability.py
 │
 ├── api/
 │   ├── schema.py                     # request/response DTOs
-│   └── routers/                      # chat.py, health.py, kb.py, settings.py
+│   └── routers/                      # chat.py, health.py, etc.
 │
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), settings.ts
-│   ├── components/                   # MessageList, Composer, ToolBubble, SourcesBubble, layout/
-│   ├── hooks/                        # useChat
-│   └── pages/                        # HomePage, ChatPage, SettingsPage, NotFoundPage
+│   ├── components/                   # ui component
+│   ├── hooks/                        # hooks
+│   └── pages/                        # ui pages
 └── (Vite build served by nginx in Docker)
 
-infra/                                 # repo root — Docker + Azure infra, no Python imports
-├── docker/                            # Dockerfile.backend, Dockerfile.frontend, nginx.conf.template
+infra/                                 # Docker + Azure, no Python
+├── docker/                            # *.Docker
 └── azure/                             # main.bicep — see docs/infra.md
 ```
 
