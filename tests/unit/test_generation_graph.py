@@ -169,3 +169,26 @@ async def test_revision_instruction_does_not_outlive_its_turn(llm, chat) -> None
     next_turn_calls = llm.agent_calls[3:]
     assert _saw(revision_call, REVISION_INSTRUCTION)
     assert not any(_saw(call, REVISION_INSTRUCTION) for call in next_turn_calls)
+
+
+async def test_verifier_only_sees_the_current_turns_context(llm, chat) -> None:
+    _grounded_turn(llm, "alpha")
+    _grounded_turn(llm, "beta")
+
+    await chat("tell me about alpha")
+    await chat("tell me about beta")
+
+    second_turn_prompt = llm.verifier_prompts[1]
+    assert "about beta" in second_turn_prompt
+    assert "about alpha" not in second_turn_prompt
+
+
+async def test_turn_without_retrieval_skips_verification(llm, chat) -> None:
+    _grounded_turn(llm, "alpha")
+    llm.relevance_verdicts.append("RELEVANT")
+    llm.agent_replies.append(_answer("You're welcome!"))
+
+    await chat("tell me about alpha")
+    await chat("thanks")
+
+    assert len(llm.verifier_prompts) == 1

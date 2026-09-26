@@ -1,4 +1,4 @@
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
 VERIFIER_PROMPT = (
@@ -14,9 +14,21 @@ REVISION_INSTRUCTION = (
 )
 
 
+def _current_turn(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Messages since the user's latest message. The thread's history holds every
+    earlier turn too, and their retrievals can't vouch for this turn's answer.
+    """
+    for index in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[index], HumanMessage):
+            return messages[index + 1 :]
+    return messages
+
+
 def _collect_context(messages: list[BaseMessage]) -> str:
     return "\n\n".join(
-        str(m.content) for m in messages if isinstance(m, ToolMessage) and m.content
+        str(m.content)
+        for m in _current_turn(messages)
+        if isinstance(m, ToolMessage) and m.content
     )
 
 
