@@ -1,4 +1,6 @@
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -12,3 +14,11 @@ class RawDocument:
 class IngestionReport:
     documents: int
     chunks: int
+
+
+@dataclass(frozen=True)
+class User:
+    id: uuid.UUID
+    email: str
+    hashed_password: str
+    created_at: datetime

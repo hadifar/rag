@@ -1,11 +1,12 @@
 """Contracts every service depends on instead of a concrete SDK."""
 
+import uuid
 from collections.abc import Iterable
 from typing import Protocol
 
 from langchain_core.documents import Document
 
-from rag.domain.models import RawDocument
+from rag.domain.models import RawDocument, User
 
 
 class VectorStorePort(Protocol):
@@ -26,3 +27,9 @@ class DocumentLoaderPort(Protocol):
 
 class ChunkerPort(Protocol):
     def chunk(self, document: RawDocument) -> list[Document]: ...
+
+
+class UserRepositoryPort(Protocol):
+    async def get_by_email(self, email: str) -> User | None: ...
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None: ...
+    async def create(self, email: str, hashed_password: str) -> User: ...

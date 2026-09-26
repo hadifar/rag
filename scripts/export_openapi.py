@@ -5,7 +5,7 @@ import json
 from pydantic import SecretStr
 
 from rag.app import create_app
-from rag.config import OpenAILLM, PineconeConfig, Settings
+from rag.config import AuthConfig, OpenAILLM, PineconeConfig, Settings
 
 _PLACEHOLDER_SETTINGS = Settings(
     _env_file=None,  # pyright: ignore[reportCallIssue] — ignore the real .env, only the schema shape matters here
@@ -19,6 +19,9 @@ _PLACEHOLDER_SETTINGS = Settings(
         DENSE_MODEL="placeholder",
         SPARSE_MODEL="placeholder",
         NAMESPACE="placeholder",
+    ),
+    AUTH=AuthConfig(
+        DATABASE_URL=SecretStr("placeholder"), JWT_SECRET=SecretStr("placeholder")
     ),
 )
 

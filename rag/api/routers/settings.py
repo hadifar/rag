@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from rag.api.schema import SettingsResponse
+from rag.api.schema.settings import SettingsResponse
 from rag.config import Settings
 
 # TODO: later change default model

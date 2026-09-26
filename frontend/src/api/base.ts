@@ -11,3 +11,7 @@ export function jsonPost(body: unknown) {
     body: JSON.stringify(body),
   };
 }
+
+export function authHeader(accessToken: string): Record<string, string> {
+  return { Authorization: `Bearer ${accessToken}` };
+}

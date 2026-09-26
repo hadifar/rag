@@ -1,16 +1,24 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from rag.api.deps import get_current_user
+from rag.api.routers.auth import build_auth_router
 from rag.api.routers.chat import build_chat_router
 from rag.api.routers.health import build_health_router
 from rag.api.routers.kb import build_kb_router
 from rag.api.routers.settings import build_settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
-from rag.domain.errors import DocumentNotFoundError, RagError
+from rag.domain.errors import (
+    DocumentNotFoundError,
+    InvalidCredentialsError,
+    InvalidTokenError,
+    RagError,
+    UserNotFoundError,
+)
 
 
 def _build_lifespan(container: Container | None, settings: Settings):
@@ -37,6 +45,12 @@ def _register_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
+    @app.exception_handler(InvalidCredentialsError)
+    @app.exception_handler(InvalidTokenError)
+    @app.exception_handler(UserNotFoundError)
+    async def _handle_unauthorized(request: Request, exc: RagError) -> JSONResponse:
+        return JSONResponse(status_code=401, content={"detail": str(exc)})
+
     @app.exception_handler(RagError)
     async def _handle_rag_error(request: Request, exc: RagError) -> JSONResponse:
         return JSONResponse(status_code=500, content={"detail": str(exc)})
@@ -46,11 +60,19 @@ def create_app(
     container: Container | None = None, settings: Settings | None = None
 ) -> FastAPI:
     settings = settings or get_settings()
+    require_user = [Depends(get_current_user)]
 
     app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
-    app.include_router(build_chat_router(), prefix="/api/chat")
+    app.include_router(build_auth_router(settings), prefix="/api/auth")
+    app.include_router(
+        build_chat_router(), prefix="/api/chat", dependencies=require_user
+    )
     app.include_router(build_health_router(), prefix="/api/health")
-    app.include_router(build_kb_router(), prefix="/api/kb")
-    app.include_router(build_settings_router(settings), prefix="/api/settings")
+    app.include_router(build_kb_router(), prefix="/api/kb", dependencies=require_user)
+    app.include_router(
+        build_settings_router(settings),
+        prefix="/api/settings",
+        dependencies=require_user,
+    )
     _register_error_handlers(app)
     return app

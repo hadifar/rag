@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from rag.api.deps import GenerationServiceDep
-from rag.api.schema import ChatRequest
+from rag.api.schema.chat import ChatRequest
 from rag.domain.events import (
     SourcesReady,
     StreamEvent,

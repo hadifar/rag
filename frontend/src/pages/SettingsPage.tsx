@@ -1,5 +1,6 @@
 import { type SubmitEvent, useEffect, useState } from 'react';
 import { fetchSettings } from '../api/settings';
+import { useAuth } from '../context/AuthContext';
 import type { Schemas } from '../types';
 
 const inputCls =
@@ -9,17 +10,19 @@ const labelCls = 'flex flex-col gap-1.5 text-sm font-medium text-slate-700';
 const EMPTY: Schemas['SettingsResponse'] = { model: '', temperature: 0, top_k: 4 };
 
 export default function SettingsPage() {
+  const { accessToken } = useAuth();
   const [form, setForm] = useState<Schemas['SettingsResponse']>(EMPTY);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    fetchSettings()
+    if (!accessToken) return;
+    fetchSettings(accessToken)
       .then(setForm)
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [accessToken]);
 
   // TODO: persist via the settings API once the endpoint supports writes.
   const handleSubmit = (e: SubmitEvent<HTMLFormElement>) => {

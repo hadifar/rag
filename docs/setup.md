@@ -22,6 +22,15 @@ openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.
 Then make sure `.env`'s `CHECKPOINTER__DATABASE_URL` uses that same password (the app connects with it
 directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
 
+Auth (login) uses the same Postgres instance via `AUTH__DATABASE_URL` — set it to the same value as
+`CHECKPOINTER__DATABASE_URL` above, and set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand
+-hex 32`). Before serving for the first time, apply the `users` table migration and create a user
+(there's no public signup — accounts are created out-of-band):
+```bash
+uv run alembic upgrade head
+uv run rag create-user you@example.com
+```
+
 ## Running
 
 ### Python (uv)

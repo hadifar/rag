@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from rag.api.deps import RankingServiceDep
-from rag.api.schema import HealthResponse
+from rag.api.schema.health import HealthResponse
 
 
 def build_health_router() -> APIRouter:
