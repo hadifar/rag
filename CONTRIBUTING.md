@@ -8,31 +8,32 @@ cd rag
 bash scripts/setup.sh
 ```
 
-This runs `uv sync` and installs the git hooks (`pre-commit`, `commit-msg`, `pre-push`, `post-checkout` stages) for this clone. Hooks run automatically; run `pre-commit run --all-files` to check everything up front.
+This runs `uv sync` and installs the git hooks for this clone. See
+[docs/setup.md](docs/setup.md) for `.env`/`data/` setup and running the app (Python, CLI, or
+Docker).
 
-- **pre-commit** — `ruff` (lint + format) and `import-linter` (enforces the `domain`/`services`/`adapters`/`api`/`ui` layering in `pyproject.toml`)
-- **commit-msg** — [Conventional Commits](https://www.conventionalcommits.org/) via `commitizen` (e.g. `fix: handle missing session UUID`, `feat: add search highlighting`)
-- **pre-push** — `pyright` (type checking); also blocks direct (non-merge) commits to `master`/`dev`, and requires new branches to follow the gitflow prefix convention: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`, `release/`, `hotfix/`
-- **post-checkout** — warns (non-blocking) if `master`/`dev` is behind its upstream after a checkout
+## Conventions & architecture
 
-Deliberate override for any of these: `--no-verify`.
+See [docs/conventions.md](docs/conventions.md) for coding style and the patterns to follow when
+extending `rag/` (adding a service, a route, a tool, a backend, etc.).
 
-## Commit messages
+## What's enforced automatically
 
-Commits must follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `fix: handle missing session UUID`, `feat: add search highlighting`), enforced by the `commitizen` hook.
-
+Hooks run on every commit/push; run `pre-commit run --all-files` to check everything up front,
+or `--no-verify` to deliberately skip a hook. See [docs/enforcement.md](docs/enforcement.md) for
+the full list — linting, type checking, `import-linter` layering, Conventional Commits, gitflow
+branch rules, and which test suite runs where.
 
 ## Test
 
 ```
-uv run pytest
+uv run pytest                    # both suites
+uv run pytest tests/unit         # fast, no external dependencies
+uv run pytest tests/integration  # real Pinecone/OpenAI — needs PINECONE__API_KEY/LLM__API_KEY in .env
 ```
 
-Runs both suites:
-- `tests/unit` — fast, no external dependencies (FastAPI wired up with stub services via `create_app(container=...)`).
-- `tests/integration` — against real Pinecone/OpenAI, requires `PINECONE__API_KEY`/`LLM__API_KEY` in `.env` (see `tests/integration/conftest.py`); skips with a clear reason if they're missing.
-
-Run just one: `uv run pytest tests/unit` or `uv run pytest tests/integration`.
+See [docs/enforcement.md#tests](docs/enforcement.md#tests) for what runs automatically vs. only
+on manual dispatch.
 
 ## Frontend
 
