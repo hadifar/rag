@@ -11,6 +11,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.types import Overwrite
 
 from rag.services.generation_service.guards.groundness import (
     REVISION_INSTRUCTION,
@@ -35,10 +36,20 @@ FALLBACK_MESSAGE = "I'm having trouble reaching the language model right now. Pl
 
 class GraphState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+    # Per-turn fields: the checkpointer persists every key across a thread's turns,
+    # so each one must be reset by new_turn() or it leaks into the next turn.
     sources: NotRequired[Annotated[list[str], operator.add]]
     relevant: NotRequired[bool]
     grounded: NotRequired[bool]
     verify_attempts: NotRequired[int]
+
+
+def new_turn(message: str) -> dict:
+    """Graph input for a user's turn: appends the message and resets per-turn state.
+    Overwrite bypasses the `sources` reducer, which would otherwise append to the
+    previous turn's list rather than start a fresh one.
+    """
+    return {"messages": [HumanMessage(content=message)], "sources": Overwrite([])}
 
 
 def _fallback_response(_input: object) -> AIMessage:

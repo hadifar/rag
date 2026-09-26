@@ -1,7 +1,6 @@
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
@@ -22,10 +21,10 @@ _USER_FACING_NODE = "agent"
 
 
 async def stream_events(
-    graph: CompiledStateGraph, messages: list[BaseMessage], config: RunnableConfig
+    graph: CompiledStateGraph, graph_input: dict, config: RunnableConfig
 ) -> AsyncIterator[StreamEvent]:
     async for raw_event in graph.astream_events(
-        {"messages": messages}, config=config, version="v2"
+        graph_input, config=config, version="v2"
     ):
         event = _parse_event(raw_event)
         if event is not None:

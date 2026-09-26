@@ -1,12 +1,11 @@
 from collections.abc import AsyncIterator, Callable
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from rag.domain.events import StreamEvent
-from rag.services.generation_service.graph import build_graph
+from rag.services.generation_service.graph import build_graph, new_turn
 from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
 from rag.services.retrieval_service.service import RetrievalService
@@ -35,7 +34,5 @@ class GenerationService:
             "configurable": {"thread_id": thread_id},
             **self._trace_config("chat"),
         }
-        async for event in stream_events(
-            self._graph, [HumanMessage(content=message)], config
-        ):
+        async for event in stream_events(self._graph, new_turn(message), config):
             yield event
