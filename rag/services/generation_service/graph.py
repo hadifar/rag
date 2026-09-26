@@ -39,7 +39,6 @@ class GraphState(TypedDict):
     # Per-turn fields: the checkpointer persists every key across a thread's turns,
     # so each one must be reset by new_turn() or it leaks into the next turn.
     sources: NotRequired[Annotated[list[str], operator.add]]
-    relevant: NotRequired[bool]
     grounded: NotRequired[bool]
     verify_attempts: NotRequired[int]
     # Guard steering for this turn only: sent to the agent alongside `messages` but
@@ -74,14 +73,10 @@ def _with_resilience(llm: Runnable) -> Runnable:
 
 
 async def _guardrail(llm: Runnable, state: GraphState) -> dict:
-
     if await is_relevant(llm, state["messages"]):
-        return {"relevant": True}
+        return {}
 
-    return {
-        "relevant": False,
-        "instructions": [SystemMessage(content=OFF_TOPIC_INSTRUCTION)],
-    }
+    return {"instructions": [SystemMessage(content=OFF_TOPIC_INSTRUCTION)]}
 
 
 async def _call_model(llm_with_tools: Runnable, state: GraphState) -> dict:
