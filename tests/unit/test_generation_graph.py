@@ -118,3 +118,22 @@ async def test_sources_only_cover_the_current_turn(llm, chat) -> None:
 
     assert _sources(first) == ["alpha.md"]
     assert _sources(second) == ["beta.md"]
+
+
+def _revised_turn(llm: _ScriptedChatModel, query: str) -> None:
+    """Scripts one on-topic turn whose first answer fails verification once."""
+    llm.relevance_verdicts.append("RELEVANT")
+    llm.agent_replies += [_search(query), _answer("unsupported"), _answer("revised")]
+    llm.grounding_verdicts += ["UNGROUNDED", "GROUNDED"]
+
+
+async def test_each_turn_gets_its_own_revision_attempt(llm, chat) -> None:
+    _revised_turn(llm, "alpha")
+    _revised_turn(llm, "beta")
+
+    await chat("tell me about alpha")
+    await chat("tell me about beta")
+
+    # 3 agent calls per turn: search, the ungrounded answer, and the revision.
+    assert len(llm.agent_calls) == 6
+    assert llm.grounding_verdicts == []

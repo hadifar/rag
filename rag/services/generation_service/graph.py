@@ -49,7 +49,11 @@ def new_turn(message: str) -> dict:
     Overwrite bypasses the `sources` reducer, which would otherwise append to the
     previous turn's list rather than start a fresh one.
     """
-    return {"messages": [HumanMessage(content=message)], "sources": Overwrite([])}
+    return {
+        "messages": [HumanMessage(content=message)],
+        "sources": Overwrite([]),
+        "verify_attempts": 0,
+    }
 
 
 def _fallback_response(_input: object) -> AIMessage:
