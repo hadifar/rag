@@ -15,6 +15,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent
+from rag.services.generation_service.guards.groundness import REVISION_INSTRUCTION
+from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.generation_service.service import GenerationService
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -137,3 +139,33 @@ async def test_each_turn_gets_its_own_revision_attempt(llm, chat) -> None:
     # 3 agent calls per turn: search, the ungrounded answer, and the revision.
     assert len(llm.agent_calls) == 6
     assert llm.grounding_verdicts == []
+
+
+def _saw(call: list[BaseMessage], instruction: str) -> bool:
+    return any(message.content == instruction for message in call)
+
+
+async def test_off_topic_instruction_does_not_outlive_its_turn(llm, chat) -> None:
+    llm.relevance_verdicts.append("IRRELEVANT")
+    llm.agent_replies.append(_answer("I can only help with AtlasFlow."))
+    _grounded_turn(llm, "beta")
+
+    await chat("what's the weather?")
+    await chat("tell me about beta")
+
+    off_topic_call, *next_turn_calls = llm.agent_calls
+    assert _saw(off_topic_call, OFF_TOPIC_INSTRUCTION)
+    assert not any(_saw(call, OFF_TOPIC_INSTRUCTION) for call in next_turn_calls)
+
+
+async def test_revision_instruction_does_not_outlive_its_turn(llm, chat) -> None:
+    _revised_turn(llm, "alpha")
+    _grounded_turn(llm, "beta")
+
+    await chat("tell me about alpha")
+    await chat("tell me about beta")
+
+    revision_call = llm.agent_calls[2]
+    next_turn_calls = llm.agent_calls[3:]
+    assert _saw(revision_call, REVISION_INSTRUCTION)
+    assert not any(_saw(call, REVISION_INSTRUCTION) for call in next_turn_calls)

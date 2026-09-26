@@ -42,16 +42,20 @@ class GraphState(TypedDict):
     relevant: NotRequired[bool]
     grounded: NotRequired[bool]
     verify_attempts: NotRequired[int]
+    # Guard steering for this turn only: sent to the agent alongside `messages` but
+    # never written into them, so it doesn't sit in the thread's history afterwards.
+    instructions: NotRequired[Annotated[list[BaseMessage], operator.add]]
 
 
 def new_turn(message: str) -> dict:
     """Graph input for a user's turn: appends the message and resets per-turn state.
-    Overwrite bypasses the `sources` reducer, which would otherwise append to the
-    previous turn's list rather than start a fresh one.
+    Overwrite bypasses the list reducers, which would otherwise append to the
+    previous turn's lists rather than start fresh ones.
     """
     return {
         "messages": [HumanMessage(content=message)],
         "sources": Overwrite([]),
+        "instructions": Overwrite([]),
         "verify_attempts": 0,
     }
 
@@ -76,14 +80,16 @@ async def _guardrail(llm: Runnable, state: GraphState) -> dict:
 
     return {
         "relevant": False,
-        "messages": [SystemMessage(content=OFF_TOPIC_INSTRUCTION)],
+        "instructions": [SystemMessage(content=OFF_TOPIC_INSTRUCTION)],
     }
 
 
 async def _call_model(llm_with_tools: Runnable, state: GraphState) -> dict:
-    messages = state["messages"]
-    if not messages or messages[0].type != "system":
-        messages = [SystemMessage(content=SYSTEM_PROMPT), *messages]
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        *state["messages"],
+        *state.get("instructions", []),
+    ]
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}
 
@@ -100,7 +106,7 @@ async def _verify(llm: Runnable, state: GraphState) -> dict:
     return {
         "grounded": False,
         "verify_attempts": attempts + 1,
-        "messages": [HumanMessage(content=REVISION_INSTRUCTION)],
+        "instructions": [HumanMessage(content=REVISION_INSTRUCTION)],
     }
 
 
