@@ -8,8 +8,8 @@ from rag.adapters.db import open_db_pool
 from rag.adapters.llm_client import build_llm
 from rag.adapters.observability import open_trace_config
 from rag.adapters.pinecone_client import open_vector_store
-from rag.adapters.user_repository import PostgresUserRepository
 from rag.config import Settings
+from rag.repository.user_repository import PostgresUserRepository
 from rag.services.auth_service.service import AuthService
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
