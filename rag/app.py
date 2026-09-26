@@ -5,11 +5,11 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from rag.api.deps import get_current_user
-from rag.api.routers.auth import build_auth_router
-from rag.api.routers.chat import build_chat_router
-from rag.api.routers.health import build_health_router
-from rag.api.routers.kb import build_kb_router
-from rag.api.routers.settings import build_settings_router
+from rag.api.routers.auth import router as auth_router
+from rag.api.routers.chat import router as chat_router
+from rag.api.routers.health import router as health_router
+from rag.api.routers.kb import router as kb_router
+from rag.api.routers.settings import router as settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
 from rag.domain.errors import (
@@ -63,16 +63,17 @@ def create_app(
     require_user = [Depends(get_current_user)]
 
     app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
-    app.include_router(build_auth_router(settings), prefix="/api/auth")
+    # Routers pull config via Depends(get_settings) — override so a caller-supplied
+    # `settings` (e.g. a test's stub) is what every route actually sees, not the
+    # real @lru_cache'd one get_settings() would otherwise return.
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    app.include_router(auth_router, prefix="/api/auth")
+    app.include_router(chat_router, prefix="/api/chat", dependencies=require_user)
+    app.include_router(health_router, prefix="/api/health")
+    app.include_router(kb_router, prefix="/api/kb", dependencies=require_user)
     app.include_router(
-        build_chat_router(), prefix="/api/chat", dependencies=require_user
-    )
-    app.include_router(build_health_router(), prefix="/api/health")
-    app.include_router(build_kb_router(), prefix="/api/kb", dependencies=require_user)
-    app.include_router(
-        build_settings_router(settings),
-        prefix="/api/settings",
-        dependencies=require_user,
+        settings_router, prefix="/api/settings", dependencies=require_user
     )
     _register_error_handlers(app)
     return app

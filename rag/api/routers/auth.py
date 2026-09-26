@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Cookie, Request, Response
 
-from rag.api.deps import AuthServiceDep, CurrentUserDep
+from rag.api.deps import AuthServiceDep, CurrentUserDep, SettingsDep
 from rag.api.schema.auth import LoginRequest, TokenResponse, UserResponse
 from rag.config import Settings
 from rag.domain.errors import InvalidTokenError
 
 _REFRESH_COOKIE = "refresh_token"
 _REFRESH_COOKIE_PATH = "/api/auth"
+
+router = APIRouter(tags=["auth"])
 
 
 def _set_refresh_cookie(
@@ -23,43 +25,38 @@ def _set_refresh_cookie(
     )
 
 
-def build_auth_router(settings: Settings) -> APIRouter:
-    router = APIRouter(tags=["auth"])
+@router.post("/login")
+async def login(
+    login_request: LoginRequest,
+    request: Request,
+    response: Response,
+    auth_service: AuthServiceDep,
+    settings: SettingsDep,
+) -> TokenResponse:
+    user = await auth_service.authenticate(login_request.email, login_request.password)
+    _set_refresh_cookie(
+        response, request, auth_service.create_refresh_token(user), settings
+    )
+    return TokenResponse(access_token=auth_service.create_access_token(user))
 
-    @router.post("/login")
-    async def login(
-        login_request: LoginRequest,
-        request: Request,
-        response: Response,
-        auth_service: AuthServiceDep,
-    ) -> TokenResponse:
-        user = await auth_service.authenticate(
-            login_request.email, login_request.password
-        )
-        _set_refresh_cookie(
-            response, request, auth_service.create_refresh_token(user), settings
-        )
-        return TokenResponse(access_token=auth_service.create_access_token(user))
 
-    @router.post("/refresh")
-    async def refresh(
-        request: Request,
-        response: Response,
-        auth_service: AuthServiceDep,
-        refresh_token: str | None = Cookie(default=None, alias=_REFRESH_COOKIE),
-    ) -> TokenResponse:
-        if refresh_token is None:
-            raise InvalidTokenError("missing refresh cookie")
-        user_id = auth_service.verify_refresh_token(refresh_token)
-        user = await auth_service.get_user(user_id)
-        return TokenResponse(access_token=auth_service.create_access_token(user))
+@router.post("/refresh")
+async def refresh(
+    auth_service: AuthServiceDep,
+    refresh_token: str | None = Cookie(default=None, alias=_REFRESH_COOKIE),
+) -> TokenResponse:
+    if refresh_token is None:
+        raise InvalidTokenError("missing refresh cookie")
+    user_id = auth_service.verify_refresh_token(refresh_token)
+    user = await auth_service.get_user(user_id)
+    return TokenResponse(access_token=auth_service.create_access_token(user))
 
-    @router.post("/logout", status_code=204)
-    async def logout(response: Response) -> None:
-        response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
 
-    @router.get("/me")
-    async def me(current_user: CurrentUserDep) -> UserResponse:
-        return UserResponse(id=current_user.id, email=current_user.email)
+@router.post("/logout", status_code=204)
+async def logout(response: Response) -> None:
+    response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
 
-    return router
+
+@router.get("/me")
+async def me(current_user: CurrentUserDep) -> UserResponse:
+    return UserResponse(id=current_user.id, email=current_user.email)

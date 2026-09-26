@@ -22,22 +22,20 @@ class SseEventType(StrEnum):
     SOURCES = "sources"
 
 
-def build_chat_router() -> APIRouter:
-    router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"])
 
-    @router.post("/stream")
-    async def stream(
-        chat_request: ChatRequest, generation_service: GenerationServiceDep
-    ) -> StreamingResponse:
-        async def event_stream():
-            async for event in generation_service.stream_chat(
-                chat_request.message, chat_request.thread_id
-            ):
-                yield _to_sse(event)
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+@router.post("/stream")
+async def stream(
+    chat_request: ChatRequest, generation_service: GenerationServiceDep
+) -> StreamingResponse:
+    async def event_stream():
+        async for event in generation_service.stream_chat(
+            chat_request.message, chat_request.thread_id
+        ):
+            yield _to_sse(event)
 
-    return router
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def _to_sse(event: StreamEvent) -> str:
