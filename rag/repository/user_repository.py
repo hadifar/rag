@@ -7,7 +7,7 @@ from psycopg_pool import AsyncConnectionPool
 from rag.domain.models import User
 
 
-class PostgresUserRepository:
+class UserRepository:
     def __init__(self, pool: AsyncConnectionPool[AsyncConnection]):
         self._pool = pool
 

@@ -21,6 +21,7 @@ class Container:
     ranking_service: RetrievalService
     generation_service: GenerationService
     ingestion_service: IngestionService
+    auth_service: AuthService
 
 
 @asynccontextmanager
@@ -28,10 +29,24 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]: ...
 ```
 
 A new adapter or service is wired in here, not constructed ad hoc inside a router or another
-service. Routers and services never import `rag.adapters` directly — they take a `domain.ports`
-`Protocol` in their constructor, and `container.py` is what supplies the concrete instance. This
-is enforced by `import-linter`, not just convention — see
+service. Routers and services never import `rag.adapters` (or `rag.repository` — see
+[below](#adding-a-new-repository-persistence-behind-a-domain-port)) directly — they take a
+`domain.ports` `Protocol` in their constructor, and `container.py` is what supplies the concrete
+instance. This is enforced by `import-linter`, not just convention — see
 [enforcement.md](enforcement.md#python-code-quality).
+
+## Adding a new repository: persistence behind a domain port
+
+Same rule as adapters — `rag.repository` gets the same composition-root-only treatment as
+`rag.adapters` in `import-linter` — but it's a distinct package because it's a distinct kind of
+infra: `adapters/` wraps a third-party SDK client (Pinecone, an LLM provider); `repository/` holds
+hand-written SQL over the project's own Postgres, implementing a domain port
+(`UserRepositoryPort`, in `PostgresUserRepository`). Follow `user_repository.py`'s shape for a new
+one: plain parameterized queries via `psycopg`'s `class_row(YourModel)` row factory (maps a row
+straight onto the domain dataclass), no ORM — this project uses SQLAlchemy only as Alembic's
+migration engine, never as an app-level ORM (see [limitation.md](limitation.md) if that
+trade-off ever stops making sense for a new table's shape). Wire it into `container.py` like any
+other adapter, injected into its service through the port, never imported by the service directly.
 
 ## Adding a new implementation of an existing capability: satisfy the `Protocol`, don't branch on type
 
@@ -65,24 +80,44 @@ is identical: nothing downstream branches on which concrete implementation is ac
 
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 
-Every router in `rag/api/routers/` follows the same shape: a `build_*_router()` function that
-declares its endpoints as closures, takes its dependencies as `Annotated[T, Depends(...)]` aliases
-from `deps.py` (never constructs a service inline), and returns/raises typed Pydantic models —
-`Response` subclasses (`PlainTextResponse`, `StreamingResponse`) only when the body genuinely isn't
-JSON. Business logic (retrieval, generation, chunk reassembly) lives in the injected service, not
-in the route body — a route should read as "call the service, shape the result."
+Every router in `rag/api/routers/` follows the same shape: a flat, module-level
+`router = APIRouter(prefix="/api/x", tags=["x"])`, with each endpoint a plain `@router.get`/`post`
+function — not a `build_*_router()` factory wrapping closures. Handlers take their dependencies as
+`Annotated[T, Depends(...)]` aliases from `deps.py` (`ContainerDep`, `RankingServiceDep`,
+`SettingsDep`, `CurrentUserDep`, ...), never construct a service inline, and return/raise typed
+Pydantic models — `Response` subclasses (`PlainTextResponse`, `StreamingResponse`) only when the
+body genuinely isn't JSON. Business logic (retrieval, generation, chunk reassembly) lives in the
+injected service, not in the route body — a route should read as "call the service, shape the
+result." `app.py` imports the router object directly (`from rag.api.routers.chat import router as
+chat_router`) and does `app.include_router(chat_router, dependencies=...)` — the prefix lives on
+the router itself, not at inclusion time; `dependencies=` at inclusion time is for a uniform gate
+across every route in that router (e.g. `[Depends(get_current_user)]` on `chat`/`kb`/`settings`);
+a single route needing something the others don't takes it as a per-route dependency instead
+(`@router.get(..., dependencies=[Depends(...)])` or a real parameter if the value is used, like
+`auth.py`'s `/me` using `current_user: CurrentUserDep`).
 
-On failure, raise a `rag.domain.errors.RagError` subclass, not `fastapi.HTTPException` — the router
-doesn't know the right HTTP status for a domain failure, `app.py`'s `_register_error_handlers` does
-(see `DocumentNotFoundError` → 404 in `kb.py`/`app.py`). Add a new status mapping there when adding
-a new domain error, rather than reaching for `HTTPException` inline.
+`SettingsDep`/`get_app_settings` reads `request.app.state.settings` (`api/deps.py`) — the same
+`app.state` pattern `ContainerDep`/`get_container` already uses — rather than FastAPI's
+`dependency_overrides`, which is for tests reaching into an already-built app from the outside,
+not for the app's own composition root to configure its routes.
 
-`*Dep` aliases (`ContainerDep`, `RankingServiceDep`, `GenerationServiceDep`, ...) only resolve
-through FastAPI's request pipeline — they mean nothing on a plain function FastAPI doesn't call as
-part of handling a request. A router-builder function invoked directly at app-construction time
-(like `build_settings_router(settings)` in `app.py`) takes the concrete type (`Settings`), not a
-`*Dep` alias — `Depends(...)` silently never runs there, so the annotation would just be misleading
-metadata on an ordinary parameter.
+On failure, raise a `rag.domain.errors.RagError` subclass, not `fastapi.HTTPException` — the
+router doesn't know the right HTTP status for a domain failure. Give the new exception class a
+`status_code: ClassVar[int]` in `rag/domain/errors.py` (defaults to 500 on the `RagError` base if
+omitted); `rag/api/error_handlers.py`'s single `@app.exception_handler(RagError)` handler reads
+`exc.status_code` polymorphically via Starlette's MRO-based dispatch, so a new domain error needs
+no change to `app.py` or `error_handlers.py` at all — just the `status_code` on the new class.
+
+## Adding a new schema/DTO
+
+`rag/api/schema/` mirrors `rag/api/routers/` one module per feature (`chat.py`, `auth.py`,
+`settings.py`, `health.py`) rather than one flat file — a new feature gets its own schema module,
+imported only by its own router. These are request/response DTOs for the wire format, not domain
+models — they live under `rag/api/` (not a top-level `rag/schema/`) because nothing outside
+`rag.api` ever imports them; promoting them to a sibling of `domain`/`services`/`adapters` would
+claim a cross-layer role they don't have, and `import-linter`'s `layering` contract already keeps
+`domain`/`services` from reaching into `rag.api` at all, so nesting gets that boundary for free
+instead of needing a new contract to state it.
 
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 

@@ -16,6 +16,9 @@ cd rag
 bash scripts/setup.sh
 # fill in .env (see .example.env), then:
 docker compose up --build
+# once it's up, create a login (no public signup — see docs/setup.md):
+docker compose exec backend alembic upgrade head
+docker compose exec backend rag create-user you@example.com
 ```
 Full setup and other ways to run it, are in [docs/setup.md](docs/setup.md).
 

@@ -9,7 +9,7 @@ from rag.adapters.llm_client import build_llm
 from rag.adapters.observability import open_trace_config
 from rag.adapters.pinecone_client import open_vector_store
 from rag.config import Settings
-from rag.repository.user_repository import PostgresUserRepository
+from rag.repository.user_repository import UserRepository
 from rag.services.auth_service.service import AuthService
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -49,7 +49,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         auth_service = AuthService(
-            user_repository=PostgresUserRepository(db_pool),
+            user_repository=UserRepository(db_pool),
             jwt_secret=settings.AUTH.JWT_SECRET.get_secret_value(),
             jwt_algorithm=settings.AUTH.JWT_ALGORITHM,
             access_ttl=timedelta(minutes=settings.AUTH.ACCESS_TOKEN_EXPIRE_MINUTES),
