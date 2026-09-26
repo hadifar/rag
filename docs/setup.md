@@ -22,6 +22,15 @@ openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.
 Then make sure `.env`'s `CHECKPOINTER__DATABASE_URL` uses that same password (the app connects with it
 directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
 
+Auth (login) uses the same Postgres instance via `AUTH__DATABASE_URL` — set it to the same value as
+`CHECKPOINTER__DATABASE_URL` above, and set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand
+-hex 32`). Before serving for the first time, apply the `users` table migration and create a user
+(there's no public signup — accounts are created out-of-band):
+```bash
+uv run alembic upgrade head
+uv run rag create-user you@example.com
+```
+
 ## Running
 
 ### Python (uv)
@@ -43,12 +52,20 @@ uv run rag serve
 ```bash
 docker compose up --build
 ```
-Starts `postgres` (checkpointer storage, published on `localhost:5432`), `backend`, and the
-frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to the host,
-only reachable inside the compose network. nginx proxies `/api/*` to it, so use the frontend URL
-for both the UI and the API.
+Starts `postgres` (checkpointer + auth/users storage, published on `localhost:5432`), `backend`,
+and the frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to
+the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
+frontend URL for both the UI and the API.
 
 Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup) above.
+
+Once the stack is up, apply the `users` table migration and create a login (one-time, or after a
+fresh `pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
+done:
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend rag create-user you@example.com
+```
 
 ```bash
 docker compose down   # stop and remove the containers

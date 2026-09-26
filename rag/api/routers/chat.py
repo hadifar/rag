@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from rag.api.deps import GenerationServiceDep
-from rag.api.schema import ChatRequest
+from rag.api.schema.chat import ChatRequest
 from rag.domain.events import (
     SourcesReady,
     StreamEvent,
@@ -22,22 +22,20 @@ class SseEventType(StrEnum):
     SOURCES = "sources"
 
 
-def build_chat_router() -> APIRouter:
-    router = APIRouter(tags=["chat"])
+router = APIRouter(prefix="/api/chat", tags=["chat"])
 
-    @router.post("/stream")
-    async def stream(
-        chat_request: ChatRequest, generation_service: GenerationServiceDep
-    ) -> StreamingResponse:
-        async def event_stream():
-            async for event in generation_service.stream_chat(
-                chat_request.message, chat_request.thread_id
-            ):
-                yield _to_sse(event)
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+@router.post("/stream")
+async def stream(
+    chat_request: ChatRequest, generation_service: GenerationServiceDep
+) -> StreamingResponse:
+    async def event_stream():
+        async for event in generation_service.stream_chat(
+            chat_request.message, chat_request.thread_id
+        ):
+            yield _to_sse(event)
 
-    return router
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def _to_sse(event: StreamEvent) -> str:

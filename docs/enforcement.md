@@ -15,16 +15,18 @@ just rely on review discipline.
 - `pyright` type checking at the `pre-push` stage
 - `import-linter` (`lint-imports`) enforces the layered architecture in `rag/`
   (`pyproject.toml`'s `[tool.importlinter]`):
-  - `rag.domain` may not import `rag.services`, `rag.adapters`, or `rag.api` ("domain is pure")
-  - `rag.services` may not import `rag.adapters` directly
-  - `rag.api` may not import `rag.adapters` directly (except `container.py`, explicitly ignored)
+  - `rag.domain` may not import `rag.services`, `rag.adapters`, `rag.repository`, or `rag.api`
+    ("domain is pure")
+  - `rag.services` may not import `rag.adapters` or `rag.repository` directly
+  - `rag.api` may not import `rag.adapters` or `rag.repository` directly (except `container.py`,
+    explicitly ignored)
   - an explicit layering contract: `rag.api` → `rag.services` → `rag.domain`
 - `uv-lock` keeps `uv.lock` in sync with `pyproject.toml`, auto-fixing locally
 
 ## Backend/frontend schema sync
 - The `frontend-api-types` pre-commit hook regenerates
   `frontend/src/types/api.generated.ts` from the backend's OpenAPI schema whenever
-  `rag/api/schema.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —
+  `rag/api/schema/*.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —
   auto-fixes locally like `uv-lock`, and re-runs in CI so a stale generated file fails the
   `pre-commit` job
 - `frontend/src/types/index.ts` re-exports the whole schema map as

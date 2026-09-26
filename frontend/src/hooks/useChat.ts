@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamChat } from '../api/chat';
+import { useAuth } from '../context/AuthContext';
 import type { ChatMessage, ChatStreamEvent, ChatMessageInput } from '../types/chat';
 
 function assistantText(text: string): ChatMessageInput {
@@ -49,6 +50,7 @@ function createStreamHandler(
 }
 
 export function useChat() {
+  const { accessToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const nextId = useRef(0);
   const threadIdRef = useRef(crypto.randomUUID());
@@ -98,7 +100,13 @@ export function useChat() {
       };
 
       try {
-        await streamChat({ message: text, thread_id: threadIdRef.current, onEvent, signal: controller.signal });
+        await streamChat({
+          message: text,
+          thread_id: threadIdRef.current,
+          accessToken: accessToken ?? '',
+          onEvent,
+          signal: controller.signal,
+        });
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);
@@ -109,7 +117,7 @@ export function useChat() {
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [appendMsg, updateMsg, deleteMsg],
+    [appendMsg, updateMsg, deleteMsg, accessToken],
   );
 
   return { messages, sendMessage };

@@ -22,17 +22,29 @@
 - The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_VERIFY_ATTEMPTS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
 - `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
-- `GET /api/settings` returns the full system prompt to any unauthenticated caller — free reconnaissance for anyone trying to jailbreak the guardrail/agent.
 
 ## Conversation & session state
-- `thread_id` is a client-supplied free string with no ownership check
+- `thread_id` is a client-supplied free string with no ownership check — `/api/chat/stream`'s
+  handler takes only `ChatRequest`/`generation_service`, never `current_user` (the router-level
+  auth dependency gates *that someone* is logged in, not *who*), so `thread_id` reaches the
+  checkpointer with zero link to the caller's identity. Login stops a fully anonymous caller, but
+  any two authenticated users can still read/continue each other's conversations by reusing or
+  guessing a `thread_id`
 - The frontend never persists `thread_id` anywhere — it's a `crypto.randomUUID()` held only in a React ref (`useChat.ts`), regenerated on every remount. A page refresh (or new tab) orphans the conversation in the Postgres checkpointer with no way for the user to get back to it, even though the backend is built to persist it.
 - The sidebar's conversation history (`Sidebar.tsx`) is hardcoded `MOCK_SESSIONS` with a `// TODO: replace with real sessions from the backend` — every user sees the same fabricated list of past chats, none of which are theirs or clickable into real history.
 
 ## Security
-- No authentication on any endpoint (`/chat/stream`, `/kb/*`, `/ui`)
+- Login/register are self-hosted, not a third-party identity provider — no self-serve signup
+  (accounts are created out-of-band via `rag create-user`, an operational bottleneck as much as a
+  security posture) and no password-reset/email-verification flow at all
+- No refresh-token rotation or revocation store: `POST /api/auth/logout` only clears the client's
+  refresh cookie — it doesn't invalidate anything server-side, so a captured access token stays
+  valid until it naturally expires (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), and a
+  captured refresh token until `AUTH__REFRESH_TOKEN_EXPIRE_DAYS` (default 7d), with no way to cut
+  either off early
+- No login-specific rate limiting — `POST /api/auth/login` only gets nginx's generic `limit_req`
+  on all of `/api/*` (10 req/min per IP), not a tighter, brute-force-aware budget of its own
 - Dockerfile runs as root, pins no specific base image version (`python:3.12-slim` floats to whatever patch Docker Hub currently serves), and is a single-stage build
-- System prompt disclosure via `/api/settings` (see Generation & guardrails above)
 
 ## Reliability
 - No retry/backoff around Pinecone calls (LLM calls already retry with a fallback, see `graph.py`) — `search_kb` has no error handling at all, so a transient Pinecone error propagates straight out of the graph mid-turn instead of degrading gracefully like the LLM path does
@@ -59,3 +71,4 @@
 
 ## Infra & deployment
 - The Postgres server behind `CHECKPOINTER__DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
+- `AUTH__DATABASE_URL`/`AUTH__JWT_SECRET` aren't wired into `main.bicep`/Key Vault at all yet — same gap as the checkpointer's `CHECKPOINTER__DATABASE_URL` above, plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)

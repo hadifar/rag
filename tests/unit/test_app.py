@@ -1,5 +1,8 @@
+import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator, Generator
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import pytest
@@ -9,7 +12,13 @@ from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
 from rag.app import create_app
-from rag.config import LoggingObservability, OpenAILLM, PineconeConfig, Settings
+from rag.config import (
+    AuthConfig,
+    LoggingObservability,
+    OpenAILLM,
+    PineconeConfig,
+    Settings,
+)
 from rag.container import Container
 from rag.domain.events import (
     SourcesReady,
@@ -18,9 +27,35 @@ from rag.domain.events import (
     ToolCallResult,
     ToolCallStart,
 )
+from rag.domain.models import User
+from rag.services.auth_service.service import AuthService
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+
+_TEST_EMAIL = "test@example.com"
+_TEST_PASSWORD = "correct horse battery staple"
+
+
+class _FakeUserRepository:
+    def __init__(self):
+        self._users: dict[uuid.UUID, User] = {}
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        return self._users.get(user_id)
+
+    async def create(self, email: str, hashed_password: str) -> User:
+        user = User(
+            id=uuid.uuid4(),
+            email=email,
+            hashed_password=hashed_password,
+            created_at=datetime.now(UTC),
+        )
+        self._users[user.id] = user
+        return user
 
 
 class _StubRetrievalService:
@@ -57,20 +92,47 @@ def _stub_settings() -> Settings:
             SPARSE_MODEL="sparse-model",
             NAMESPACE="ns",
         ),
+        AUTH=AuthConfig(
+            DATABASE_URL=SecretStr("unused"),
+            JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
+        ),
         OBSERVABILITY=LoggingObservability(),
+    )
+
+
+def _build_auth_service() -> AuthService:
+    return AuthService(
+        user_repository=_FakeUserRepository(),
+        jwt_secret="test-secret-that-is-long-enough-32b",
+        jwt_algorithm="HS256",
+        access_ttl=timedelta(minutes=15),
+        refresh_ttl=timedelta(days=7),
     )
 
 
 @pytest.fixture
 def client() -> Generator[TestClient]:
+    auth_service = _build_auth_service()
+    asyncio.run(auth_service.create_user(_TEST_EMAIL, _TEST_PASSWORD))
+
     container = Container(
         ranking_service=cast(RetrievalService, _StubRetrievalService()),
         generation_service=cast(GenerationService, _StubGenerationService()),
         ingestion_service=cast(IngestionService, object()),
+        auth_service=auth_service,
     )
     app = create_app(container=container, settings=_stub_settings())
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def auth_headers(client: TestClient) -> dict[str, str]:
+    response = client.post(
+        "/api/auth/login", json={"email": _TEST_EMAIL, "password": _TEST_PASSWORD}
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def test_live_endpoint_ok(client: TestClient) -> None:
@@ -85,8 +147,10 @@ def test_ready_endpoint_exercises_ranking_service(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_settings_endpoint_returns_config(client: TestClient) -> None:
-    response = client.get("/api/settings")
+def test_settings_endpoint_returns_config(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/settings", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["model"] == "gpt-4o-mini"
@@ -94,15 +158,73 @@ def test_settings_endpoint_returns_config(client: TestClient) -> None:
     assert body["top_k"] == 4
 
 
-def test_kb_endpoint_returns_document(client: TestClient) -> None:
-    response = client.get("/api/kb/some-doc")
+def test_settings_endpoint_requires_auth(client: TestClient) -> None:
+    response = client.get("/api/settings")
+    assert response.status_code == 401
+
+
+def test_kb_endpoint_returns_document(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/kb/some-doc", headers=auth_headers)
     assert response.status_code == 200
     assert response.text == "content for some-doc"
 
 
-def test_kb_endpoint_404_when_document_missing(client: TestClient) -> None:
-    response = client.get("/api/kb/missing")
+def test_kb_endpoint_404_when_document_missing(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/kb/missing", headers=auth_headers)
     assert response.status_code == 404
+
+
+def test_kb_endpoint_requires_auth(client: TestClient) -> None:
+    response = client.get("/api/kb/some-doc")
+    assert response.status_code == 401
+
+
+def test_login_wrong_password_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/login", json={"email": _TEST_EMAIL, "password": "wrong"}
+    )
+    assert response.status_code == 401
+
+
+def test_me_endpoint_returns_current_user(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["email"] == _TEST_EMAIL
+
+
+def test_refresh_endpoint_issues_new_access_token(client: TestClient) -> None:
+    login_response = client.post(
+        "/api/auth/login", json={"email": _TEST_EMAIL, "password": _TEST_PASSWORD}
+    )
+    assert login_response.status_code == 200
+
+    refresh_response = client.post("/api/auth/refresh")
+    assert refresh_response.status_code == 200
+    assert "access_token" in refresh_response.json()
+
+
+def test_refresh_without_cookie_rejected(client: TestClient) -> None:
+    response = client.post("/api/auth/refresh")
+    assert response.status_code == 401
+
+
+def test_logout_clears_refresh_cookie(client: TestClient) -> None:
+    login_response = client.post(
+        "/api/auth/login", json={"email": _TEST_EMAIL, "password": _TEST_PASSWORD}
+    )
+    assert login_response.status_code == 200
+
+    logout_response = client.post("/api/auth/logout")
+    assert logout_response.status_code == 204
+
+    refresh_response = client.post("/api/auth/refresh")
+    assert refresh_response.status_code == 401
 
 
 def _parse_sse(body: str) -> list[tuple[str, str]]:
@@ -116,9 +238,21 @@ def _parse_sse(body: str) -> list[tuple[str, str]]:
     return events
 
 
-def test_chat_stream_endpoint_wired(client: TestClient) -> None:
+def test_chat_stream_endpoint_requires_auth(client: TestClient) -> None:
+    response = client.post(
+        "/api/chat/stream", json={"message": "hi", "thread_id": "t1"}
+    )
+    assert response.status_code == 401
+
+
+def test_chat_stream_endpoint_wired(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     with client.stream(
-        "POST", "/api/chat/stream", json={"message": "hi", "thread_id": "t1"}
+        "POST",
+        "/api/chat/stream",
+        json={"message": "hi", "thread_id": "t1"},
+        headers=auth_headers,
     ) as response:
         assert response.status_code == 200
         body = "".join(response.iter_text())
@@ -126,7 +260,9 @@ def test_chat_stream_endpoint_wired(client: TestClient) -> None:
     assert "echo: hi" in body
 
 
-def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> None:
+def test_chat_stream_contract_matches_frontend_parsing(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     """Locks the SSE wire format to what frontend/src/api/chat.ts actually parses.
 
     This endpoint returns raw text/event-stream, so it's invisible to the OpenAPI
@@ -134,7 +270,10 @@ def test_chat_stream_contract_matches_frontend_parsing(client: TestClient) -> No
     that catches a field rename here before it breaks the frontend at runtime.
     """
     with client.stream(
-        "POST", "/api/chat/stream", json={"message": "hi", "thread_id": "t1"}
+        "POST",
+        "/api/chat/stream",
+        json={"message": "hi", "thread_id": "t1"},
+        headers=auth_headers,
     ) as response:
         assert response.status_code == 200
         body = "".join(response.iter_text())

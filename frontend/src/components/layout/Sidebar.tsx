@@ -7,7 +7,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   SparklesIcon,
+  ArrowRightStartOnRectangleIcon,
 } from '@heroicons/react/24/outline';
+
+import { useAuth } from '../../context/AuthContext';
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 
@@ -62,10 +65,16 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const startNewChat = () => {
     setActiveSession(null);
     navigate('/chat');
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   return (
@@ -168,6 +177,19 @@ export default function Sidebar() {
         {footerLinks.map((link) => (
           <SidebarLink key={link.to} {...link} isCollapsed={isCollapsed} />
         ))}
+        <button
+          onClick={handleLogout}
+          title={isCollapsed ? 'Log out' : undefined}
+          className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors ${
+            isCollapsed ? 'justify-center' : ''
+          }`}
+        >
+          <ArrowRightStartOnRectangleIcon
+            className="shrink-0 text-slate-400"
+            style={{ height: '1.125rem', width: '1.125rem' }}
+          />
+          {!isCollapsed && 'Log out'}
+        </button>
       </div>
     </aside>
   );

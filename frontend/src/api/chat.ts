@@ -3,20 +3,27 @@ import {
   fetchEventSource,
 } from '@microsoft/fetch-event-source';
 
-import { apiUrl, jsonPost } from './base';
+import { apiUrl, authHeader, jsonPost } from './base';
 import type { Schemas } from '../types';
 import type { ChatStreamEvent } from '../types/chat';
 
 export type StreamChatArgs = Schemas['ChatRequest'] & {
+  accessToken: string;
   onEvent: (event: ChatStreamEvent) => void;
   signal?: AbortSignal;
 };
 
-export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
+export function streamChat({
+  accessToken,
+  onEvent,
+  signal,
+  ...request
+}: StreamChatArgs): Promise<void> {
+  const { headers, ...init } = jsonPost(request);
 
   return fetchEventSource(apiUrl('chat/stream'), {
-
-    ...jsonPost(request),
+    ...init,
+    headers: { ...headers, ...authHeader(accessToken) },
     signal,
     openWhenHidden: true, // Keep the stream alive in a backgrounded tab
 

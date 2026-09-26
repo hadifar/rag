@@ -25,5 +25,7 @@ fi
 
 echo
 echo "Setup complete. Next:"
-echo "  uv run rag ingest   # build the vector index from data/"
-echo "  uv run rag serve    # start the API + UI"
+echo "  uv run alembic upgrade head        # create the users table"
+echo "  uv run rag create-user you@example.com   # there's no public signup"
+echo "  uv run rag ingest                  # build the vector index from data/"
+echo "  uv run rag serve                    # start the API + UI"
