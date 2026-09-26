@@ -8,7 +8,7 @@ DEFAULT_TEMPERATURE = 0.2
 DEFAULT_TOP_K = 4
 DEFAULT_MODEL = "gpt-4o-mini"
 
-router = APIRouter(tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 @router.get("")

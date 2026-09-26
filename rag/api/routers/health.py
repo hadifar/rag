@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from rag.api.deps import RankingServiceDep
 from rag.api.schema.health import HealthResponse
 
-router = APIRouter(tags=["health"])
+router = APIRouter(prefix="/api/health", tags=["health"])
 
 
 @router.get("/live")

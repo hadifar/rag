@@ -8,7 +8,7 @@ from rag.domain.errors import InvalidTokenError
 _REFRESH_COOKIE = "refresh_token"
 _REFRESH_COOKIE_PATH = "/api/auth"
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _set_refresh_cookie(

@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class AuthConfig(BaseModel):
+    DATABASE_URL: SecretStr
+    JWT_SECRET: SecretStr
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+
 class OpenAILLM(BaseModel):
     BACKEND: Literal["openai"] = "openai"
     API_KEY: SecretStr
@@ -40,14 +48,6 @@ class PineconeConfig(BaseModel):
     NAMESPACE: str
 
 
-class AuthConfig(BaseModel):
-    DATABASE_URL: SecretStr
-    JWT_SECRET: SecretStr
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-
-
 class LoggingObservability(BaseModel):
     BACKEND: Literal["logging"] = "logging"
 
@@ -75,11 +75,12 @@ class Settings(BaseSettings):
         env_file=".env", env_nested_delimiter="__", case_sensitive=True, extra="forbid"
     )
 
+    AUTH: AuthConfig
+
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
     LLM: LLMConfig
     PINECONE: PineconeConfig
-    AUTH: AuthConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()
     CHECKPOINTER: CheckpointerConfig = MemoryCheckpointer()
 

@@ -4,7 +4,7 @@ from fastapi.responses import PlainTextResponse
 from rag.api.deps import RankingServiceDep
 from rag.domain.errors import DocumentNotFoundError
 
-router = APIRouter(tags=["kb"])
+router = APIRouter(prefix="/api/kb", tags=["kb"])
 
 
 @router.get("/{filename}")

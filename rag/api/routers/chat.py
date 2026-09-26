@@ -22,7 +22,7 @@ class SseEventType(StrEnum):
     SOURCES = "sources"
 
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 @router.post("/stream")
