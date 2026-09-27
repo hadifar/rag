@@ -23,6 +23,13 @@ else
     echo "==> .env already exists, leaving it as-is"
 fi
 
+if ! compgen -G "data/*.md" >/dev/null; then
+    echo "==> Extracting knowledge base (data/data.zip)"
+    uv run python -m zipfile -e data/data.zip .
+else
+    echo "==> data/*.md already present, leaving it as-is"
+fi
+
 echo
 echo "Setup complete. Next:"
 echo "  uv run alembic upgrade head        # create the users table"
