@@ -4,8 +4,13 @@ from contextlib import asynccontextmanager
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg import AsyncConnection
+from psycopg.rows import DictRow, dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from rag.config import MemoryCheckpointer, PostgresCheckpointer, Settings
+
+_DictRowPool = AsyncConnectionPool[AsyncConnection[DictRow]]
 
 
 @asynccontextmanager
@@ -19,9 +24,14 @@ async def _open_memory(
 async def _open_postgres(
     config: PostgresCheckpointer,
 ) -> AsyncGenerator[BaseCheckpointSaver]:
-    async with AsyncPostgresSaver.from_conn_string(
-        config.DATABASE_URL.get_secret_value()
-    ) as checkpointer:
+
+    async with _DictRowPool(
+        config.DATABASE_URL.get_secret_value(),
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        check=_DictRowPool.check_connection,
+        open=False,
+    ) as pool:
+        checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()
         yield checkpointer
 
