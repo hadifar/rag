@@ -72,7 +72,7 @@ they depend on `domain`'s `Port` protocols, and `container.py` is the only place
 adapter or repository gets wired in. `rag.repository` exists alongside `rag.adapters` rather than
 merged into it — same composition-root-only rule, just a distinct kind of infra (hand-written SQL
 over a domain port, vs. a wrapped third-party SDK client) — see
-[conventions.md](conventions.md#adding-a-new-repository-persistence-behind-a-domain-port).
+[conventions.md](conventions.md#adding-a-new-repository-sql-behind-a-domain-port).
 
 ## Generation graph (`create_agent`)
 
@@ -167,7 +167,11 @@ graph LR
 ```
 
 `schema/` mirrors `routers/` one module per feature, rather than one flat file — see
-[conventions.md](conventions.md#adding-a-new-schemadto).
+[conventions.md](conventions.md#adding-a-new-schemadto). The DTOs live under `rag/api/`, not in a
+top-level `rag/schema/`, because nothing outside `rag.api` imports them: making them a sibling of
+`domain`/`services`/`adapters` would claim a cross-layer role they don't have, and nesting them
+gets the boundary for free from `import-linter`'s `layering` contract, which already keeps
+`domain`/`services` out of `rag.api`.
 
 Kept in sync by the `frontend-api-types` pre-commit hook, not by hand — see
 [enforcement.md](enforcement.md#backendfrontend-schema-sync).

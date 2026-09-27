@@ -88,6 +88,15 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 | `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
+`container.py`'s `build_container` is the composition root: an async context manager that opens
+the Postgres pools and tracing, constructs every adapter, repository and service, and tears the
+connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
+`ContainerDep`/`SettingsDep` in `api/deps.py` read it.
+
+Ingestion today has one `DocumentLoaderPort` (`MarkdownFileLoader`) and two `ChunkerPort`s:
+`WholeDocumentChunker` (wired in by default) and `MarkdownHeaderChunker`. Chunk ids are
+`f"{source_id}::{chunk_index}"`, so re-running `rag ingest` upserts over existing chunks.
+
 ## LLM provider
 
 `adapters/llm_client.py`'s `build_llm(settings)` returns a `BaseChatModel`, picked by matching
@@ -214,6 +223,11 @@ app to pick it up immediately.
 
 `chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
 [Authentication](#authentication)); `auth` and `health` don't.
+
+Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
+class attribute (500 on the base). `api/error_handlers.py` registers one
+`@app.exception_handler(RagError)`, and Starlette's MRO-based dispatch sends every subclass
+there, so the response status comes from the exception class itself.
 
 - `POST /api/auth/login` — `{email, password}` → `{access_token, token_type}`, sets the refresh
   cookie.
