@@ -61,8 +61,9 @@
   valid until it naturally expires (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), and a
   captured refresh token until `AUTH__REFRESH_TOKEN_EXPIRE_DAYS` (default 7d), with no way to cut
   either off early
-- No login-specific rate limiting — `POST /api/auth/login` only gets nginx's generic `limit_req`
-  on all of `/api/*` (10 req/min per IP), not a tighter, brute-force-aware budget of its own
+- Login rate limiting is per IP only — `POST /api/auth/login` has its own nginx zone (5 req/min,
+  burst 3), but nothing throttles failed attempts per account, so credential stuffing spread
+  across many IPs, or a slow attack on one account, isn't slowed down
 - Dockerfile runs as root, pins no specific base image version (`python:3.12-slim` floats to whatever patch Docker Hub currently serves), and is a single-stage build
 
 ## Reliability
