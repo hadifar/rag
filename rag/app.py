@@ -16,7 +16,6 @@ from rag.container import Container, build_container
 
 
 def _build_lifespan(container: Container | None, settings: Settings):
-    # mirroring the FastAPI lifespan pattern from https://www.pinecone.io/learn/pinecone-async-fastapi/.
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.settings = settings

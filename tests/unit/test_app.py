@@ -17,7 +17,6 @@ from rag.config import (
     AuthConfig,
     LoggingObservability,
     OpenAILLM,
-    PineconeConfig,
     Settings,
 )
 from rag.container import Container
@@ -65,23 +64,16 @@ class _StubRetrievalService:
             return None
         return Document(page_content=f"content for {source_id}", metadata={})
 
+    async def ping(self) -> None:
+        return None
+
 
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
         LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
-        PINECONE=PineconeConfig(
-            API_KEY=SecretStr("test-key"),
-            DENSE_INDEX_NAME="dense",
-            SPARSE_INDEX_NAME="sparse",
-            CLOUD="aws",
-            REGION="us-east-1",
-            DENSE_MODEL="dense-model",
-            SPARSE_MODEL="sparse-model",
-            NAMESPACE="ns",
-        ),
+        DATABASE_URL=SecretStr("unused"),
         AUTH=AuthConfig(
-            DATABASE_URL=SecretStr("unused"),
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
         ),
         OBSERVABILITY=LoggingObservability(),

@@ -12,8 +12,8 @@ if config.config_file_name is not None:
 
 
 def _database_url() -> str:
-    """The auth DB URL from Settings, adapted to SQLAlchemy's psycopg3 dialect."""
-    url = get_settings().AUTH.DATABASE_URL.get_secret_value()
+    """The app's DATABASE_URL, adapted to SQLAlchemy's psycopg3 dialect."""
+    url = get_settings().DATABASE_URL.get_secret_value()
     return url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 

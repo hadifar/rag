@@ -37,7 +37,9 @@ just rely on review discipline.
 - `pytest tests/unit` runs on every commit (pre-commit hook) and again in CI
   (`pre-commit.yml`'s `test` job)
 - `pytest tests/integration` only runs on manual `workflow_dispatch`
-  (`integration-tests.yml`) — **not** a merge gate
+  (`integration-tests.yml`) — **not** a merge gate. That job starts a throwaway Postgres, runs
+  `alembic upgrade head` (so it also exercises the migrations), and fails — rather than skips —
+  when a required setting is missing, so it can't pass green with zero tests run
 
 ## General file hygiene
 `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-added-large-files`

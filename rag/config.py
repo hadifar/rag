@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AuthConfig(BaseModel):
-    DATABASE_URL: SecretStr
     JWT_SECRET: SecretStr
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -18,6 +17,7 @@ class OpenAILLM(BaseModel):
     BACKEND: Literal["openai"] = "openai"
     API_KEY: SecretStr
     MODEL: str
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
 
 
 class AzureOpenAILLM(BaseModel):
@@ -26,26 +26,7 @@ class AzureOpenAILLM(BaseModel):
     ENDPOINT: str
     DEPLOYMENT: str
     API_VERSION: str
-
-
-class MemoryCheckpointer(BaseModel):
-    BACKEND: Literal["memory"] = "memory"
-
-
-class PostgresCheckpointer(BaseModel):
-    BACKEND: Literal["postgres"] = "postgres"
-    DATABASE_URL: SecretStr
-
-
-class PineconeConfig(BaseModel):
-    API_KEY: SecretStr
-    DENSE_INDEX_NAME: str
-    SPARSE_INDEX_NAME: str
-    CLOUD: str
-    REGION: str
-    DENSE_MODEL: str
-    SPARSE_MODEL: str
-    NAMESPACE: str
+    EMBEDDING_DEPLOYMENT: str
 
 
 class LoggingObservability(BaseModel):
@@ -65,24 +46,22 @@ ObservabilityConfig = Annotated[
     LoggingObservability | LangfuseObservability, Field(discriminator="BACKEND")
 ]
 
-CheckpointerConfig = Annotated[
-    MemoryCheckpointer | PostgresCheckpointer, Field(discriminator="BACKEND")
-]
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_nested_delimiter="__", case_sensitive=True, extra="forbid"
     )
 
+    # The one Postgres database behind everything: users, conversations, knowledge-base
+    # chunks (schema by Alembic) and conversation messages (LangGraph's checkpointer).
+    DATABASE_URL: SecretStr
+
     AUTH: AuthConfig
 
     KNOWLEDGE_BASE_DIR: Path = Path("data")
 
     LLM: LLMConfig
-    PINECONE: PineconeConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()
-    CHECKPOINTER: CheckpointerConfig = MemoryCheckpointer()
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

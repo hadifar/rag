@@ -19,6 +19,9 @@ class VectorStorePort(Protocol):
         self, documents: list[Document], *, ids: list[str]
     ) -> list[str]: ...
     async def aget_document(self, source_id: str) -> Document | None: ...
+    async def aping(self) -> None:
+        """Raises if the store can't serve queries; must be cheap (readiness probe)."""
+        ...
 
 
 class DocumentLoaderPort(Protocol):

@@ -22,8 +22,7 @@ graph LR
         langgraph["create_agent: model ⇄ tools + guard middleware"]
     end
 
-    postgres[(Postgres<br/>checkpointer + users + conversations)]
-    pinecone[(Pinecone<br/>dense + sparse indexes)]
+    postgres[(Postgres + pgvector<br/>checkpointer · users · conversations · chunks)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
 
@@ -33,8 +32,8 @@ graph LR
     api -->|"login/refresh, bearer-gated routes"| postgres
     api --> langgraph
     langgraph -->|checkpoints, one thread per conversation| postgres
-    langgraph -->|search_kb tool call| pinecone
-    langgraph -->|chat completions| llm
+    langgraph -->|search_kb: hybrid vector + full-text query| postgres
+    langgraph -->|chat completions, embeddings| llm
     langgraph -.->|traces, if enabled| langfuse
 ```
 
@@ -51,10 +50,10 @@ Enforced by `import-linter` (see [enforcement.md](enforcement.md)), not just con
 ```mermaid
 graph TD
     api[rag/api<br/>routers · deps.py · error_handlers.py]
-    services[rag/services<br/>retrieval · generation · ingestion · auth]
+    services[rag/services<br/>retrieval · generation · ingestion · auth · conversation]
     domain[rag/domain<br/>models, ports, errors, events]
-    adapters[rag/adapters<br/>pinecone_client · llm_client · checkpointer · observability · db]
-    repository[rag/repository<br/>user_repository]
+    adapters[rag/adapters<br/>llm_client · checkpointer · observability · db]
+    repository[rag/repository<br/>user · conversation · document repositories]
     container[rag/container.py<br/>]
 
     api --> services
@@ -119,9 +118,11 @@ graph TD
     pages["pages/<br/>ChatPage, SettingsPage, HomePage, LoginPage, NotFoundPage"]
     guard["components/layout/RequireAuth<br/>redirects to /login if unauthenticated"]
     authctx["context/AuthContext<br/>access token in memory, silent refresh on load"]
+    convctx["context/ConversationsContext<br/>sidebar list, paging, delete"]
     hooks["hooks/<br/>useChat"]
-    apiclient["api/<br/>chat.ts, settings.ts, kb.ts, auth.ts"]
-    components["components/<br/>MessageList, Composer, ToolBubble, SourcesBubble"]
+    utils["utils/<br/>pure list/history helpers"]
+    apiclient["api/<br/>chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
+    components["components/<br/>Sidebar, MessageList, Composer, ToolBubble, SourcesBubble"]
     backend[["backend<br/>/api/*"]]
 
     guard -->|reads status from| authctx
@@ -129,13 +130,20 @@ graph TD
     pages --> hooks
     pages --> components
     hooks --> apiclient
+    hooks -->|new/renamed conversations| convctx
+    hooks --> utils
+    convctx --> apiclient
+    convctx --> utils
+    components -->|list| convctx
     components -->|accessToken| authctx
     components -.->|renders state from| hooks
     apiclient -->|fetch / fetchEventSource, Bearer token| backend
     authctx -->|login/refresh/logout, credentials: include| apiclient
 ```
 
-Components stay presenter-only: `useChat` owns the streaming/state logic, `api/chat.ts` owns
+Components stay presenter-only: `useChat` owns the streaming/state logic (and follows a new
+conversation's server-assigned id into the URL without remounting — `chat/:conversationId?` is
+one route), `ConversationsContext` owns the sidebar list, `utils/` holds their pure transforms, `api/chat.ts` owns
 the transport, `ToolBubble`/`MessageList` only render what the hook hands them. `SourcesBubble`
 fetches its kb link via `api/kb.ts` and opens a blob URL rather than a plain `<a href>`, since a
 bearer-token-protected endpoint can't be reached by a bare browser navigation — the same
@@ -149,11 +157,11 @@ schema map as `Schemas`, so `api/chat.ts` and `api/settings.ts` reference `Schem
 
 ```mermaid
 graph LR
-    schema["rag/api/schema/<br/>chat.py, auth.py, settings.py, health.py"]
+    schema["rag/api/schema/<br/>chat.py, conversations.py, auth.py, settings.py, health.py"]
     genscript["openapi-typescript<br/>(generate:types)"]
     generated[types/api.generated.ts]
     idx["types/index.ts<br/>Schemas = components['schemas']"]
-    apiclient[api/chat.ts, api/settings.ts, api/auth.ts]
+    apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
 
     schema --> genscript --> generated --> idx --> apiclient
 ```

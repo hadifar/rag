@@ -20,10 +20,15 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         return answer, tool_calls
 
 
-async def test_answers_starter_rate_limit_with_the_correct_number(integration_settings):
+async def test_answers_from_the_knowledge_base_with_the_correct_number(
+    integration_settings, seeded_kb
+):
+    # The fact exists only in the fixture knowledge base `seeded_kb` ingests, so a
+    # correct answer means the agent actually searched and used what it found.
     answer, tool_calls = await _ask(
         integration_settings,
-        "The per-minute rate limit for the Starter plan. Output format: Just the integer/decimal number, no markdown, no text.",
+        "How much does the Zephyr analytics add-on cost per seat per month? "
+        "Output format: Just the integer/decimal number, no markdown, no text.",
     )
     assert "search_kb" in tool_calls
-    assert "60" in answer.strip()
+    assert "14" in answer.strip()

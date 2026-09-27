@@ -293,6 +293,6 @@ async def test_history_shows_each_question_with_its_final_answer_and_sources() -
 
 
 def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
-    # A thread the checkpointer doesn't have (e.g. lost with the in-memory backend on
-    # restart) reads back as no messages; that used to crash with a zip() ValueError.
+    # A thread the checkpointer doesn't have (e.g. a conversation whose messages were
+    # never saved) reads back as no messages; that used to crash with a zip() ValueError.
     assert to_history([]) == []

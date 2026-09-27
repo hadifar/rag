@@ -29,7 +29,7 @@ branch rules, and which test suite runs where.
 ```
 uv run pytest                    # both suites
 uv run pytest tests/unit         # fast, no external dependencies
-uv run pytest tests/integration  # real Pinecone/OpenAI — needs PINECONE__API_KEY/LLM__API_KEY in .env
+uv run pytest tests/integration  # real OpenAI + Postgres (pgvector) — needs a filled .env and `alembic upgrade head`
 ```
 
 See [docs/enforcement.md#tests](docs/enforcement.md#tests) for what runs automatically vs. only

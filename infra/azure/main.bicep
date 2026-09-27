@@ -44,9 +44,6 @@ param databaseUrl string
 param llmApiKey string
 
 @secure()
-param pineconeApiKey string
-
-@secure()
 param langfusePublicKey string
 
 @secure()
@@ -58,16 +55,13 @@ param llmProvider string = 'openai'
 
 @description('Non-secret app config — see rag/config.py:Settings for the full field list.')
 param openAiModel string = 'gpt-4o-mini'
+@description('Must be a text-embedding-3-* model — see rag/config.py:OpenAILLM.EMBEDDING_MODEL.')
+param openAiEmbeddingModel string = 'text-embedding-3-small'
 param azureOpenAiEndpoint string = ''
 param azureOpenAiDeployment string = ''
+@description('A text-embedding-3-* deployment — required when llmProvider is azure_openai.')
+param azureOpenAiEmbeddingDeployment string = ''
 param azureOpenAiApiVersion string = '2024-05-01-preview'
-param pineconeDenseIndexName string
-param pineconeSparseIndexName string
-param pineconeCloud string
-param pineconeRegion string
-param pineconeDenseModel string
-param pineconeSparseModel string
-param pineconeNamespace string
 param langfuseEnabled bool = true
 param langfuseHost string = 'https://cloud.langfuse.com'
 
@@ -78,7 +72,6 @@ var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
 var secretsToStore = [
   { name: 'database-url', value: databaseUrl }
   { name: 'llm-api-key', value: llmApiKey }
-  { name: 'pinecone-api-key', value: pineconeApiKey }
   { name: 'langfuse-public-key', value: langfusePublicKey }
   { name: 'langfuse-secret-key', value: langfuseSecretKey }
 ]
@@ -88,11 +81,13 @@ var llmAppSettings = llmProvider == 'azure_openai'
       LLM__BACKEND: 'azure_openai'
       LLM__ENDPOINT: azureOpenAiEndpoint
       LLM__DEPLOYMENT: azureOpenAiDeployment
+      LLM__EMBEDDING_DEPLOYMENT: azureOpenAiEmbeddingDeployment
       LLM__API_VERSION: azureOpenAiApiVersion
     }
   : {
       LLM__BACKEND: 'openai'
       LLM__MODEL: openAiModel
+      LLM__EMBEDDING_MODEL: openAiEmbeddingModel
     }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
@@ -354,21 +349,12 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     {
       // Must match the port rag.config.Settings.PORT defaults to / the app binds.
       WEBSITES_PORT: '8000'
-      CHECKPOINTER__BACKEND: 'postgres'
 
-      CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
+      DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
-      PINECONE__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pinecone-api-key/)'
       OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
       OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
 
-      PINECONE__DENSE_INDEX_NAME: pineconeDenseIndexName
-      PINECONE__SPARSE_INDEX_NAME: pineconeSparseIndexName
-      PINECONE__CLOUD: pineconeCloud
-      PINECONE__REGION: pineconeRegion
-      PINECONE__DENSE_MODEL: pineconeDenseModel
-      PINECONE__SPARSE_MODEL: pineconeSparseModel
-      PINECONE__NAMESPACE: pineconeNamespace
       // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
       // this flag had no actual effect — it now genuinely selects the backend.
       OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'
