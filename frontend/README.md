@@ -43,8 +43,13 @@ mocking the app's own modules; a request with no handler fails the test.
 
 The e2e suite signs in as an existing user (`uv run rag create-user`), passed via `E2E_EMAIL` /
 `E2E_PASSWORD`. Playwright reuses a running backend (`:8000`) and dev server (`:5173`), or starts
-them itself (always in CI) — the backend still needs Postgres, migrations and a filled `../.env`.
+them itself (always in CI) — the backend still needs Postgres, migrations and a filled `../.env`
+(with `localhost` as the `DATABASE_URL` host, see [docs/setup.md](../docs/setup.md#python-uv)).
 The first time, install the browser with `npx playwright install chromium`.
+
+Because a running backend is reused as-is, restart it after pulling backend changes. A stale one
+can lack newer routes, e.g. a 404 on `/api/auth/login`, which the login page reports as
+"Invalid email or password". Check with `curl -s localhost:8000/openapi.json`.
 
 ## Structure
 

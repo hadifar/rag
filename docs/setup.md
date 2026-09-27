@@ -46,9 +46,19 @@ uv run rag create-user you@example.com
 uv run python -m rag serve
 ```
 A Postgres instance (with pgvector) must be reachable at `DATABASE_URL` — e.g.
-`docker compose up -d postgres` (published on `localhost:5432`; change the URL's host to
-`localhost` when running the app outside Docker).
-There's no in-memory mode.
+`docker compose up -d postgres` (published on `localhost:5432`). There's no in-memory mode.
+
+The host in `DATABASE_URL` depends on where the app runs. The name `postgres` only resolves inside
+the compose network, so outside Docker it fails with `failed to resolve host 'postgres'`:
+
+| App runs | `DATABASE_URL` host |
+|---|---|
+| on your machine (`uv run …`, `rag serve`, `rag create-user`, `alembic`) | `localhost` |
+| in the `backend` container (`docker compose up`) | `postgres` |
+
+The `backend` container reads the same `.env` (`env_file: .env`), so keep `.env` on one of the two and
+override the other on the command line, e.g.
+`DATABASE_URL=postgresql://rag:<password>@localhost:5432/rag uv run rag serve`.
 
 ### CLI
 ```bash
