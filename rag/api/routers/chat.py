@@ -41,7 +41,9 @@ async def stream(
 def _to_sse(event: StreamEvent) -> str:
     match event:
         case TextDelta(text=text):
-            return _format(SseEventType.TEXT, text)
+            # JSON, not raw text: json.dumps escapes "\n", which would otherwise end
+            # the SSE event early and drop the rest of the token.
+            return _format(SseEventType.TEXT, json.dumps({"text": text}))
         case ToolCallStart(name=name, query=query):
             return _format(
                 SseEventType.TOOL_START, json.dumps({"name": name, "query": query})

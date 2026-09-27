@@ -37,9 +37,11 @@ export function streamChat({
 
     onmessage(ev) {
       switch (ev.event) {
-        case 'text':
-          onEvent({ type: 'text', text: ev.data });
+        case 'text': {
+          const { text } = JSON.parse(ev.data) as { text: string };
+          onEvent({ type: 'text', text });
           break;
+        }
         case 'tool_start': {
           const { name, query } = JSON.parse(ev.data) as { name: string; query: string };
           onEvent({ type: 'tool_start', name, query });

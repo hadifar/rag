@@ -145,8 +145,9 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `ag
 model calls only — `guardrail` and `verify` run their own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result`
-  events).
+- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result` /
+  `sources` events). Every event's `data` is a single-line JSON object — including `text`
+  (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
   (which links to `/api/kb/{filename}`).

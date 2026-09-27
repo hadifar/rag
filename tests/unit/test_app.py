@@ -241,12 +241,17 @@ def test_logout_clears_refresh_cookie(client: TestClient) -> None:
 
 def _parse_sse(body: str) -> list[tuple[str, str]]:
     """Splits an SSE body into (event, data) pairs, mirroring how
-    @microsoft/fetch-event-source hands events to frontend/src/api/chat.ts's onmessage.
+    @microsoft/fetch-event-source (lib/cjs/parse.js) hands events to
+    frontend/src/api/chat.ts's onmessage: a blank line ends an event, repeated
+    `data:` lines are joined with "\\n", and one space after the colon is dropped.
     """
     events = []
-    for block in body.strip().split("\n\n"):
-        lines = dict(line.split(": ", 1) for line in block.splitlines())
-        events.append((lines["event"], lines["data"]))
+    for block in filter(None, body.split("\n\n")):
+        fields = [line.partition(":")[::2] for line in block.split("\n")]
+        values = [(name, value.removeprefix(" ")) for name, value in fields]
+        event = next((value for name, value in values if name == "event"), "")
+        data = "\n".join(value for name, value in values if name == "data")
+        events.append((event, data))
     return events
 
 
@@ -300,8 +305,8 @@ def test_chat_stream_contract_matches_frontend_parsing(
 
     text_event, tool_start_event, tool_result_event, sources_event = events
 
-    # frontend: onEvent({ type: 'text', text: ev.data }) — raw, unparsed data.
-    assert text_event[1] == "echo: hi"
+    # frontend: const { text } = JSON.parse(ev.data)
+    assert json.loads(text_event[1]) == {"text": "echo: hi"}
 
     # frontend: const { name, query } = JSON.parse(ev.data)
     assert json.loads(tool_start_event[1]) == {
@@ -317,3 +322,22 @@ def test_chat_stream_contract_matches_frontend_parsing(
 
     # frontend: const { names } = JSON.parse(ev.data)
     assert json.loads(sources_event[1]) == {"names": ["doc-a", "doc-b"]}
+
+
+def test_chat_stream_text_with_newlines_survives_sse_framing(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    """LLM tokens are full of "\\n" (markdown); a raw "\\n\\n" in a data field would end
+    the SSE event early and drop the text after it.
+    """
+    message = "# Title\n\n- item\r\n- item\n"
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": message, "thread_id": "t1"},
+        headers=auth_headers,
+    ) as response:
+        body = "".join(response.iter_text())
+
+    text_events = [data for event, data in _parse_sse(body) if event == "text"]
+    assert [json.loads(data) for data in text_events] == [{"text": f"echo: {message}"}]
