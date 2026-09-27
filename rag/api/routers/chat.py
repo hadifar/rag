@@ -67,7 +67,7 @@ _ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, str]]] = {
         SseEventType.TOOL_RESULT,
         json.dumps({"name": e.name, "output": e.output}),
     ),
-    SourcesReady: lambda e: (SseEventType.SOURCES, json.dumps({"names": e.sources})),
+    SourcesReady: lambda e: (SseEventType.SOURCES, json.dumps({"sources": e.sources})),
     ConversationTitled: lambda e: (
         SseEventType.TITLE,
         json.dumps({"id": e.conversation_id, "title": e.title}),

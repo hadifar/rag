@@ -1,42 +1,40 @@
-import { apiUrl, jsonPost } from './base';
+import {
+  ApiError,
+  apiUrl,
+  ensureOk,
+  jsonPostInit,
+  refreshSession,
+  requestJson,
+  setAccessToken,
+} from './client';
 import type { Schemas } from '../types';
 
-export class AuthError extends Error {}
+/**
+ * Logs in and stores the access token for every later request. Plain `fetch`, not
+ * `authFetch`: a 401 here means wrong credentials, not an expired session to refresh.
+ */
+export async function login(email: string, password: string): Promise<void> {
+  const init: RequestInit = {
+    ...jsonPostInit({ email, password } satisfies Schemas['LoginRequest']),
+    credentials: 'include',
+  };
+  const res = ensureOk(await fetch(apiUrl('auth/login'), init), 'auth/login', init);
+  const body: Schemas['TokenResponse'] = await res.json();
+  setAccessToken(body.access_token);
+}
 
-async function parseTokenResponse(res: Response): Promise<Schemas['TokenResponse']> {
-  if (!res.ok) {
-    throw new AuthError(`request failed: ${res.status}`);
+/** Restores a session from the refresh cookie, e.g. on page load. */
+export async function restoreSession(): Promise<void> {
+  if (!(await refreshSession())) {
+    throw new ApiError(401, 'no session to restore');
   }
-  return res.json();
-}
-
-export function login(
-  email: string,
-  password: string
-): Promise<Schemas['TokenResponse']> {
-  return fetch(apiUrl('auth/login'), {
-    ...jsonPost({ email, password } satisfies Schemas['LoginRequest']),
-    credentials: 'include',
-  }).then(parseTokenResponse);
-}
-
-export function refresh(): Promise<Schemas['TokenResponse']> {
-  return fetch(apiUrl('auth/refresh'), {
-    method: 'POST',
-    credentials: 'include',
-  }).then(parseTokenResponse);
 }
 
 export async function logout(): Promise<void> {
+  setAccessToken(null);
   await fetch(apiUrl('auth/logout'), { method: 'POST', credentials: 'include' });
 }
 
-export async function me(accessToken: string): Promise<Schemas['UserResponse']> {
-  const res = await fetch(apiUrl('auth/me'), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new AuthError(`request failed: ${res.status}`);
-  }
-  return res.json();
+export function me(): Promise<Schemas['UserResponse']> {
+  return requestJson('auth/me');
 }

@@ -10,10 +10,15 @@ Then fill in `.env` (see .example.env) `LLM__API_KEY`, the database URLs, etc. T
 server needs the `pgvector` extension — the Docker Compose `postgres` service
 (`pgvector/pgvector:pg17`) has it; `alembic upgrade head` enables it.
 
-**You need a `data/` folder in the repo root with your own `.md` files** — it's gitignored, so a
-fresh clone doesn't come with one. `KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at it,
-and `Dockerfile.backend` does `COPY data/ data/`, so it must exist (even if just with a placeholder
-`.md`) before `docker compose up --build`, or the image build fails.
+**The knowledge base ships zipped** — the repo holds only `data/data.zip`, not the `.md` files
+themselves. `scripts/setup.sh` extracts it into `data/` (skipped if `data/*.md` already exists); to
+do it by hand, from the repo root:
+```bash
+unzip data/data.zip   # extracts the .md files into data/
+```
+`KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at that folder, and `Dockerfile.backend`
+does `COPY data/ data/`, so unzip before `rag ingest` or `docker compose up --build`, or nothing
+gets ingested. To use your own knowledge base instead, put your `.md` files in `data/`.
 
 If running via Docker (below), also create the Postgres init password Docker Compose expects,
 gitignored and never read by the app itself:

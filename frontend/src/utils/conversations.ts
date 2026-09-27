@@ -1,6 +1,4 @@
-import type { Schemas } from '../types';
-
-export type Conversation = Schemas['ConversationResponse'];
+import type { Conversation } from '../types';
 
 /** Puts `conversation` first (it was just used), replacing any older copy of it. */
 export function upsertConversation(list: Conversation[], conversation: Conversation): Conversation[] {

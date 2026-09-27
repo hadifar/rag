@@ -1,0 +1,50 @@
+import { useCallback, useEffect, useState } from 'react';
+
+import { fetchSettings } from '../api/settings';
+import type { Schemas } from '../types';
+
+type Settings = Schemas['SettingsResponse'];
+type LoadStatus = 'loading' | 'ready' | 'error';
+
+const EMPTY: Settings = { model: '', temperature: 0, top_k: 4 };
+const SAVED_NOTICE_MS = 3000;
+
+/** The settings form: loaded from the server, edited locally, and saved. */
+export function useSettings() {
+  const [form, setForm] = useState<Settings>(EMPTY);
+  const [status, setStatus] = useState<LoadStatus>('loading');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setForm(settings);
+        setStatus('ready');
+      })
+      .catch(() => {
+        // Keep the blank form so it can still be filled in.
+        if (!cancelled) setStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Hide the "Saved" notice again after a moment.
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), SAVED_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [saved]);
+
+  const update = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  }, []);
+
+  // TODO: persist via the settings API once the endpoint supports writes.
+  const save = useCallback(() => setSaved(true), []);
+
+  return { form, status, saved, update, save };
+}

@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { ApiError } from '../api/base';
+import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
 import { fetchConversationMessages } from '../api/conversations';
-import { useAuth } from '../context/AuthContext';
-import { useConversations } from '../context/ConversationsContext';
+import { useConversations } from './useConversations';
+import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
 import { historyToMessages } from '../utils/history';
-import type { ChatMessage, ChatStreamEvent, ChatMessageInput } from '../types/chat';
-
-function assistantText(text: string): ChatMessageInput {
-  return { type: 'text', content: { text } };
-}
+import type { ChatStreamEvent } from '../types';
+import { useMessageList } from './useMessageList';
 
 function historyErrorText(err: unknown): string {
   return err instanceof ApiError && err.status === 404
@@ -20,102 +17,39 @@ function historyErrorText(err: unknown): string {
     : "Couldn't load this conversation. Please try again.";
 }
 
-function createStreamHandler(
-  appendMsg: (msg: ChatMessageInput) => string,
-  updateMsg: (id: string, msg: ChatMessageInput) => void,
-) {
-  let assistantMsgId: string | null = null;
-  let assistantMsgText = '';
-  let toolMsgId: string | null = null;
-
-  return (event: ChatStreamEvent) => {
-    switch (event.type) {
-      case 'text':
-        assistantMsgText += event.text;
-        if (assistantMsgId === null) {
-          assistantMsgId = appendMsg(assistantText(assistantMsgText));
-        } else {
-          updateMsg(assistantMsgId, assistantText(assistantMsgText));
-        }
-        break;
-      case 'tool_start':
-        toolMsgId = appendMsg({
-          type: 'tool',
-          content: { name: event.name, query: event.query, status: 'pending' },
-        });
-        break;
-      case 'tool_result':
-        if (toolMsgId !== null) {
-          updateMsg(toolMsgId, {
-            type: 'tool',
-            content: { name: event.name, output: event.output, status: 'done' },
-          });
-        }
-        break;
-      case 'sources':
-        if (event.names.length > 0) {
-          appendMsg({ type: 'sources', content: { names: event.names } });
-        }
-        break;
-    }
-  };
-}
-
 /** `conversationId` is the one in the URL; undefined for a new, not yet sent chat. */
 export function useChat(conversationId: string | undefined) {
-  const { accessToken } = useAuth();
   const { upsert, rename } = useConversations();
   const navigate = useNavigate();
-  const { key: locationKey } = useLocation();
+  const { messages, append, update, remove, replace } = useMessageList();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const nextId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  // The conversation new messages go to. Ahead of the URL for a moment: set as soon
-  // as the server assigns a new conversation's id, before the URL is updated to it.
-  const conversationIdRef = useRef(conversationId);
-  // Set right before this hook updates the URL itself, so the effect below can tell
-  // that apart from the user navigating (sidebar, New chat, back/forward).
-  const selfNavigationRef = useRef(false);
+  // The conversation on screen, which new messages go to. Ahead of the URL for a
+  // moment: a new chat's id is set here right before the URL is updated to it.
+  const conversationIdRef = useRef<string | undefined>(undefined);
 
-  const appendMsg = useCallback((msg: ChatMessageInput): string => {
-    const id = String(nextId.current++);
-    setMessages((prev) => [...prev, { ...msg, id } as ChatMessage]);
-    return id;
-  }, []);
-
-  const updateMsg = useCallback((id: string, msg: ChatMessageInput) => {
-    setMessages((prev) => prev.map((m) => (m.id === id ? ({ ...msg, id } as ChatMessage) : m)));
-  }, []);
-
-  const deleteMsg = useCallback((id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  }, []);
-
-  const replaceMessages = useCallback((inputs: ChatMessageInput[]) => {
-    setMessages(inputs.map((msg) => ({ ...msg, id: String(nextId.current++) }) as ChatMessage));
-  }, []);
-
-  // Every user navigation (including "New chat" to the same /chat URL, hence the
-  // location key) switches conversations: stop the old stream and load the new one.
+  // Navigating to another conversation (sidebar, New chat, back/forward) stops the
+  // old stream and loads the new one. Skipped when the URL just caught up with the
+  // conversation already on screen, i.e. a new chat's first message.
   useEffect(() => {
-    if (selfNavigationRef.current) {
-      selfNavigationRef.current = false;
-      return;
-    }
+    if (conversationId && conversationId === conversationIdRef.current) return;
     abortRef.current?.abort();
     conversationIdRef.current = conversationId;
-    replaceMessages([]);
-    if (!conversationId || !accessToken) return;
+    replace([]);
+    if (!conversationId) return;
 
     const controller = new AbortController();
-    fetchConversationMessages(conversationId, accessToken, controller.signal)
-      .then((history) => replaceMessages(historyToMessages(history)))
+    fetchConversationMessages(conversationId, controller.signal)
+      .then((history) => replace(historyToMessages(history)))
       .catch((err: unknown) => {
-        if (!controller.signal.aborted) replaceMessages([assistantText(historyErrorText(err))]);
+        if (!controller.signal.aborted) replace([assistantText(historyErrorText(err))]);
       });
-    return () => controller.abort();
-  }, [conversationId, locationKey, accessToken, replaceMessages]);
+    return () => {
+      controller.abort();
+      // Not loaded after all, so the next run must load it (e.g. StrictMode's re-run).
+      conversationIdRef.current = undefined;
+    };
+  }, [conversationId, replace]);
 
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -130,59 +64,57 @@ export function useChat(conversationId: string | undefined) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      appendMsg({ type: 'text', content: { text }, position: 'right' });
+      // A new chat gets its id here, and the URL follows it before anything streams.
+      let id = conversationIdRef.current;
+      if (!id) {
+        id = crypto.randomUUID();
+        conversationIdRef.current = id;
+        navigate(conversationPath(id), { replace: true });
+      }
 
-      const typingId = appendMsg({ type: 'typing' });
+      append({ type: 'text', content: { text }, position: 'right' });
+
+      const typingId = append({ type: 'typing' });
       let typingCleared = false;
       const clearTyping = () => {
         if (typingCleared) return;
         typingCleared = true;
-        deleteMsg(typingId);
+        remove(typingId);
       };
 
-      const handleStreamEvent = createStreamHandler(appendMsg, updateMsg);
+      const showBubble = createBubbleHandler(append, update);
       const onEvent = (event: ChatStreamEvent) => {
         switch (event.type) {
-          case 'conversation': {
-            const { id } = event.conversation;
+          case 'conversation':
             upsert(event.conversation);
-            if (conversationIdRef.current !== id) {
-              // A new conversation: follow its server-assigned id in the URL, without
-              // reloading, since this stream is still delivering its first answer.
-              conversationIdRef.current = id;
-              selfNavigationRef.current = true;
-              navigate(conversationPath(id), { replace: true });
-            }
             return;
-          }
           case 'title':
             rename(event.id, event.title);
             return;
           default:
             clearTyping();
-            handleStreamEvent(event);
+            showBubble(event);
         }
       };
 
       try {
         await streamChat({
           message: text,
-          conversation_id: conversationIdRef.current ?? null,
-          accessToken: accessToken ?? '',
+          conversation_id: id,
           onEvent,
           signal: controller.signal,
         });
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);
-          appendMsg(assistantText(`Something went wrong: ${message}`));
+          append(assistantText(`Something went wrong: ${message}`));
         }
       } finally {
         clearTyping();
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [appendMsg, updateMsg, deleteMsg, accessToken, upsert, rename, navigate],
+    [append, update, remove, upsert, rename, navigate],
   );
 
   return { messages, sendMessage };

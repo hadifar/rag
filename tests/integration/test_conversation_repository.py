@@ -59,6 +59,18 @@ async def test_create_get_touch_title_delete(
     assert await repository.touch(created.id) is None
 
 
+async def test_create_uses_the_given_id(
+    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
+) -> None:
+    repository = ConversationRepository(pool)
+    client_id = uuid.uuid4()
+
+    created = await repository.create(user_id, "from the client", client_id)
+
+    assert created.id == client_id
+    assert await repository.get(client_id) == created
+
+
 async def test_keyset_pagination_visits_every_row_once_newest_first(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:

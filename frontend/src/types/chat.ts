@@ -1,4 +1,4 @@
-import type { components } from './api.generated';
+import type { Conversation } from './api';
 
 export type TextContent = { text: string };
 
@@ -9,7 +9,7 @@ export type ToolContent = {
   status: 'pending' | 'done';
 };
 
-export type SourcesContent = { names: string[] };
+export type SourcesContent = { sources: string[] };
 
 export type ChatMessageInput =
   | { type: 'typing' }
@@ -20,7 +20,7 @@ export type ChatMessageInput =
 export type ChatMessage = ChatMessageInput & { id: string };
 
 export type ChatStreamEvent =
-  | { type: 'conversation'; conversation: components['schemas']['ConversationResponse'] }
+  | { type: 'conversation'; conversation: Conversation }
   | { type: 'title'; id: string; title: string }
   | { type: 'text'; text: string }
   | { type: 'tool_start'; name: string; query: string }
