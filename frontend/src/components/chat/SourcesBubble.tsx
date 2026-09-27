@@ -1,4 +1,4 @@
-import type { SourcesContent } from '../types';
+import type { SourcesContent } from '../../types';
 
 type SourcesBubbleProps = SourcesContent & { onOpen: (name: string) => void };
 

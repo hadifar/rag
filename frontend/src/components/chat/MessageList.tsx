@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
-import type { ChatMessage } from '../types';
+import type { ChatMessage } from '../../types';
 import { TextBubble } from './TextBubble';
 import { ToolBubble } from './ToolBubble';
 import { SourcesBubble } from './SourcesBubble';

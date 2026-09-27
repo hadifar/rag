@@ -61,7 +61,7 @@ migrations/                            # Alembic — `users`, `conversations`, `
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
-│   ├── components/                   # ui component
+│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles)
 │   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
 │   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)

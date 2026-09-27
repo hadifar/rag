@@ -29,7 +29,7 @@ src/
 ├── api/          # network calls (chat.ts streams SSE from /api/chat/stream; conversations.ts)
 ├── components/
 │   ├── layout/   # AppLayout, RequireAuth, Sidebar (new chat, your conversations, settings)
-│   └── ...       # MessageList, Composer, and the tool/sources/typing bubbles it renders
+│   └── chat/     # MessageList, Composer, and the text/tool/sources/typing bubbles it renders
 ├── context/      # AuthProvider (session), ConversationsProvider (sidebar list, paging, delete)
 ├── hooks/        # useChat (streaming, loading a conversation's history), useAuth/useConversations, …
 ├── pages/        # HomePage, ChatPage, LoginPage, SettingsPage, NotFoundPage

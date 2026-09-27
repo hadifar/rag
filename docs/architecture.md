@@ -121,7 +121,7 @@ graph TD
     hooks["hooks/<br/>useChat"]
     utils["utils/<br/>pure list/history helpers"]
     apiclient["api/<br/>client.ts (token, authFetch), chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
-    components["components/<br/>Sidebar, MessageList, Composer, ToolBubble, SourcesBubble"]
+    components["components/<br/>layout/: Sidebar · chat/: MessageList, Composer, bubbles"]
     backend[["backend<br/>/api/*"]]
 
     guard -->|reads status from| authctx

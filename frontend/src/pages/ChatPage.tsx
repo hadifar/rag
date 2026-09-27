@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { openKbSource } from '../api/kb';
 import { useChat } from '../hooks/useChat';
-import { MessageList } from '../components/MessageList';
-import { Composer } from '../components/Composer';
+import { MessageList } from '../components/chat/MessageList';
+import { Composer } from '../components/chat/Composer';
 
 export function ChatPage() {
   const { conversationId } = useParams();
