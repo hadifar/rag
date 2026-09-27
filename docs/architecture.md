@@ -22,7 +22,7 @@ graph LR
         langgraph["create_agent: model ⇄ tools + guard middleware"]
     end
 
-    postgres[(Postgres<br/>checkpointer + users)]
+    postgres[(Postgres<br/>checkpointer + users + conversations)]
     pinecone[(Pinecone<br/>dense + sparse indexes)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
@@ -32,7 +32,7 @@ graph LR
     proxy -->|"proxy_pass, SSE unbuffered"| api
     api -->|"login/refresh, bearer-gated routes"| postgres
     api --> langgraph
-    langgraph -->|thread_id checkpoints| postgres
+    langgraph -->|checkpoints, one thread per conversation| postgres
     langgraph -->|search_kb tool call| pinecone
     langgraph -->|chat completions| llm
     langgraph -.->|traces, if enabled| langfuse

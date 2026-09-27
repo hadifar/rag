@@ -24,14 +24,17 @@
 - `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
 ## Conversation & session state
-- `thread_id` is a client-supplied free string with no ownership check — `/api/chat/stream`'s
-  handler takes only `ChatRequest`/`generation_service`, never `current_user` (the router-level
-  auth dependency gates *that someone* is logged in, not *who*), so `thread_id` reaches the
-  checkpointer with zero link to the caller's identity. Login stops a fully anonymous caller, but
-  any two authenticated users can still read/continue each other's conversations by reusing or
-  guessing a `thread_id`
-- The frontend never persists `thread_id` anywhere — it's a `crypto.randomUUID()` held only in a React ref (`useChat.ts`), regenerated on every remount. A page refresh (or new tab) orphans the conversation in the Postgres checkpointer with no way for the user to get back to it, even though the backend is built to persist it.
-- The sidebar's conversation history (`Sidebar.tsx`) is hardcoded `MOCK_SESSIONS` with a `// TODO: replace with real sessions from the backend` — every user sees the same fabricated list of past chats, none of which are theirs or clickable into real history.
+- Titles are LLM-generated after a new conversation's first answer, so the stream stays open
+  (after the answer is complete) for one more short LLM call, capped at 10s. If it fails or
+  times out, the conversation keeps its fallback title (the trimmed first message).
+- The sidebar paginates by `(updated_at, id)`, and using a conversation moves it to the top, so a
+  conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
+  but a conversation used on another device meanwhile won't show up until a reload.
+- Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
+  threads, which live in separate tables with no user link — a full user deletion (GDPR) still
+  has to delete each conversation's thread first.
+- Conversations created before the `conversations` table existed (checkpoint threads keyed by
+  the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
 
 ## Security
 - Login/register are self-hosted, not a third-party identity provider — no self-serve signup

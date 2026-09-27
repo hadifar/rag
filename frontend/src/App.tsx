@@ -19,7 +19,9 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: 'chat', element: <ChatPage /> },
+          // One route for new (/chat) and existing (/chat/:id) chats, so ChatPage stays
+          // mounted while a new chat's URL switches to its server-assigned id mid-stream.
+          { path: 'chat/:conversationId?', element: <ChatPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

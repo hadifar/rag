@@ -6,6 +6,23 @@ on:
 jobs:
   integration:
     runs-on: ubuntu-latest
+    # Job-level: alembic's env.py loads the full Settings too, not just the tests.
+    env:
+      LLM__BACKEND: openai
+      LLM__API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LLM__MODEL: ${{ vars.OPENAI_MODEL }}
+
+      PINECONE__API_KEY: ${{ secrets.PINECONE_API_KEY }}
+      PINECONE__DENSE_INDEX_NAME: ${{ vars.PINECONE_DENSE_INDEX_NAME }}
+      PINECONE__SPARSE_INDEX_NAME: ${{ vars.PINECONE_SPARSE_INDEX_NAME }}
+      PINECONE__CLOUD: ${{ vars.PINECONE_CLOUD }}
+      PINECONE__REGION: ${{ vars.PINECONE_REGION }}
+      PINECONE__DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
+      PINECONE__SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
+      PINECONE__NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
+
+      AUTH__DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
+      AUTH__JWT_SECRET: ci-integration-unused-jwt-secret-000000
     # build_container opens the auth DB pool, so the tests need a reachable Postgres.
     services:
       postgres:
@@ -33,23 +50,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
+      # Creates the users/conversations tables the repository tests run against.
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
+
       - name: Run integration tests
-        env:
-
-          LLM__BACKEND: openai
-          LLM__API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LLM__MODEL: ${{ vars.OPENAI_MODEL }}
-
-          PINECONE__API_KEY: ${{ secrets.PINECONE_API_KEY }}
-          PINECONE__DENSE_INDEX_NAME: ${{ vars.PINECONE_DENSE_INDEX_NAME }}
-          PINECONE__SPARSE_INDEX_NAME: ${{ vars.PINECONE_SPARSE_INDEX_NAME }}
-          PINECONE__CLOUD: ${{ vars.PINECONE_CLOUD }}
-          PINECONE__REGION: ${{ vars.PINECONE_REGION }}
-          PINECONE__DENSE_MODEL: ${{ vars.PINECONE_DENSE_MODEL }}
-          PINECONE__SPARSE_MODEL: ${{ vars.PINECONE_SPARSE_MODEL }}
-          PINECONE__NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
-
-          AUTH__DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
-          AUTH__JWT_SECRET: ci-integration-unused-jwt-secret-000000
-
         run: uv run pytest tests/integration

@@ -47,3 +47,25 @@ class InvalidTokenError(RagError):
 
     def __init__(self, reason: str):
         super().__init__(f"Invalid token: {reason}")
+
+
+class ConversationNotFoundError(RagError):
+    """Raised when a conversation doesn't exist or belongs to another user.
+
+    One error for both, so a caller can't probe which ids exist.
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, conversation_id: object):
+        super().__init__(f"No conversation found for id={conversation_id!r}")
+        self.conversation_id = conversation_id
+
+
+class InvalidCursorError(RagError):
+    """Raised when a pagination cursor wasn't produced by this API."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self):
+        super().__init__("Invalid pagination cursor")

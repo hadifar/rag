@@ -28,6 +28,7 @@ from rag.services.generation_service.guards.groundness import REVISION_INSTRUCTI
 from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
+from rag.services.generation_service.turn import to_history
 from rag.services.retrieval_service.service import RetrievalService
 
 
@@ -265,3 +266,33 @@ async def test_verifier_only_sees_the_current_turns_context(
     if second_turn_searches:
         assert "facts about security" in model.verifier_calls[1]
         assert "facts about pricing" not in model.verifier_calls[1]
+
+
+async def test_history_shows_each_question_with_its_final_answer_and_sources() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _search("pricing"),
+            _answer("wrong"),
+            _answer("revised"),
+            _answer("You're welcome!"),
+        ],
+        groundedness_verdicts=["UNGROUNDED"],
+    )
+    chat = _Chat(model)
+    await chat.send("How much?")
+    await chat.send("thanks")
+
+    history = to_history(await chat.saved_messages())
+
+    assert [(m.role, m.text, m.sources) for m in history] == [
+        ("user", "How much?", []),
+        ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
+        ("user", "thanks", []),
+        ("assistant", "You're welcome!", []),
+    ]
+
+
+def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
+    # A thread the checkpointer doesn't have (e.g. lost with the in-memory backend on
+    # restart) reads back as no messages; that used to crash with a zip() ValueError.
+    assert to_history([]) == []

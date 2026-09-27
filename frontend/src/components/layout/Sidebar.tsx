@@ -8,27 +8,17 @@ import {
   ChevronRightIcon,
   SparklesIcon,
   ArrowRightStartOnRectangleIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 
 import { useAuth } from '../../context/AuthContext';
+import { useConversations } from '../../context/ConversationsContext';
+import { conversationPath } from '../../utils/conversations';
+import type { Conversation } from '../../utils/conversations';
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 
 const topLinks: NavItem[] = [{ to: '/', label: 'Home', Icon: HomeIcon }];
-
-// TODO: replace with real sessions from the backend.
-const MOCK_SESSIONS = [
-  { id: 's1', title: 'How do I reset my password?' },
-  { id: 's2', title: 'Summarize the onboarding guide' },
-  { id: 's3', title: 'Refund policy for annual plans' },
-  { id: 's4', title: 'Compare pricing tiers' },
-  { id: 's5', title: 'Explain the API rate limits' },
-  { id: 's6', title: 'Steps to configure SSO' },
-  { id: 's7', title: 'What changed in the last release?' },
-  { id: 's8', title: 'Data retention and deletion' },
-  { id: 's9', title: 'Troubleshooting failed uploads' },
-  { id: 's10', title: 'Security certifications' },
-];
 
 const footerLinks: NavItem[] = [{ to: '/settings', label: 'Settings', Icon: Cog6ToothIcon }];
 
@@ -61,16 +51,83 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
   );
 }
 
+function ConversationLink({
+  conversation,
+  onDelete,
+}: {
+  conversation: Conversation;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="group flex items-center gap-1">
+      <NavLink
+        to={conversationPath(conversation.id)}
+        title={conversation.title}
+        className={({ isActive }) =>
+          `min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
+            isActive
+              ? 'bg-slate-100 font-medium text-slate-900'
+              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+          }`
+        }
+      >
+        {conversation.title}
+      </NavLink>
+      <button
+        type="button"
+        onClick={() => onDelete(conversation.id)}
+        title="Delete chat"
+        className="shrink-0 rounded-md p-1 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
+      >
+        <TrashIcon className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function ConversationList() {
+  const { conversations, status, hasMore, isLoadingMore, loadMore, deleteConversation } =
+    useConversations();
+
+  const confirmDelete = (id: string) => {
+    if (window.confirm('Delete this chat? This cannot be undone.')) {
+      deleteConversation(id).catch(() => window.alert("Couldn't delete the chat. Please try again."));
+    }
+  };
+
+  return (
+    <>
+      <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Recent</p>
+      {status === 'loading' && <p className="px-3 py-2 text-[13px] text-slate-400">Loading…</p>}
+      {status === 'error' && (
+        <p className="px-3 py-2 text-[13px] text-slate-400">Couldn't load your chats.</p>
+      )}
+      {status === 'ready' && conversations.length === 0 && (
+        <p className="px-3 py-2 text-[13px] text-slate-400">No chats yet.</p>
+      )}
+      {conversations.map((conversation) => (
+        <ConversationLink key={conversation.id} conversation={conversation} onDelete={confirmDelete} />
+      ))}
+      {hasMore && (
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={isLoadingMore}
+          className="w-full rounded-lg px-3 py-2 text-left text-[13px] text-indigo-600 hover:bg-slate-50 disabled:text-slate-400"
+        >
+          {isLoadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
+    </>
+  );
+}
+
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeSession, setActiveSession] = useState<string | null>(null);
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  const startNewChat = () => {
-    setActiveSession(null);
-    navigate('/chat');
-  };
+  const startNewChat = () => navigate('/chat');
 
   const handleLogout = async () => {
     await logout();
@@ -149,27 +206,7 @@ export default function Sidebar() {
 
       {/* Previous sessions */}
       <nav className="flex-1 px-2 pb-2 space-y-0.5 overflow-y-auto min-h-0">
-        {!isCollapsed && (
-          <>
-            <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-              Recent
-            </p>
-            {MOCK_SESSIONS.map(({ id, title }) => (
-              <button
-                key={id}
-                onClick={() => setActiveSession(id)}
-                title={title}
-                className={`block w-full truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
-                  activeSession === id
-                    ? 'bg-slate-100 font-medium text-slate-900'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                {title}
-              </button>
-            ))}
-          </>
-        )}
+        {!isCollapsed && <ConversationList />}
       </nav>
 
       {/* Footer */}

@@ -37,6 +37,7 @@ rag/
 │   ├── retrieval_service/
 │   ├── ingestion_service/
 │   ├── generation_service/
+│   ├── conversation_service/         # ownership, create-on-first-message, titles, paging, delete
 │   └── auth_service/                 # hashing + JWT issuance/verification, via UserRepositoryPort
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
@@ -47,7 +48,8 @@ rag/
 │   └── db.py                         # auth Postgres connection pool
 │
 ├── repository/                       # concrete persistence implementing a domain port — same
-│   └── user_repository.py            # composition-root-only rule as adapters/, just a distinct kind of infra
+│   ├── user_repository.py            # composition-root-only rule as adapters/, just a distinct kind of infra
+│   └── conversation_repository.py
 │
 ├── api/
 │   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. SettingsDep/CurrentUserDep
@@ -55,7 +57,7 @@ rag/
 │   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
 │   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
-migrations/                            # Alembic — `users` table only, no ORM models elsewhere
+migrations/                            # Alembic — `users` and `conversations` tables, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), settings.ts, auth.ts, kb.ts
@@ -99,13 +101,22 @@ interface, so neither know or care which backend is selected.
 
 ## Conversation state
 
-A LangGraph checkpointer, keyed by a client-generated UUID `thread_id`, built by
-`adapters/checkpointer.py`'s `open_checkpointer()` (an async context manager, mirroring
-`open_vector_store()`) from `Settings.CHECKPOINTER`, a discriminated union selected by
-`CHECKPOINTER__BACKEND`:
-- The frontend generates one per browser session and passes it in every request.
-- A raw API caller generates and passes its own in `ChatRequest.thread_id`.
-- The server never reconstructs history from a request payload — the checkpointer loads/saves it.
+A conversation is a row in the `conversations` table (`id`, `user_id`, `title`, `created_at`,
+`updated_at`; `migrations/versions/0002_…`), owned by `ConversationService`. Its messages live in
+the LangGraph checkpointer, whose thread id is the conversation's id:
+- The server assigns every id. A `ChatRequest` without `conversation_id` starts a new
+  conversation owned by the caller; the stream's first SSE event (`conversation`) carries its id.
+- A `conversation_id` that doesn't exist or belongs to another user is a 404 — the same answer
+  for both, so ids can't be probed. This is checked before the stream starts.
+- A new conversation is titled after its first message, then after the first answer an LLM
+  call writes a short title, sent as the stream's last event (`title`).
+- The server never reconstructs history from a request payload — the checkpointer loads/saves
+  it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
+  answer and sources; tool calls aren't replayed).
+
+The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
+context manager, mirroring `open_vector_store()`) from `Settings.CHECKPOINTER`, a discriminated
+union selected by `CHECKPOINTER__BACKEND`:
 - `"memory"` (default) → `InMemorySaver`, for local dev; doesn't survive a restart or multiple
   replicas.
 - `"postgres"` → `AsyncPostgresSaver`, reading `CHECKPOINTER__DATABASE_URL`; `checkpointer.setup()`
@@ -145,8 +156,8 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `mo
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result` /
-  `sources` events). Every event's `data` is a single-line JSON object — including `text`
+- FastAPI's `POST /api/chat/stream` turns it into SSE (`conversation` / `text` / `tool_start` /
+  `tool_result` / `sources` / `title` events). Every event's `data` is a single-line JSON object — including `text`
   (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
@@ -205,7 +216,12 @@ app to pick it up immediately.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
 - `GET /api/auth/me` — returns `{id, email}` for the caller's access token.
-- `POST /api/chat/stream` — `{message: str, thread_id: str}` → SSE stream of normalized events.
+- `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
+  events; no `conversation_id` starts a new conversation. 404 for someone else's conversation.
+- `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
+  as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
+- `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
+- `DELETE /api/conversations/{id}` — deletes its messages, then the conversation; 204, or 404.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — deliberately exercises the real retrieval path (a dense+sparse
   Pinecone query) rather than a bare ping, so "ready" actually means "can serve"; no real LLM
