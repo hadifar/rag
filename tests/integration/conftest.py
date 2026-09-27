@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from pydantic import ValidationError
 
@@ -8,8 +10,13 @@ from rag.config import Settings
 def integration_settings() -> Settings:
     """Real Settings loaded from .env — points at the same Pinecone indexes/namespace
     `rag ingest` populates, so tests query the actual knowledge base, read-only.
+
+    Skips locally when credentials are missing, but fails in CI: a skipped run there
+    reports green with zero tests executed.
     """
     try:
         return Settings()  # pyright: ignore[reportCallIssue] — fields come from .env
     except ValidationError as exc:
+        if os.environ.get("CI"):
+            raise
         pytest.skip(f"Pinecone/OpenAI credentials not configured in .env: {exc}")

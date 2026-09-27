@@ -80,3 +80,12 @@ npm install
 npm run dev   # UI at http://localhost:5173, proxies API calls to :8000
 ```
 See [frontend/README.md](../frontend/README.md).
+
+## CI vs. production config
+
+`.github/workflows/integration-tests.yml` hardcodes `LLM__BACKEND=openai`, `AUTH__DATABASE_URL`
+(pointing at a throwaway Postgres service container) and a dummy `AUTH__JWT_SECRET`. That's only
+safe because the database lives for a single job. In production, never hardcode these: take them
+from GitHub `secrets` (credentials, such as `AUTH__DATABASE_URL`, which contains the DB password,
+and `AUTH__JWT_SECRET`) or `vars` (non-sensitive choices such as `LLM__BACKEND`), the same way the
+workflow already reads `OPENAI_API_KEY` and `PINECONE_*`.
