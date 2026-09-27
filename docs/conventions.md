@@ -40,14 +40,8 @@ instance. This is enforced by `import-linter`, not just convention — see
 
 Same rule as adapters — `rag.repository` gets the same composition-root-only treatment as
 `rag.adapters` in `import-linter` — but it's a distinct package because it's a distinct kind of
-infra: `adapters/` wraps a third-party SDK client (an LLM provider, LangGraph's checkpointer); `repository/` holds
-hand-written SQL over the project's own Postgres, implementing a domain port
-(`UserRepositoryPort`, in `PostgresUserRepository`). Follow `user_repository.py`'s shape for a new
-one: plain parameterized queries via `psycopg`'s `class_row(YourModel)` row factory (maps a row
-straight onto the domain dataclass), no ORM — this project uses SQLAlchemy only as Alembic's
-migration engine, never as an app-level ORM (see [limitation.md](limitation.md) if that
-trade-off ever stops making sense for a new table's shape). Wire it into `container.py` like any
-other adapter, injected into its service through the port, never imported by the service directly.
+infra: `adapters/` wraps a third-party SDK client (an LLM provider, LangGraph's checkpointer); `repository/` holds SQL over the project's own Postgres, implementing a domain port
+(`UserRepositoryPort`, in `PostgresUserRepository`).
 
 ## Adding a new implementation of an existing capability: satisfy the `Protocol`, don't branch on type
 

@@ -44,7 +44,7 @@ rag/
 │   ├── llm_client.py
 │   ├── checkpointer.py
 │   ├── observability.py
-│   └── db.py                         # auth Postgres connection pool
+│   └── db.py                         # the app's Postgres pool (users, conversations, documents)
 │
 ├── repository/                       # concrete persistence implementing a domain port — same
 │   ├── user_repository.py            # composition-root-only rule as adapters/, just a distinct kind of infra
@@ -119,8 +119,10 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   answer and sources; tool calls aren't replayed).
 
 The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
-context manager, mirroring `open_vector_store()`): an `AsyncPostgresSaver` over a connection
-pool of its own on the app's `DATABASE_URL` (required). The pool replaces connections that die,
+context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` over a
+connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from the
+repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
+prepared statements). Both pools test a connection before handing it out and replace dead ones,
 so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
 (idempotent schema migration). Durable across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
