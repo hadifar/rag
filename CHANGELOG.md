@@ -1,3 +1,27 @@
+## v0.8.0 (2026-09-27)
+
+### Feat
+
+- replace Pinecone with pgvector and use a single DATABASE_URL
+- persist conversations with an owned list, history and delete
+- init commit authentication service
+
+### Fix
+
+- add a dedicated rate-limit zone for login
+- sync db & checkpointer, include check & open to db
+- use asyncconnectionpool to handle auto recovery
+- JSON-encode SSE text events so newlines survive
+- always mark refresh cookie secure
+
+### Refactor
+
+- drop the in-memory checkpointer and refresh stale docs
+- use react-agent instead of graph
+- error handling leaned & app is now only composition
+- move user repo to its own package
+- authentication and router structure for improved clarity and functionality
+
 ## v0.7.0 (2026-09-25)
 
 ### Feat
