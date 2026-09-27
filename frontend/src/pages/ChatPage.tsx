@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { openKbSource } from '../api/kb';
 import { useChat } from '../hooks/useChat';
 import { MessageList } from '../components/MessageList';
 import { Composer } from '../components/Composer';
@@ -9,7 +10,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <MessageList messages={messages} />
+      <MessageList messages={messages} onOpenSource={openKbSource} />
       <Composer onSend={sendMessage} />
     </div>
   );

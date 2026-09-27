@@ -5,7 +5,18 @@ import { ToolBubble } from './ToolBubble';
 import { SourcesBubble } from './SourcesBubble';
 import { TypingIndicator } from './TypingIndicator';
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+type MessageListProps = {
+  messages: ChatMessage[];
+  onOpenSource: (name: string) => void;
+};
+
+function MessageBubble({
+  message,
+  onOpenSource,
+}: {
+  message: ChatMessage;
+  onOpenSource: (name: string) => void;
+}) {
   switch (message.type) {
     case 'typing':
       return <TypingIndicator />;
@@ -17,11 +28,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       return <ToolBubble {...message.content} />;
 
     case 'sources':
-      return <SourcesBubble {...message.content} />;
+      return <SourcesBubble {...message.content} onOpen={onOpenSource} />;
   }
 }
 
-export function MessageList({ messages }: { messages: ChatMessage[] }) {
+export function MessageList({ messages, onOpenSource }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,7 +46,7 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
           key={message.id}
           className={`flex ${message.type === 'text' && message.position === 'right' ? 'justify-end' : 'justify-start'}`}
         >
-          <MessageBubble message={message} />
+          <MessageBubble message={message} onOpenSource={onOpenSource} />
         </div>
       ))}
       <div ref={bottomRef} />

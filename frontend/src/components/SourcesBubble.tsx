@@ -1,7 +1,8 @@
-import { openKbSource } from '../api/kb';
 import type { SourcesContent } from '../types/chat';
 
-export function SourcesBubble({ names }: SourcesContent) {
+type SourcesBubbleProps = SourcesContent & { onOpen: (name: string) => void };
+
+export function SourcesBubble({ names, onOpen }: SourcesBubbleProps) {
   return (
     <div className="max-w-[480px] rounded-xl bg-slate-50 px-3 py-2 text-sm">
       <div className="font-medium text-slate-700">📚 Sources</div>
@@ -10,7 +11,7 @@ export function SourcesBubble({ names }: SourcesContent) {
           <li key={name}>
             <button
               type="button"
-              onClick={() => openKbSource(name)}
+              onClick={() => onOpen(name)}
               className="text-indigo-600 hover:underline"
             >
               {name}

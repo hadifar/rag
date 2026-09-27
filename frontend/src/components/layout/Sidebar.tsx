@@ -13,6 +13,7 @@ import {
 
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
+import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../../utils/conversations';
 import type { Conversation } from '../../utils/conversations';
 
@@ -86,14 +87,8 @@ function ConversationLink({
 }
 
 function ConversationList() {
-  const { conversations, status, hasMore, isLoadingMore, loadMore, deleteConversation } =
-    useConversations();
-
-  const confirmDelete = (id: string) => {
-    if (window.confirm('Delete this chat? This cannot be undone.')) {
-      deleteConversation(id).catch(() => window.alert("Couldn't delete the chat. Please try again."));
-    }
-  };
+  const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversations();
+  const confirmDelete = useConfirmDeleteConversation();
 
   return (
     <>
