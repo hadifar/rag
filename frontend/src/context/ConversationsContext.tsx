@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from 'react';
 import type { ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 
@@ -19,7 +27,7 @@ type ConversationsContextValue = {
   status: ListStatus;
   hasMore: boolean;
   isLoadingMore: boolean;
-  loadMore: () => Promise<void>;
+  loadMore: () => void;
   /** A turn started in `conversation`: add it, or move it to the top. */
   upsert: (conversation: Conversation) => void;
   rename: (id: string, title: string) => void;
@@ -35,7 +43,7 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<ListStatus>('loading');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingMore, startLoadingMore] = useTransition();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,16 +62,22 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const loadMore = useCallback(async () => {
+  const loadMore = useCallback(() => {
     if (!nextCursor || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const page = await listConversations(nextCursor);
-      setConversations((list) => appendPage(list, page.items));
-      setNextCursor(page.next_cursor);
-    } finally {
-      setIsLoadingMore(false);
-    }
+    startLoadingMore(async () => {
+      // Caught here: an error escaping a transition goes to the route's error page.
+      // On failure the button just re-enables, so the user can try again.
+      try {
+        const page = await listConversations(nextCursor);
+        // Updates after an `await` need their own startTransition to stay in it.
+        startLoadingMore(() => {
+          setConversations((list) => appendPage(list, page.items));
+          setNextCursor(page.next_cursor);
+        });
+      } catch {
+        // Nothing to show: the list and cursor are unchanged.
+      }
+    });
   }, [nextCursor, isLoadingMore]);
 
   const upsert = useCallback((conversation: Conversation) => {
