@@ -122,7 +122,8 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
     )
     app = create_app(container=container, settings=_stub_settings())
-    with TestClient(app) as test_client:
+    # https, so the client sends the (always Secure) refresh cookie back.
+    with TestClient(app, base_url="https://testserver") as test_client:
         yield test_client
 
 
@@ -207,6 +208,17 @@ def test_refresh_endpoint_issues_new_access_token(client: TestClient) -> None:
     refresh_response = client.post("/api/auth/refresh")
     assert refresh_response.status_code == 200
     assert "access_token" in refresh_response.json()
+
+
+def test_login_sets_secure_refresh_cookie(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/login", json={"email": _TEST_EMAIL, "password": _TEST_PASSWORD}
+    )
+    assert response.status_code == 200
+    set_cookie = response.headers["set-cookie"].lower()
+    assert set_cookie.startswith("refresh_token=")
+    assert "; secure" in set_cookie
+    assert "; httponly" in set_cookie
 
 
 def test_refresh_without_cookie_rejected(client: TestClient) -> None:

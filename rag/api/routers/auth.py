@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Request, Response
+from fastapi import APIRouter, Cookie, Response
 
 from rag.api.deps import AuthServiceDep, CurrentUserDep, SettingsDep
 from rag.api.schema.auth import LoginRequest, TokenResponse, UserResponse
@@ -11,32 +11,26 @@ _REFRESH_COOKIE_PATH = "/api/auth"
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _set_refresh_cookie(
-    response: Response, request: Request, token: str, settings: Settings
-) -> None:
+def _set_refresh_cookie(response: Response, token: str, settings: Settings) -> None:
     response.set_cookie(
         key=_REFRESH_COOKIE,
         value=token,
         max_age=settings.AUTH.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path=_REFRESH_COOKIE_PATH,
         httponly=True,
-        secure=request.url.scheme == "https",
-        samesite="lax",
+        secure=True,
     )
 
 
 @router.post("/login")
 async def login(
     login_request: LoginRequest,
-    request: Request,
     response: Response,
     auth_service: AuthServiceDep,
     settings: SettingsDep,
 ) -> TokenResponse:
     user = await auth_service.authenticate(login_request.email, login_request.password)
-    _set_refresh_cookie(
-        response, request, auth_service.create_refresh_token(user), settings
-    )
+    _set_refresh_cookie(response, auth_service.create_refresh_token(user), settings)
     return TokenResponse(access_token=auth_service.create_access_token(user))
 
 

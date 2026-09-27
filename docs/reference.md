@@ -124,7 +124,9 @@ project already runs its own Postgres).
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
   and kept in memory only (React context, never `localStorage`).
 - **Refresh token** — a longer-lived JWT (`AUTH__REFRESH_TOKEN_EXPIRE_DAYS`, default 7d), set as an
-  httpOnly/SameSite=Lax cookie scoped to `/api/auth`, `Secure` only when the request is HTTPS.
+  httpOnly/SameSite=Lax cookie scoped to `/api/auth`, always `Secure` (TLS
+  terminates at nginx/App Service, so the app can't tell https from the request; local dev over
+  `http://localhost` still works in Chrome/Firefox, not Safari).
   `POST /api/auth/refresh` reads it and issues a new access token — there's no rotation or
   revocation store, so a stolen refresh token stays valid until it naturally expires (see
   [limitation.md](limitation.md#security)).
