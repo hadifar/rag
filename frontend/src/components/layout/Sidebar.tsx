@@ -117,7 +117,7 @@ function ConversationList() {
   );
 }
 
-export default function Sidebar() {
+export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();

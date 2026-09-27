@@ -4,7 +4,7 @@ import { SparklesIcon } from '@heroicons/react/24/outline';
 
 import { useAuth } from '../context/AuthContext';
 
-export default function LoginPage() {
+export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

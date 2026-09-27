@@ -1,8 +1,8 @@
 import { Outlet } from 'react-router-dom';
 import { ConversationsProvider } from '../../context/ConversationsContext';
-import Sidebar from './Sidebar';
+import { Sidebar } from './Sidebar';
 
-export default function AppLayout() {
+export function AppLayout() {
   return (
     <ConversationsProvider>
       <div className="flex h-full bg-slate-50 overflow-hidden">

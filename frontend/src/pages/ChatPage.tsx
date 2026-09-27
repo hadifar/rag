@@ -4,7 +4,7 @@ import { useChat } from '../hooks/useChat';
 import { MessageList } from '../components/MessageList';
 import { Composer } from '../components/Composer';
 
-export default function ChatPage() {
+export function ChatPage() {
   const { conversationId } = useParams();
   const { messages, sendMessage } = useChat(conversationId);
 
