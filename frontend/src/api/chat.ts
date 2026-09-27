@@ -3,7 +3,7 @@ import {
   fetchEventSource,
 } from '@microsoft/fetch-event-source';
 
-import { apiUrl, authFetch, jsonPostInit } from './client';
+import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
 import type { Schemas } from '../types';
 import type { ChatStreamEvent } from '../types/chat';
 
@@ -25,7 +25,7 @@ export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Pro
       if (response.ok && contentType.startsWith(EventStreamContentType)) {
         return;
       }
-      throw new Error(`chat stream failed to open: ${response.status}`);
+      throw new ApiError(response.status, `chat stream failed to open: ${response.status}`);
     },
 
     onmessage(ev) {
