@@ -74,16 +74,14 @@ merged into it — same composition-root-only rule, just a distinct kind of infr
 over a domain port, vs. a wrapped third-party SDK client) — see
 [conventions.md](conventions.md#adding-a-new-repository-sql-behind-a-domain-port).
 
-## Generation graph (`create_agent`)
+## Agent
 
-`generation_service/graph.py` builds the graph with LangChain's `create_agent` (a model ⇄ tools
-loop); the guards are middleware around it rather than hand-wired nodes:
+`generation_service/graph.py` builds the agent with LangChain's `create_agent`;
 
 ```mermaid
 graph TD
     __start__((start)) --> topical(TopicalGuard.before_agent)
-    topical --> resetg(GroundednessGuard.before_agent)
-    resetg --> model(model)
+    topical --> model(model)
     model --> verify(GroundednessGuard.after_model)
     verify -.->|tool call| tools(tools)
     verify -.->|ungrounded, under cap| model
@@ -101,9 +99,10 @@ graph TD
   off-topic message it adds the decline instruction to the system prompt and removes the tools
   — for that turn's model calls only (`wrap_model_call`), so the decline text is still generated
   and streamed by `model`.
-- **`GroundednessGuard`** resets its revision counter each turn (`before_agent`), checks each
-  final answer against **this turn's** `search_kb` results (`after_model`), and on an ungrounded
-  one jumps back to `model` with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
+- **`GroundednessGuard`** checks each final answer against **this turn's** `search_kb` results
+  (`after_model`), and on an ungrounded one jumps back to `model` with a revision instruction,
+  capped at `MAX_VERIFY_ATTEMPTS`. It keeps no state: a rejected answer stays in the thread, so
+  the revisions so far are this turn's final answers minus one.
 - **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
 
 Guard instructions are never saved to the thread: the checkpoint holds only what the user and
