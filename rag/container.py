@@ -5,11 +5,11 @@ from datetime import timedelta
 
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
-from rag.adapters.llm_client import build_llm
+from rag.adapters.llm_client import build_embeddings, build_llm
 from rag.adapters.observability import open_trace_config
-from rag.adapters.pinecone_client import open_vector_store
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
+from rag.repository.document_repository import DocumentRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -33,11 +33,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
     """Opens connections and tears it down on exit."""
 
     async with (
-        open_vector_store(settings) as vector_store,
         open_checkpointer(settings) as checkpointer,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
     ):
+        vector_store = DocumentRepository(db_pool, build_embeddings(settings))
         ranking_service = RetrievalService(vector_store=vector_store)
 
         llm = build_llm(settings)

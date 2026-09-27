@@ -14,11 +14,12 @@ _DictRowPool = AsyncConnectionPool[AsyncConnection[DictRow]]
 
 @asynccontextmanager
 async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpointSaver]:
-    """Opens the checkpointer's connection pool for the caller's scope and tears it down
-    on exit.
+    """Opens the checkpointer's own connection pool for the caller's scope and tears it
+    down on exit. Same database as `open_db_pool`, but a separate pool: the saver needs
+    dict rows, autocommit and no prepared statements on every connection.
     """
     async with _DictRowPool(
-        settings.CHECKPOINTER.DATABASE_URL.get_secret_value(),
+        settings.DATABASE_URL.get_secret_value(),
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         check=_DictRowPool.check_connection,
         open=False,

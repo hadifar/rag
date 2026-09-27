@@ -22,8 +22,7 @@ graph LR
         langgraph["create_agent: model ⇄ tools + guard middleware"]
     end
 
-    postgres[(Postgres<br/>checkpointer + users + conversations)]
-    pinecone[(Pinecone<br/>dense + sparse indexes)]
+    postgres[(Postgres + pgvector<br/>checkpointer · users · conversations · chunks)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
 
@@ -33,8 +32,8 @@ graph LR
     api -->|"login/refresh, bearer-gated routes"| postgres
     api --> langgraph
     langgraph -->|checkpoints, one thread per conversation| postgres
-    langgraph -->|search_kb tool call| pinecone
-    langgraph -->|chat completions| llm
+    langgraph -->|search_kb: hybrid vector + full-text query| postgres
+    langgraph -->|chat completions, embeddings| llm
     langgraph -.->|traces, if enabled| langfuse
 ```
 
@@ -53,8 +52,8 @@ graph TD
     api[rag/api<br/>routers · deps.py · error_handlers.py]
     services[rag/services<br/>retrieval · generation · ingestion · auth · conversation]
     domain[rag/domain<br/>models, ports, errors, events]
-    adapters[rag/adapters<br/>pinecone_client · llm_client · checkpointer · observability · db]
-    repository[rag/repository<br/>user_repository · conversation_repository]
+    adapters[rag/adapters<br/>llm_client · checkpointer · observability · db]
+    repository[rag/repository<br/>user · conversation · document repositories]
     container[rag/container.py<br/>]
 
     api --> services

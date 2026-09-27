@@ -13,7 +13,7 @@ async def live() -> HealthResponse:
 
 @router.get("/ready")
 async def ready(ranking_service: RankingServiceDep) -> HealthResponse:
-    # Deliberately exercises the real retrieval path (dense+sparse Pinecone query)
-    # rather than a bare ping, so "ready" actually means "can serve".
-    await ranking_service.search("healthcheck", top_k=1)
+    # Queries the document store (so a missing migration or unreachable Postgres fails
+    # the probe) but not the embedding API, which would cost money on every probe.
+    await ranking_service.ping()
     return HealthResponse(status="ok")

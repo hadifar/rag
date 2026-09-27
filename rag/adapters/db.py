@@ -11,9 +11,11 @@ from rag.config import Settings
 async def open_db_pool(
     settings: Settings,
 ) -> AsyncGenerator[AsyncConnectionPool[AsyncConnection]]:
-    """Opens the auth DB connection pool for the caller's scope and tears it down on exit."""
+    """Opens the app's connection pool (users, conversations, documents) for the
+    caller's scope and tears it down on exit.
+    """
     pool = AsyncConnectionPool[AsyncConnection](
-        settings.AUTH.DATABASE_URL.get_secret_value(), open=False
+        settings.DATABASE_URL.get_secret_value(), open=False
     )
     async with pool:
         yield pool

@@ -12,7 +12,7 @@ Follows PEP 20 and the
 ## Adding a new service or adapter: extend `container.py`, don't reach around it
 
 `container.py` is the only place concrete adapters get constructed and injected — pure wiring, no
-FastAPI/React imports. It's an async context manager so connections it opens (Pinecone, Postgres)
+FastAPI/React imports. It's an async context manager so connections it opens (Postgres pools, tracing)
 get torn down deterministically:
 
 ```python
@@ -40,7 +40,7 @@ instance. This is enforced by `import-linter`, not just convention — see
 
 Same rule as adapters — `rag.repository` gets the same composition-root-only treatment as
 `rag.adapters` in `import-linter` — but it's a distinct package because it's a distinct kind of
-infra: `adapters/` wraps a third-party SDK client (Pinecone, an LLM provider); `repository/` holds
+infra: `adapters/` wraps a third-party SDK client (an LLM provider, LangGraph's checkpointer); `repository/` holds
 hand-written SQL over the project's own Postgres, implementing a domain port
 (`UserRepositoryPort`, in `PostgresUserRepository`). Follow `user_repository.py`'s shape for a new
 one: plain parameterized queries via `psycopg`'s `class_row(YourModel)` row factory (maps a row
