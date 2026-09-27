@@ -14,18 +14,20 @@ class ConversationRepository:
     def __init__(self, pool: AsyncConnectionPool[AsyncConnection]):
         self._pool = pool
 
-    async def create(self, user_id: uuid.UUID, title: str) -> Conversation:
+    async def create(
+        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
+    ) -> Conversation:
         async with (
             self._pool.connection() as conn,
             conn.cursor(row_factory=class_row(Conversation)) as cur,
         ):
             await cur.execute(
                 f"""
-                INSERT INTO conversations (user_id, title)
-                VALUES (%s, %s)
+                INSERT INTO conversations (id, user_id, title)
+                VALUES (%s, %s, %s)
                 RETURNING {_COLUMNS}
                 """,
-                (user_id, title),
+                (conversation_id or uuid.uuid4(), user_id, title),
             )
             row = await cur.fetchone()
             assert row is not None  # INSERT ... RETURNING always yields a row

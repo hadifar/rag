@@ -102,17 +102,37 @@ async def test_follow_up_message_reuses_the_conversation_and_is_not_retitled() -
     assert len(engine.threads[str(conversation_id)]) == 4
 
 
-@pytest.mark.parametrize("owner", [BOB, None], ids=["someone-elses", "nonexistent"])
-async def test_cannot_use_a_conversation_the_user_does_not_own(
-    owner: uuid.UUID | None,
-) -> None:
+async def test_first_message_with_a_client_id_creates_the_conversation_under_it() -> (
+    None
+):
+    service, repository, _ = _service()
+    client_id = uuid.uuid4()
+
+    events = await _send(service, ALICE, "hi", client_id)
+
+    assert cast(ConversationReady, events[0]).conversation.id == client_id
+    assert repository.rows[client_id].user_id == ALICE
+    assert isinstance(events[-1], ConversationTitled)  # titled like any new chat
+
+
+async def test_cannot_use_a_conversation_someone_else_owns() -> None:
     service, repository, engine = _service()
-    conversation_id = (
-        (await repository.create(owner, "Bob's chat")).id if owner else uuid.uuid4()
-    )
+    conversation_id = (await repository.create(BOB, "Bob's chat")).id
 
     with pytest.raises(ConversationNotFoundError):
         await service.start_turn(ALICE, conversation_id, "hi")
+    with pytest.raises(ConversationNotFoundError):
+        await service.history(ALICE, conversation_id)
+    with pytest.raises(ConversationNotFoundError):
+        await service.delete(ALICE, conversation_id)
+    assert engine.deleted_threads == []
+    assert repository.rows[conversation_id].user_id == BOB
+
+
+async def test_cannot_read_or_delete_a_conversation_that_does_not_exist() -> None:
+    service, _, engine = _service()
+    conversation_id = uuid.uuid4()
+
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):

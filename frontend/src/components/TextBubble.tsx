@@ -1,6 +1,6 @@
 import Markdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
-import type { TextContent } from '../types/chat';
+import type { TextContent } from '../types';
 
 type TextBubbleProps = TextContent & { position?: 'left' | 'right' };
 

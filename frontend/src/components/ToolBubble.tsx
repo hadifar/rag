@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
-import type { ToolContent } from '../types/chat';
+import type { ToolContent } from '../types';
 
 export function ToolBubble({ name, query, output, status }: ToolContent) {
   const [collapsed, setCollapsed] = useState(true);

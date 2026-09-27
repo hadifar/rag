@@ -1,7 +1,7 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from './useAuth';
 
 /** Signs in, then returns to the page that sent the user to /login (or home). */
 export function useLogin() {

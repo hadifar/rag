@@ -62,8 +62,8 @@ frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
 │   ├── components/                   # ui component
-│   ├── context/                      # AuthContext (session status + user), ConversationsContext (sidebar list)
-│   ├── hooks/                        # useChat (streaming + history loading)
+│   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
+│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
 └── (Vite build served by nginx in Docker)
@@ -117,10 +117,13 @@ interface, so neither know or care which backend is selected.
 A conversation is a row in the `conversations` table (`id`, `user_id`, `title`, `created_at`,
 `updated_at`; `migrations/versions/0002_…`), owned by `ConversationService`. Its messages live in
 the LangGraph checkpointer, whose thread id is the conversation's id:
-- The server assigns every id. A `ChatRequest` without `conversation_id` starts a new
-  conversation owned by the caller; the stream's first SSE event (`conversation`) carries its id.
-- A `conversation_id` that doesn't exist or belongs to another user is a 404 — the same answer
-  for both, so ids can't be probed. This is checked before the stream starts.
+- The client picks a new chat's id (a random UUID) and sends it with the first message; a
+  `conversation_id` the server hasn't seen starts a new conversation under that id, owned by the
+  caller. Omitting it also starts one, with a server-generated id. The stream's first SSE event
+  (`conversation`) carries the conversation either way.
+- A `conversation_id` that belongs to another user is a 404, checked before the stream starts.
+  Reading or deleting one that doesn't exist is the same 404, so ids can't be probed there;
+  chatting to an unknown id creates it, which reveals nothing a random UUID could find.
 - A new conversation is titled after its first message, then after the first answer an LLM
   call writes a short title, sent as the stream's last event (`title`).
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
@@ -149,7 +152,7 @@ its own Postgres).
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
   and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
   `authFetch`, which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
-  if the refresh fails too, `AuthContext` switches to unauthenticated and `RequireAuth`
+  if the refresh fails too, `AuthProvider` switches to unauthenticated and `RequireAuth`
   redirects to `/login`.
 - **Refresh token** — a longer-lived JWT (`AUTH__REFRESH_TOKEN_EXPIRE_DAYS`, default 7d), set as an
   httpOnly/SameSite=Lax cookie scoped to `/api/auth`, always `Secure` (TLS
@@ -238,7 +241,7 @@ there, so the response status comes from the exception class itself.
 - `POST /api/auth/logout` — clears the refresh cookie.
 - `GET /api/auth/me` — returns `{id, email}` for the caller's access token.
 - `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
-  events; no `conversation_id` starts a new conversation. 404 for someone else's conversation.
+  events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.

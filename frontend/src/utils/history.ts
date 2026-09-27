@@ -1,5 +1,4 @@
-import type { Schemas } from '../types';
-import type { ChatMessageInput } from '../types/chat';
+import type { ChatMessageInput, Schemas } from '../types';
 
 /** A saved conversation as the bubbles the live chat would have shown for it. */
 export function historyToMessages(history: Schemas['HistoryMessageResponse'][]): ChatMessageInput[] {
@@ -9,7 +8,7 @@ export function historyToMessages(history: Schemas['HistoryMessageResponse'][]):
     }
     const answer: ChatMessageInput = { type: 'text', content: { text: message.text } };
     return message.sources.length > 0
-      ? [answer, { type: 'sources', content: { names: message.sources } }]
+      ? [answer, { type: 'sources', content: { sources: message.sources } }]
       : [answer];
   });
 }

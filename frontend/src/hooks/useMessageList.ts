@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
-import type { ChatMessage, ChatMessageInput } from '../types/chat';
+import type { ChatMessage, ChatMessageInput } from '../types';
 
 /** The chat's bubbles, each given a stable id so it can be updated or removed later. */
 export function useMessageList() {

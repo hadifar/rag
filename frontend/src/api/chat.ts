@@ -4,8 +4,16 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
-import type { Schemas } from '../types';
-import type { ChatStreamEvent } from '../types/chat';
+import type { ChatStreamEvent, Schemas } from '../types';
+
+const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>([
+  'conversation',
+  'title',
+  'text',
+  'tool_start',
+  'tool_result',
+  'sources',
+]);
 
 export type StreamChatArgs = Schemas['ChatRequest'] & {
   onEvent: (event: ChatStreamEvent) => void;
@@ -28,39 +36,15 @@ export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Pro
       throw new ApiError(response.status, `chat stream failed to open: ${response.status}`);
     },
 
-    onmessage(ev) {
-      switch (ev.event) {
-        case 'conversation': {
-          const conversation = JSON.parse(ev.data) as Schemas['ConversationResponse'];
-          onEvent({ type: 'conversation', conversation });
-          break;
-        }
-        case 'title': {
-          const { id, title } = JSON.parse(ev.data) as { id: string; title: string };
-          onEvent({ type: 'title', id, title });
-          break;
-        }
-        case 'text': {
-          const { text } = JSON.parse(ev.data) as { text: string };
-          onEvent({ type: 'text', text });
-          break;
-        }
-        case 'tool_start': {
-          const { name, query } = JSON.parse(ev.data) as { name: string; query: string };
-          onEvent({ type: 'tool_start', name, query });
-          break;
-        }
-        case 'tool_result': {
-          const { name, output } = JSON.parse(ev.data) as { name: string; output: string };
-          onEvent({ type: 'tool_result', name, output });
-          break;
-        }
-        case 'sources': {
-          const { names } = JSON.parse(ev.data) as { names: string[] };
-          onEvent({ type: 'sources', names });
-          break;
-        }
-      }
+    onmessage({ event, data }) {
+      if (!STREAM_EVENT_TYPES.has(event)) return; // e.g. an event this client predates
+      const payload = JSON.parse(data);
+      // Each event's JSON is its fields, except `conversation`, which is the object itself.
+      onEvent(
+        (event === 'conversation'
+          ? { type: event, conversation: payload }
+          : { type: event, ...payload }) as ChatStreamEvent
+      );
     },
     onerror(err) {
       throw err;

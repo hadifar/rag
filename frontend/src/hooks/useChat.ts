@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
 import { fetchConversationMessages } from '../api/conversations';
-import { useConversations } from '../context/ConversationsContext';
+import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
 import { historyToMessages } from '../utils/history';
-import type { ChatStreamEvent } from '../types/chat';
+import type { ChatStreamEvent } from '../types';
 import { useMessageList } from './useMessageList';
 
 function historyErrorText(err: unknown): string {
@@ -21,24 +21,18 @@ function historyErrorText(err: unknown): string {
 export function useChat(conversationId: string | undefined) {
   const { upsert, rename } = useConversations();
   const navigate = useNavigate();
-  const { key: locationKey } = useLocation();
   const { messages, append, update, remove, replace } = useMessageList();
 
   const abortRef = useRef<AbortController | null>(null);
-  // The conversation new messages go to. Ahead of the URL for a moment: set as soon
-  // as the server assigns a new conversation's id, before the URL is updated to it.
-  const conversationIdRef = useRef(conversationId);
-  // Set right before this hook updates the URL itself, so the effect below can tell
-  // that apart from the user navigating (sidebar, New chat, back/forward).
-  const selfNavigationRef = useRef(false);
+  // The conversation on screen, which new messages go to. Ahead of the URL for a
+  // moment: a new chat's id is set here right before the URL is updated to it.
+  const conversationIdRef = useRef<string | undefined>(undefined);
 
-  // Every user navigation (including "New chat" to the same /chat URL, hence the
-  // location key) switches conversations: stop the old stream and load the new one.
+  // Navigating to another conversation (sidebar, New chat, back/forward) stops the
+  // old stream and loads the new one. Skipped when the URL just caught up with the
+  // conversation already on screen, i.e. a new chat's first message.
   useEffect(() => {
-    if (selfNavigationRef.current) {
-      selfNavigationRef.current = false;
-      return;
-    }
+    if (conversationId && conversationId === conversationIdRef.current) return;
     abortRef.current?.abort();
     conversationIdRef.current = conversationId;
     replace([]);
@@ -50,8 +44,12 @@ export function useChat(conversationId: string | undefined) {
       .catch((err: unknown) => {
         if (!controller.signal.aborted) replace([assistantText(historyErrorText(err))]);
       });
-    return () => controller.abort();
-  }, [conversationId, locationKey, replace]);
+    return () => {
+      controller.abort();
+      // Not loaded after all, so the next run must load it (e.g. StrictMode's re-run).
+      conversationIdRef.current = undefined;
+    };
+  }, [conversationId, replace]);
 
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -66,6 +64,14 @@ export function useChat(conversationId: string | undefined) {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      // A new chat gets its id here, and the URL follows it before anything streams.
+      let id = conversationIdRef.current;
+      if (!id) {
+        id = crypto.randomUUID();
+        conversationIdRef.current = id;
+        navigate(conversationPath(id), { replace: true });
+      }
+
       append({ type: 'text', content: { text }, position: 'right' });
 
       const typingId = append({ type: 'typing' });
@@ -79,18 +85,9 @@ export function useChat(conversationId: string | undefined) {
       const showBubble = createBubbleHandler(append, update);
       const onEvent = (event: ChatStreamEvent) => {
         switch (event.type) {
-          case 'conversation': {
-            const { id } = event.conversation;
+          case 'conversation':
             upsert(event.conversation);
-            if (conversationIdRef.current !== id) {
-              // A new conversation: follow its server-assigned id in the URL, without
-              // reloading, since this stream is still delivering its first answer.
-              conversationIdRef.current = id;
-              selfNavigationRef.current = true;
-              navigate(conversationPath(id), { replace: true });
-            }
             return;
-          }
           case 'title':
             rename(event.id, event.title);
             return;
@@ -103,7 +100,7 @@ export function useChat(conversationId: string | undefined) {
       try {
         await streamChat({
           message: text,
-          conversation_id: conversationIdRef.current ?? null,
+          conversation_id: id,
           onEvent,
           signal: controller.signal,
         });

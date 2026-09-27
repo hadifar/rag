@@ -11,11 +11,11 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 
-import { useAuth } from '../../context/AuthContext';
-import { useConversations } from '../../context/ConversationsContext';
+import { useAuth } from '../../hooks/useAuth';
+import { useConversations } from '../../hooks/useConversations';
 import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../../utils/conversations';
-import type { Conversation } from '../../utils/conversations';
+import type { Conversation } from '../../types';
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 

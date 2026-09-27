@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('Base name used to derive resource names (e.g. "rag-chatbot").')
+@description('Base name used to derive resource names (e.g. "rag").')
 param appName string
 
 @description('Azure region for all resources.')

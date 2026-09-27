@@ -81,8 +81,8 @@ The `/api/chat/stream` wire format is hand-kept in four places; change all four 
 1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
 2. its encoder in `_ENCODERS` in `rag/api/routers/chat.py` — `data` must be single-line JSON
    (`json.dumps`/`model_dump_json`), never raw text, or a `\n\n` ends the event early;
-3. its `case` in `frontend/src/api/chat.ts` and its member of `ChatStreamEvent` in
-   `frontend/src/types/chat.ts`;
+3. its name in `STREAM_EVENT_TYPES` in `frontend/src/api/chat.ts` and its member of
+   `ChatStreamEvent` in `frontend/src/types/chat.ts` (the event's JSON fields are spread into it);
 4. `test_chat_stream_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only
    check that catches the two sides drifting apart.
 

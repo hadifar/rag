@@ -116,8 +116,8 @@ the `ToolMessage` artifact, and the `sources` event is built from this turn's ar
 graph TD
     pages["pages/<br/>ChatPage, SettingsPage, HomePage, LoginPage, NotFoundPage"]
     guard["components/layout/RequireAuth<br/>redirects to /login if unauthenticated"]
-    authctx["context/AuthContext<br/>session status + user, restore on load"]
-    convctx["context/ConversationsContext<br/>sidebar list, paging, delete"]
+    authctx["context/AuthProvider<br/>session status + user, restore on load"]
+    convctx["context/ConversationsProvider<br/>sidebar list, paging, delete"]
     hooks["hooks/<br/>useChat"]
     utils["utils/<br/>pure list/history helpers"]
     apiclient["api/<br/>client.ts (token, authFetch), chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
@@ -139,17 +139,17 @@ graph TD
     authctx -->|login/restore/logout; notified on session expiry| apiclient
 ```
 
-Components stay presenter-only: `useChat` owns the streaming/state logic (and follows a new
-conversation's server-assigned id into the URL without remounting — `chat/:conversationId?` is
-one route), `ConversationsContext` owns the sidebar list, `utils/` holds their pure transforms, `api/chat.ts` owns
-the transport, `ToolBubble`/`MessageList` only render what the hook hands them. `SourcesBubble`
-fetches its kb link via `api/kb.ts` and opens a blob URL rather than a plain `<a href>`, since a
-bearer-token-protected endpoint can't be reached by a bare browser navigation — the same
-presenter-only rule just means the fetch/blob logic lives in `api/kb.ts`, not the component.
+Components stay presenter-only: `useChat` owns the streaming/state logic (a new chat's first
+message generates its id client-side and moves the URL to it before streaming, without
+remounting — `chat/:conversationId?` is one route), `ConversationsProvider` owns the sidebar list, `utils/` holds their pure transforms, `api/chat.ts` owns
+the transport, `ToolBubble`/`MessageList` only render what the hook hands them. `SourcesBubble`'s
+links open through `api/kb.ts` (passed in as `onOpen` by `ChatPage`), which fetches the file and
+opens a blob URL rather than a plain `<a href>`, since a bearer-token-protected endpoint can't be
+reached by a bare browser navigation.
 
 ## Backend schema → frontend types
 
-A build-time connection, not a runtime one — `types/index.ts` re-exports the whole generated
+A build-time connection, not a runtime one — `types/api.ts` exposes the whole generated
 schema map as `Schemas`, so `api/chat.ts` and `api/settings.ts` reference `Schemas['ChatRequest']`
 / `Schemas['SettingsResponse']` instead of hand-duplicating request/response shapes:
 
@@ -158,7 +158,7 @@ graph LR
     schema["rag/api/schema/<br/>chat.py, conversations.py, auth.py, settings.py, health.py"]
     genscript["openapi-typescript<br/>(generate:types)"]
     generated[types/api.generated.ts]
-    idx["types/index.ts<br/>Schemas = components['schemas']"]
+    idx["types/api.ts<br/>Schemas = components['schemas']"]
     apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
 
     schema --> genscript --> generated --> idx --> apiclient

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { useConversations } from '../context/ConversationsContext';
+import { useConversations } from './useConversations';
 
 /** Asks the user to confirm, then deletes the conversation; tells them if that failed. */
 export function useConfirmDeleteConversation(): (id: string) => void {

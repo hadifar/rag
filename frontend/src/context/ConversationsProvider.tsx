@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useTransition,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import type { ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 
@@ -17,24 +9,8 @@ import {
   renameConversation,
   upsertConversation,
 } from '../utils/conversations';
-
-import type { Conversation } from '../utils/conversations';
-
-type ListStatus = 'loading' | 'ready' | 'error';
-
-type ConversationsContextValue = {
-  conversations: Conversation[];
-  status: ListStatus;
-  hasMore: boolean;
-  isLoadingMore: boolean;
-  loadMore: () => void;
-  /** A turn started in `conversation`: add it, or move it to the top. */
-  upsert: (conversation: Conversation) => void;
-  rename: (id: string, title: string) => void;
-  deleteConversation: (id: string) => Promise<void>;
-};
-
-const ConversationsContext = createContext<ConversationsContextValue | null>(null);
+import type { Conversation } from '../types';
+import { ConversationsContext, type ListStatus } from '../hooks/useConversations';
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -111,13 +87,5 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     [conversations, status, nextCursor, isLoadingMore, loadMore, upsert, rename, deleteConversation]
   );
 
-  return <ConversationsContext.Provider value={value}>{children}</ConversationsContext.Provider>;
-}
-
-export function useConversations(): ConversationsContextValue {
-  const context = useContext(ConversationsContext);
-  if (context === null) {
-    throw new Error('useConversations must be used within a ConversationsProvider');
-  }
-  return context;
+  return <ConversationsContext value={value}>{children}</ConversationsContext>;
 }

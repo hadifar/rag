@@ -1,20 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { login as apiLogin, logout as apiLogout, me, restoreSession } from '../api/auth';
 import { onSessionExpired } from '../api/client';
 import type { Schemas } from '../types';
-
-type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
-
-type AuthContextValue = {
-  status: AuthStatus;
-  user: Schemas['UserResponse'] | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext, type AuthStatus } from '../hooks/useAuth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -55,13 +45,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [status, user, login, logout]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (context === null) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return <AuthContext value={value}>{children}</AuthContext>;
 }

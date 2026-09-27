@@ -330,7 +330,7 @@ def test_chat_stream_contract_matches_frontend_parsing(
     }
 
     # frontend: const { names } = JSON.parse(ev.data)
-    assert json.loads(sources_event[1]) == {"names": ["doc-a", "doc-b"]}
+    assert json.loads(sources_event[1]) == {"sources": ["doc-a", "doc-b"]}
 
     # frontend: const { id, title } = JSON.parse(ev.data)
     assert json.loads(title_event[1]) == {"id": conversation["id"], "title": "Greeting"}
@@ -384,15 +384,10 @@ def test_chat_stream_continues_an_existing_conversation(
     assert SseEventType.TITLE not in events  # only a new conversation gets titled
 
 
-@pytest.mark.parametrize("owner", ["other-user", "nobody"])
 def test_chat_stream_404s_for_a_conversation_the_user_does_not_own(
-    client: TestClient, auth_headers: dict[str, str], owner: str
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    conversation_id = (
-        _start_conversation(client, _login(client, _OTHER_EMAIL))
-        if owner == "other-user"
-        else str(uuid.uuid4())
-    )
+    conversation_id = _start_conversation(client, _login(client, _OTHER_EMAIL))
 
     response = client.post(
         "/api/chat/stream",
@@ -402,6 +397,27 @@ def test_chat_stream_404s_for_a_conversation_the_user_does_not_own(
 
     assert response.status_code == 404
     assert response.headers["content-type"].startswith("application/json")
+
+
+def test_chat_stream_creates_a_new_conversation_under_the_clients_id(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    client_id = str(uuid.uuid4())
+
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": "hi", "conversation_id": client_id},
+        headers=auth_headers,
+    ) as response:
+        body = "".join(response.iter_text())
+
+    events = dict(_parse_sse(body))
+    assert json.loads(events[SseEventType.CONVERSATION])["id"] == client_id
+    history = client.get(
+        f"/api/conversations/{client_id}/messages", headers=auth_headers
+    )
+    assert history.status_code == 200
 
 
 def test_conversations_list_is_newest_first_and_paginated(

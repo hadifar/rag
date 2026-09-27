@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { ConversationsProvider } from '../../context/ConversationsContext';
+import { ConversationsProvider } from '../../context/ConversationsProvider';
 import { Sidebar } from './Sidebar';
 
 export function AppLayout() {

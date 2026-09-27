@@ -1,4 +1,4 @@
-import type { ChatMessageInput, ChatStreamEvent } from '../types/chat';
+import type { ChatMessageInput, ChatStreamEvent } from '../types';
 
 type AppendMessage = (msg: ChatMessageInput) => string;
 type UpdateMessage = (id: string, msg: ChatMessageInput) => void;
@@ -48,8 +48,8 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
         }
         break;
       case 'sources':
-        if (event.names.length > 0) {
-          append({ type: 'sources', content: { names: event.names } });
+        if (event.sources.length > 0) {
+          append({ type: 'sources', content: { sources: event.sources } });
         }
         break;
     }
