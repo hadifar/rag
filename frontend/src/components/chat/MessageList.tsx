@@ -42,7 +42,7 @@ export function MessageList({ messages, onOpenSource }: MessageListProps) {
   }, [messages]);
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto px-4 py-6">
+    <div role="log" aria-label="Messages" className="flex-1 space-y-4 overflow-y-auto px-4 py-6">
       {messages.map((message) => (
         <div
           key={message.id}

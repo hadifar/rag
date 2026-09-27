@@ -37,4 +37,4 @@ on manual dispatch.
 
 ## Frontend
 
-See [frontend/README.md](frontend/README.md) for setup, dev server, and lint commands.
+See [frontend/README.md](frontend/README.md) for setup, dev server, lint and test commands (Vitest unit/integration, Playwright e2e).
