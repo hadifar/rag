@@ -1,3 +1,5 @@
+import type { components } from './api.generated';
+
 export type TextContent = { text: string };
 
 export type ToolContent = {
@@ -18,6 +20,8 @@ export type ChatMessageInput =
 export type ChatMessage = ChatMessageInput & { id: string };
 
 export type ChatStreamEvent =
+  | { type: 'conversation'; conversation: components['schemas']['ConversationResponse'] }
+  | { type: 'title'; id: string; title: string }
   | { type: 'text'; text: string }
   | { type: 'tool_start'; name: string; query: string }
   | { type: 'tool_result'; name: string; output: string }

@@ -37,9 +37,21 @@ export function streamChat({
 
     onmessage(ev) {
       switch (ev.event) {
-        case 'text':
-          onEvent({ type: 'text', text: ev.data });
+        case 'conversation': {
+          const conversation = JSON.parse(ev.data) as Schemas['ConversationResponse'];
+          onEvent({ type: 'conversation', conversation });
           break;
+        }
+        case 'title': {
+          const { id, title } = JSON.parse(ev.data) as { id: string; title: string };
+          onEvent({ type: 'title', id, title });
+          break;
+        }
+        case 'text': {
+          const { text } = JSON.parse(ev.data) as { text: string };
+          onEvent({ type: 'text', text });
+          break;
+        }
         case 'tool_start': {
           const { name, query } = JSON.parse(ev.data) as { name: string; query: string };
           onEvent({ type: 'tool_start', name, query });

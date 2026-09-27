@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -22,3 +23,26 @@ class User:
     email: str
     hashed_password: str
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class Conversation:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ConversationPage:
+    items: list[Conversation]
+    # Opaque; pass back to fetch the next (older) page. None on the last page.
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class HistoryMessage:
+    role: Literal["user", "assistant"]
+    text: str
+    sources: list[str] = field(default_factory=list)

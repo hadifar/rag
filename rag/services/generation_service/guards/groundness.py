@@ -1,5 +1,19 @@
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Annotated, Any, NotRequired
+
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    AgentState,
+    ModelRequest,
+    ModelResponse,
+    hook_config,
+)
+from langchain.agents.middleware.types import PrivateStateAttr
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import Runnable
+from langgraph.runtime import Runtime
+
+from rag.services.generation_service.turn import turn_tool_messages
 
 VERIFIER_PROMPT = (
     "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
@@ -14,13 +28,13 @@ REVISION_INSTRUCTION = (
 )
 
 
-def _collect_context(messages: list[BaseMessage]) -> str:
+def _collect_context(messages: Sequence[BaseMessage]) -> str:
     return "\n\n".join(
-        str(m.content) for m in messages if isinstance(m, ToolMessage) and m.content
+        str(m.content) for m in turn_tool_messages(messages) if m.content
     )
 
 
-async def is_grounded(llm: Runnable, messages: list[BaseMessage]) -> bool:
+async def is_grounded(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
     context = _collect_context(messages)
     answer = messages[-1]
 
@@ -32,3 +46,55 @@ async def is_grounded(llm: Runnable, messages: list[BaseMessage]) -> bool:
         VERIFIER_PROMPT.format(context=context, answer=answer.content)
     )
     return "UNGROUNDED" not in str(verdict.content).upper()
+
+
+class GroundednessState(AgentState):
+    revisions: NotRequired[Annotated[int, PrivateStateAttr]]
+
+
+class GroundednessGuard(AgentMiddleware[GroundednessState]):
+    """Checks each final answer against this turn's retrieved context; if it isn't
+    supported, sends the model back to revise, up to `max_revisions` times per turn.
+    The revision instruction is added to that model call only, never saved to the
+    thread.
+    """
+
+    state_schema = GroundednessState
+
+    def __init__(self, verifier: Runnable, max_revisions: int):
+        super().__init__()
+        self._verifier = verifier
+        self._max_revisions = max_revisions
+
+    async def abefore_agent(
+        self, state: GroundednessState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        return {"revisions": 0}
+
+    @hook_config(can_jump_to=["model"])
+    async def aafter_model(
+        self, state: GroundednessState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        answer = state["messages"][-1]
+        if not isinstance(answer, AIMessage) or answer.tool_calls:
+            return None  # Not a final answer yet: the model is still searching.
+
+        revisions = state.get("revisions", 0)
+        # Fail open past the cap: end the turn rather than loop, or make the user wait
+        # on the LLM re-answering the same question indefinitely.
+        if revisions >= self._max_revisions:
+            return None
+        if await is_grounded(self._verifier, state["messages"]):
+            return None
+        return {"revisions": revisions + 1, "jump_to": "model"}
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        if request.state.get("revisions"):
+            request = request.override(
+                messages=[*request.messages, HumanMessage(content=REVISION_INSTRUCTION)]
+            )
+        return await handler(request)

@@ -7,7 +7,7 @@ from rag.config import Settings
 from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
-from rag.services.generation_service.service import GenerationService
+from rag.services.conversation_service.service import ConversationService
 from rag.services.retrieval_service.service import RetrievalService
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -36,13 +36,7 @@ def get_ranking_service(container: ContainerDep) -> RetrievalService:
     return container.ranking_service
 
 
-def get_generation_service(container: ContainerDep) -> GenerationService:
-    return container.generation_service
-
-
 RankingServiceDep = Annotated[RetrievalService, Depends(get_ranking_service)]
-
-GenerationServiceDep = Annotated[GenerationService, Depends(get_generation_service)]
 
 
 def get_auth_service(container: ContainerDep) -> AuthService:
@@ -50,6 +44,15 @@ def get_auth_service(container: ContainerDep) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_conversation_service(container: ContainerDep) -> ConversationService:
+    return container.conversation_service
+
+
+ConversationServiceDep = Annotated[
+    ConversationService, Depends(get_conversation_service)
+]
 
 
 async def get_current_user(

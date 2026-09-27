@@ -9,8 +9,10 @@ from rag.adapters.llm_client import build_llm
 from rag.adapters.observability import open_trace_config
 from rag.adapters.pinecone_client import open_vector_store
 from rag.config import Settings
+from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.auth_service.service import AuthService
+from rag.services.conversation_service.service import ConversationService
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
@@ -23,6 +25,7 @@ class Container:
     generation_service: GenerationService
     ingestion_service: IngestionService
     auth_service: AuthService
+    conversation_service: ConversationService
 
 
 @asynccontextmanager
@@ -37,8 +40,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
     ):
         ranking_service = RetrievalService(vector_store=vector_store)
 
+        llm = build_llm(settings)
+
         generation_service = GenerationService(
-            llm=build_llm(settings),
+            llm=llm,
             ranking_service=ranking_service,
             checkpointer=checkpointer,
             trace_config=trace_config,
@@ -56,6 +61,16 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
             refresh_ttl=timedelta(days=settings.AUTH.REFRESH_TOKEN_EXPIRE_DAYS),
         )
 
+        conversation_service = ConversationService(
+            repository=ConversationRepository(db_pool),
+            chat_engine=generation_service,
+            title_model=llm,
+        )
+
         yield Container(
-            ranking_service, generation_service, ingestion_service, auth_service
+            ranking_service,
+            generation_service,
+            ingestion_service,
+            auth_service,
+            conversation_service,
         )

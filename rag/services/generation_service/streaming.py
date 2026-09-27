@@ -1,10 +1,9 @@
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command
 
 from rag.domain.events import (
     SourcesReady,
@@ -13,12 +12,13 @@ from rag.domain.events import (
     ToolCallResult,
     ToolCallStart,
 )
+from rag.services.generation_service.turn import turn_sources
 
-# Only the agent node's tokens are the user-facing answer — guardrail's and verify's
-# own LLM calls (classification, not an answer) run through this same graph and would
-# otherwise leak into the text stream too, since astream_events captures every chat
-# model call in the run, not just this one.
-_USER_FACING_NODE = "agent"
+# Only create_agent's model node produces the user-facing answer. The guards' own LLM
+# calls (classification, not an answer) run in their middleware nodes of this same
+# graph and would otherwise leak into the text stream too, since astream_events
+# captures every chat model call in the run, not just this one.
+_USER_FACING_NODE = "model"
 
 
 async def stream_events(
@@ -32,7 +32,7 @@ async def stream_events(
             yield event
 
     final_state = await graph.aget_state(config)
-    sources = sorted(set(final_state.values.get("sources", [])))
+    sources = turn_sources(final_state.values.get("messages", []))
     if sources:
         yield SourcesReady(sources=sources)
 
@@ -62,13 +62,7 @@ def _parse_event(raw_event: Mapping[str, Any]) -> StreamEvent | None:
 
 
 def _tool_output_text(output: Any) -> str:
-    """A tool that needs to update graph state (e.g. search_kb writing `sources`)
-    returns a Command instead of a plain string — astream_events reports that
-    Command object itself as the output, so pull the real content back out of the
-    ToolMessage it carries rather than stringifying the Command.
-    """
-    if isinstance(output, Command) and isinstance(output.update, dict):
-        messages = output.update.get("messages") or []
-        if messages:
-            return str(messages[0].content)
+    """ToolNode reports a ToolMessage as the tool's output; the text is its content."""
+    if isinstance(output, ToolMessage):
+        return str(output.content)
     return str(output)

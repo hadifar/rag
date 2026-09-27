@@ -19,10 +19,10 @@ graph LR
 
     subgraph backendc["backend container (FastAPI/uvicorn)"]
         api[rag/api routers]
-        langgraph["LangGraph: guardrail → agent → tools → verify"]
+        langgraph["create_agent: model ⇄ tools + guard middleware"]
     end
 
-    postgres[(Postgres<br/>checkpointer + users)]
+    postgres[(Postgres<br/>checkpointer + users + conversations)]
     pinecone[(Pinecone<br/>dense + sparse indexes)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
@@ -32,7 +32,7 @@ graph LR
     proxy -->|"proxy_pass, SSE unbuffered"| api
     api -->|"login/refresh, bearer-gated routes"| postgres
     api --> langgraph
-    langgraph -->|thread_id checkpoints| postgres
+    langgraph -->|checkpoints, one thread per conversation| postgres
     langgraph -->|search_kb tool call| pinecone
     langgraph -->|chat completions| llm
     langgraph -.->|traces, if enabled| langfuse
@@ -75,17 +75,21 @@ merged into it — same composition-root-only rule, just a distinct kind of infr
 over a domain port, vs. a wrapped third-party SDK client) — see
 [conventions.md](conventions.md#adding-a-new-repository-persistence-behind-a-domain-port).
 
-## Generation graph (LangGraph)
+## Generation graph (`create_agent`)
+
+`generation_service/graph.py` builds the graph with LangChain's `create_agent` (a model ⇄ tools
+loop); the guards are middleware around it rather than hand-wired nodes:
 
 ```mermaid
 graph TD
-    __start__((start)) --> guardrail(guardrail)
-    guardrail(guardrail) --> agent(agent)
-    agent(agent) -.-> tools(tools)
-    agent(agent) -.-> verify(verify)
-    tools(tools) --> agent(agent)
-    verify(verify) -.->|ungrounded| agent(agent)
-    verify(verify) -.->|grounded| __end__((end))
+    __start__((start)) --> topical(TopicalGuard.before_agent)
+    topical --> resetg(GroundednessGuard.before_agent)
+    resetg --> model(model)
+    model --> verify(GroundednessGuard.after_model)
+    verify -.->|tool call| tools(tools)
+    verify -.->|ungrounded, under cap| model
+    verify -.->|final answer| __end__((end))
+    tools --> model
 
     classDef default fill:#f2f0ff,line-height:1.2
     classDef first fill-opacity:0
@@ -94,12 +98,19 @@ graph TD
     class __end__ last
 ```
 
-`guardrail` classifies the message as in/out of scope for AtlasFlow (adding an off-topic
-instruction rather than short-circuiting, so the decline text is still generated — and
-streamed — by `agent`). `agent` calls the LLM (bound to `search_kb`); `tools_condition` routes
-to `tools` on a tool call or on to `verify` otherwise. `tools` always loops back to `agent`.
-`verify` checks the final answer against retrieved context (`is_grounded`) and either ends the
-turn or sends `agent` back with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
+- **`TopicalGuard`** classifies the user's message once per turn (`before_agent`). For an
+  off-topic message it adds the decline instruction to the system prompt and removes the tools
+  — for that turn's model calls only (`wrap_model_call`), so the decline text is still generated
+  and streamed by `model`.
+- **`GroundednessGuard`** resets its revision counter each turn (`before_agent`), checks each
+  final answer against **this turn's** `search_kb` results (`after_model`), and on an ungrounded
+  one jumps back to `model` with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
+- **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
+
+Guard instructions are never saved to the thread: the checkpoint holds only what the user and
+the assistant said, so nothing carries over into later turns. "This turn" is everything after
+the latest `HumanMessage` (`generation_service/turn.py`); `search_kb` returns its source ids as
+the `ToolMessage` artifact, and the `sources` event is built from this turn's artifacts.
 
 ## Frontend structure
 
