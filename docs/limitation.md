@@ -17,7 +17,7 @@
 - No retrieval evaluation at all: no golden Q&A set, no precision/recall/groundedness metrics, nothing to catch a regression from a prompt, chunking, or model change before it ships
 
 ## Generation & guardrails
-- The topical guardrail is advisory, not a gate: `guardrail → agent` is an unconditional edge (see `graph.py`), so an off-topic classification only injects a "please decline" `SystemMessage` — the main agent LLM can still be talked out of following it. There is no code path that actually blocks a request.
+- The topical guardrail is advisory, not a gate: an off-topic classification only adds a "please decline" instruction and removes the tools for that turn (`TopicalGuard`) — the model can still be talked out of following the instruction. There is no code path that actually blocks a request.
 - The guardrail classifies only the latest human message in isolation (`_latest_human_message`) — a multi-turn conversation that gradually drifts off-topic or builds up a jailbreak across turns isn't caught, since only the most recent turn is scored.
 - The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_VERIFY_ATTEMPTS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
@@ -63,7 +63,7 @@
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 
 ## Testing & CI
-- Unit tests (`tests/unit/test_app.py`) are pure wiring tests against stubs — no coverage of guardrail logic, groundness verification, chunking, retry/fallback behavior, or answer quality
+- `tests/unit/test_generation_graph.py` covers the guards' per-turn behavior with a scripted fake model; otherwise unit tests are wiring tests against stubs — no coverage of chunking, retry/fallback behavior, or answer quality
 - Integration tests only run on manual `workflow_dispatch` (`integration-tests.yml`) — never automatically on push/PR to `master`, so there is no CI gate at all on retrieval or generation correctness before merge
 - CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to `master` doesn't build/push automatically
 - Nothing deploys automatically either — `infra/azure/main.bicep` must be applied by hand (`az deployment group create`); no deploy gate in CI

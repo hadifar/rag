@@ -80,7 +80,7 @@ calls an embedding model directly.
 |---|---|---|
 | `retrieval_service` | hybrid (dense+sparse) similarity search, plus single-document lookup by `source_id` | `VectorStorePort` |
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
-| `generation_service` | owns the LangGraph graph: guardrail → agent → tools → verify, tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
+| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
 
 ## LLM provider
 
@@ -141,8 +141,8 @@ project already runs its own Postgres).
 ## Streaming
 
 `generation_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
-vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `agent` node's chat
-model calls only — `guardrail` and `verify` run their own LLM calls (classification, not an
+vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `model` node's chat
+model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
 - FastAPI's `POST /api/chat/stream` turns it into SSE (`text` / `tool_start` / `tool_result` /
