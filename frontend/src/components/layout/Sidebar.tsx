@@ -11,10 +11,11 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 
-import { useAuth } from '../../context/AuthContext';
-import { useConversations } from '../../context/ConversationsContext';
+import { useAuth } from '../../hooks/useAuth';
+import { useConversations } from '../../hooks/useConversations';
+import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../../utils/conversations';
-import type { Conversation } from '../../utils/conversations';
+import type { Conversation } from '../../types';
 
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 
@@ -41,8 +42,7 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
       {({ isActive }) => (
         <>
           <Icon
-            className={`shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className={`size-4.5 shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
           />
           {!isCollapsed && label}
         </>
@@ -86,14 +86,8 @@ function ConversationLink({
 }
 
 function ConversationList() {
-  const { conversations, status, hasMore, isLoadingMore, loadMore, deleteConversation } =
-    useConversations();
-
-  const confirmDelete = (id: string) => {
-    if (window.confirm('Delete this chat? This cannot be undone.')) {
-      deleteConversation(id).catch(() => window.alert("Couldn't delete the chat. Please try again."));
-    }
-  };
+  const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversations();
+  const confirmDelete = useConfirmDeleteConversation();
 
   return (
     <>
@@ -122,7 +116,7 @@ function ConversationList() {
   );
 }
 
-export default function Sidebar() {
+export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -195,8 +189,7 @@ export default function Sidebar() {
           }`}
         >
           <PencilSquareIcon
-            className="shrink-0 text-slate-400"
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className="size-4.5 shrink-0 text-slate-400"
           />
           {!isCollapsed && 'New chat'}
         </button>
@@ -222,8 +215,7 @@ export default function Sidebar() {
           }`}
         >
           <ArrowRightStartOnRectangleIcon
-            className="shrink-0 text-slate-400"
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className="size-4.5 shrink-0 text-slate-400"
           />
           {!isCollapsed && 'Log out'}
         </button>

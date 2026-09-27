@@ -10,7 +10,6 @@
 - Every search makes one embedding API call, and every ingested chunk one embedding (batched) — retrieval now depends on the LLM provider being up, not just Postgres
 
 ## Retrieval
-- One shared `chunks` table — no per-tenant/workspace isolation
 - The keyword side is Postgres full-text with the `english` configuration and `ts_rank_cd`, not BM25: no IDF weighting, and non-English documents are stemmed as English
 - No reranker
 - Reciprocal rank fusion uses a hardcoded `k=5` (`_reciprocal_rank_fusion`) — untuned against any eval set; the conventional default is `k=60`, and this choice overweights whichever result lands rank 1
@@ -46,9 +45,6 @@
   conversation later shows only the revision.
 
 ## Frontend
-- The access token (15 min) is only refreshed on page load — after it expires every API call
-  fails with 401 until the user reloads. Each `api/*.ts` module also does its own `fetch`,
-  headers and error handling; there's no shared client that could refresh-and-retry once.
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write
   endpoint), which misleads users.
 

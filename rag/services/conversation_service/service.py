@@ -57,21 +57,26 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID | None, message: str
     ) -> Turn:
         """Resolves the conversation a message belongs to before any streaming starts,
-        so a foreign or unknown id fails as a plain 404 instead of mid-stream.
+        so someone else's id fails as a plain 404 instead of mid-stream.
 
-        No id starts a new conversation, owned by `user_id` and titled after the
-        message until `stream_turn` generates a real title.
+        An id not seen before (the client generates it for a new chat) or no id starts
+        a new conversation, owned by `user_id` and titled after the message until
+        `stream_turn` generates a real title.
         """
-        if conversation_id is None:
+        existing = (
+            await self._repository.get(conversation_id) if conversation_id else None
+        )
+        if existing is None:
             conversation = await self._repository.create(
-                user_id, _fallback_title(message)
+                user_id, _fallback_title(message), conversation_id
             )
             return Turn(conversation, is_new=True)
 
-        await self._get_owned(user_id, conversation_id)
-        conversation = await self._repository.touch(conversation_id)
+        if existing.user_id != user_id:
+            raise ConversationNotFoundError(existing.id)
+        conversation = await self._repository.touch(existing.id)
         if conversation is None:  # deleted between the ownership check and now
-            raise ConversationNotFoundError(conversation_id)
+            raise ConversationNotFoundError(existing.id)
         return Turn(conversation, is_new=False)
 
     async def stream_turn(self, turn: Turn, message: str) -> AsyncIterator[StreamEvent]:

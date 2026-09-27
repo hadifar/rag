@@ -1,32 +1,16 @@
 import { useState, type SubmitEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 
-import { useAuth } from '../context/AuthContext';
+import { useLogin } from '../hooks/useLogin';
 
-export default function LoginPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
+export function LoginPage() {
+  const { submit, error, isPending } = useLogin();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: SubmitEvent) => {
+  const handleSubmit = (e: SubmitEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      await login(email, password);
-      const from = (location.state as { from?: { pathname: string } } | null)?.from;
-      navigate(from?.pathname ?? '/', { replace: true });
-    } catch {
-      setError('Invalid email or password');
-    } finally {
-      setIsSubmitting(false);
-    }
+    submit(email, password);
   };
 
   return (
@@ -74,10 +58,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isPending}
             className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-40"
           >
-            {isSubmitting ? 'Signing in...' : 'Sign in'}
+            {isPending ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>

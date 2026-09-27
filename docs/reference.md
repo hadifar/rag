@@ -61,9 +61,9 @@ migrations/                            # Alembic — `users`, `conversations`, `
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
-│   ├── components/                   # ui component
-│   ├── context/                      # AuthContext (access token in memory), ConversationsContext (sidebar list)
-│   ├── hooks/                        # useChat (streaming + history loading)
+│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles)
+│   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
+│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
 └── (Vite build served by nginx in Docker)
@@ -88,6 +88,15 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 | `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
+`container.py`'s `build_container` is the composition root: an async context manager that opens
+the Postgres pools and tracing, constructs every adapter, repository and service, and tears the
+connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
+`ContainerDep`/`SettingsDep` in `api/deps.py` read it.
+
+Ingestion today has one `DocumentLoaderPort` (`MarkdownFileLoader`) and two `ChunkerPort`s:
+`WholeDocumentChunker` (wired in by default) and `MarkdownHeaderChunker`. Chunk ids are
+`f"{source_id}::{chunk_index}"`, so re-running `rag ingest` upserts over existing chunks.
+
 ## LLM provider
 
 `adapters/llm_client.py`'s `build_llm(settings)` returns a `BaseChatModel`, picked by matching
@@ -108,10 +117,13 @@ interface, so neither know or care which backend is selected.
 A conversation is a row in the `conversations` table (`id`, `user_id`, `title`, `created_at`,
 `updated_at`; `migrations/versions/0002_…`), owned by `ConversationService`. Its messages live in
 the LangGraph checkpointer, whose thread id is the conversation's id:
-- The server assigns every id. A `ChatRequest` without `conversation_id` starts a new
-  conversation owned by the caller; the stream's first SSE event (`conversation`) carries its id.
-- A `conversation_id` that doesn't exist or belongs to another user is a 404 — the same answer
-  for both, so ids can't be probed. This is checked before the stream starts.
+- The client picks a new chat's id (a random UUID) and sends it with the first message; a
+  `conversation_id` the server hasn't seen starts a new conversation under that id, owned by the
+  caller. Omitting it also starts one, with a server-generated id. The stream's first SSE event
+  (`conversation`) carries the conversation either way.
+- A `conversation_id` that belongs to another user is a 404, checked before the stream starts.
+  Reading or deleting one that doesn't exist is the same 404, so ids can't be probed there;
+  chatting to an unknown id creates it, which reveals nothing a random UUID could find.
 - A new conversation is titled after its first message, then after the first answer an LLM
   call writes a short title, sent as the stream's last event (`title`).
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
@@ -138,7 +150,10 @@ its own Postgres).
   for a password, `argon2-cffi` hashed) — there's no `POST /register`.
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
-  and kept in memory only (React context, never `localStorage`).
+  and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
+  `authFetch`, which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
+  if the refresh fails too, `AuthProvider` switches to unauthenticated and `RequireAuth`
+  redirects to `/login`.
 - **Refresh token** — a longer-lived JWT (`AUTH__REFRESH_TOKEN_EXPIRE_DAYS`, default 7d), set as an
   httpOnly/SameSite=Lax cookie scoped to `/api/auth`, always `Secure` (TLS
   terminates at nginx/App Service, so the app can't tell https from the request; local dev over
@@ -215,13 +230,18 @@ app to pick it up immediately.
 `chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
 [Authentication](#authentication)); `auth` and `health` don't.
 
+Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
+class attribute (500 on the base). `api/error_handlers.py` registers one
+`@app.exception_handler(RagError)`, and Starlette's MRO-based dispatch sends every subclass
+there, so the response status comes from the exception class itself.
+
 - `POST /api/auth/login` — `{email, password}` → `{access_token, token_type}`, sets the refresh
   cookie.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
 - `GET /api/auth/me` — returns `{id, email}` for the caller's access token.
 - `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
-  events; no `conversation_id` starts a new conversation. 404 for someone else's conversation.
+  events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.

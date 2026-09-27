@@ -29,11 +29,11 @@ src/
 ├── api/          # network calls (chat.ts streams SSE from /api/chat/stream; conversations.ts)
 ├── components/
 │   ├── layout/   # AppLayout, RequireAuth, Sidebar (new chat, your conversations, settings)
-│   └── ...       # MessageList, Composer, and the tool/sources/typing bubbles it renders
-├── context/      # AuthContext (session), ConversationsContext (sidebar list, paging, delete)
-├── hooks/        # useChat (streaming, message assembly, loading a conversation's history)
+│   └── chat/     # MessageList, Composer, and the text/tool/sources/typing bubbles it renders
+├── context/      # AuthProvider (session), ConversationsProvider (sidebar list, paging, delete)
+├── hooks/        # useChat (streaming, loading a conversation's history), useAuth/useConversations, …
 ├── pages/        # HomePage, ChatPage, LoginPage, SettingsPage, NotFoundPage
-├── types/        # shared types (chat messages/events) + api.generated.ts from the backend's OpenAPI
+├── types/        # import from `types/`: api.ts (backend Schemas), chat.ts (messages/events), api.generated.ts
 ├── utils/        # pure helpers: conversation list updates, history → message bubbles
 ├── App.tsx       # router
 └── main.tsx      # entry point

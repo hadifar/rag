@@ -235,5 +235,3 @@ __marimo__/
 bin/__pycache__/
 
 .import_linter_cache/
-
-data/

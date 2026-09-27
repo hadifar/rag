@@ -22,10 +22,12 @@ class FakeConversationRepository:
         self._clock += timedelta(seconds=1)
         return self._clock
 
-    async def create(self, user_id: uuid.UUID, title: str) -> Conversation:
+    async def create(
+        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
+    ) -> Conversation:
         now = self._now()
         conversation = Conversation(
-            id=uuid.uuid4(),
+            id=conversation_id or uuid.uuid4(),
             user_id=user_id,
             title=title,
             created_at=now,

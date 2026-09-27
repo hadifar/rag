@@ -41,7 +41,12 @@ class UserRepositoryPort(Protocol):
 
 
 class ConversationRepositoryPort(Protocol):
-    async def create(self, user_id: uuid.UUID, title: str) -> Conversation: ...
+    async def create(
+        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
+    ) -> Conversation:
+        """`conversation_id` is the client's id for it; None generates one."""
+        ...
+
     async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...
     async def list_for_user(
         self,

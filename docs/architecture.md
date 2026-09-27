@@ -72,18 +72,16 @@ they depend on `domain`'s `Port` protocols, and `container.py` is the only place
 adapter or repository gets wired in. `rag.repository` exists alongside `rag.adapters` rather than
 merged into it — same composition-root-only rule, just a distinct kind of infra (hand-written SQL
 over a domain port, vs. a wrapped third-party SDK client) — see
-[conventions.md](conventions.md#adding-a-new-repository-persistence-behind-a-domain-port).
+[conventions.md](conventions.md#adding-a-new-repository-sql-behind-a-domain-port).
 
-## Generation graph (`create_agent`)
+## Agent
 
-`generation_service/graph.py` builds the graph with LangChain's `create_agent` (a model ⇄ tools
-loop); the guards are middleware around it rather than hand-wired nodes:
+`generation_service/graph.py` builds the agent with LangChain's `create_agent`;
 
 ```mermaid
 graph TD
     __start__((start)) --> topical(TopicalGuard.before_agent)
-    topical --> resetg(GroundednessGuard.before_agent)
-    resetg --> model(model)
+    topical --> model(model)
     model --> verify(GroundednessGuard.after_model)
     verify -.->|tool call| tools(tools)
     verify -.->|ungrounded, under cap| model
@@ -101,9 +99,10 @@ graph TD
   off-topic message it adds the decline instruction to the system prompt and removes the tools
   — for that turn's model calls only (`wrap_model_call`), so the decline text is still generated
   and streamed by `model`.
-- **`GroundednessGuard`** resets its revision counter each turn (`before_agent`), checks each
-  final answer against **this turn's** `search_kb` results (`after_model`), and on an ungrounded
-  one jumps back to `model` with a revision instruction, capped at `MAX_VERIFY_ATTEMPTS`.
+- **`GroundednessGuard`** checks each final answer against **this turn's** `search_kb` results
+  (`after_model`), and on an ungrounded one jumps back to `model` with a revision instruction,
+  capped at `MAX_VERIFY_ATTEMPTS`. It keeps no state: a rejected answer stays in the thread, so
+  the revisions so far are this turn's final answers minus one.
 - **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
 
 Guard instructions are never saved to the thread: the checkpoint holds only what the user and
@@ -117,12 +116,12 @@ the `ToolMessage` artifact, and the `sources` event is built from this turn's ar
 graph TD
     pages["pages/<br/>ChatPage, SettingsPage, HomePage, LoginPage, NotFoundPage"]
     guard["components/layout/RequireAuth<br/>redirects to /login if unauthenticated"]
-    authctx["context/AuthContext<br/>access token in memory, silent refresh on load"]
-    convctx["context/ConversationsContext<br/>sidebar list, paging, delete"]
+    authctx["context/AuthProvider<br/>session status + user, restore on load"]
+    convctx["context/ConversationsProvider<br/>sidebar list, paging, delete"]
     hooks["hooks/<br/>useChat"]
     utils["utils/<br/>pure list/history helpers"]
-    apiclient["api/<br/>chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
-    components["components/<br/>Sidebar, MessageList, Composer, ToolBubble, SourcesBubble"]
+    apiclient["api/<br/>client.ts (token, authFetch), chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
+    components["components/<br/>layout/: Sidebar · chat/: MessageList, Composer, bubbles"]
     backend[["backend<br/>/api/*"]]
 
     guard -->|reads status from| authctx
@@ -135,23 +134,22 @@ graph TD
     convctx --> apiclient
     convctx --> utils
     components -->|list| convctx
-    components -->|accessToken| authctx
     components -.->|renders state from| hooks
-    apiclient -->|fetch / fetchEventSource, Bearer token| backend
-    authctx -->|login/refresh/logout, credentials: include| apiclient
+    apiclient -->|authFetch: Bearer token, refresh + retry once on 401| backend
+    authctx -->|login/restore/logout; notified on session expiry| apiclient
 ```
 
-Components stay presenter-only: `useChat` owns the streaming/state logic (and follows a new
-conversation's server-assigned id into the URL without remounting — `chat/:conversationId?` is
-one route), `ConversationsContext` owns the sidebar list, `utils/` holds their pure transforms, `api/chat.ts` owns
-the transport, `ToolBubble`/`MessageList` only render what the hook hands them. `SourcesBubble`
-fetches its kb link via `api/kb.ts` and opens a blob URL rather than a plain `<a href>`, since a
-bearer-token-protected endpoint can't be reached by a bare browser navigation — the same
-presenter-only rule just means the fetch/blob logic lives in `api/kb.ts`, not the component.
+Components stay presenter-only: `useChat` owns the streaming/state logic (a new chat's first
+message generates its id client-side and moves the URL to it before streaming, without
+remounting — `chat/:conversationId?` is one route), `ConversationsProvider` owns the sidebar list, `utils/` holds their pure transforms, `api/chat.ts` owns
+the transport, `ToolBubble`/`MessageList` only render what the hook hands them. `SourcesBubble`'s
+links open through `api/kb.ts` (passed in as `onOpen` by `ChatPage`), which fetches the file and
+opens a blob URL rather than a plain `<a href>`, since a bearer-token-protected endpoint can't be
+reached by a bare browser navigation.
 
 ## Backend schema → frontend types
 
-A build-time connection, not a runtime one — `types/index.ts` re-exports the whole generated
+A build-time connection, not a runtime one — `types/api.ts` exposes the whole generated
 schema map as `Schemas`, so `api/chat.ts` and `api/settings.ts` reference `Schemas['ChatRequest']`
 / `Schemas['SettingsResponse']` instead of hand-duplicating request/response shapes:
 
@@ -160,14 +158,18 @@ graph LR
     schema["rag/api/schema/<br/>chat.py, conversations.py, auth.py, settings.py, health.py"]
     genscript["openapi-typescript<br/>(generate:types)"]
     generated[types/api.generated.ts]
-    idx["types/index.ts<br/>Schemas = components['schemas']"]
+    idx["types/api.ts<br/>Schemas = components['schemas']"]
     apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
 
     schema --> genscript --> generated --> idx --> apiclient
 ```
 
 `schema/` mirrors `routers/` one module per feature, rather than one flat file — see
-[conventions.md](conventions.md#adding-a-new-schemadto).
+[conventions.md](conventions.md#adding-a-new-schemadto). The DTOs live under `rag/api/`, not in a
+top-level `rag/schema/`, because nothing outside `rag.api` imports them: making them a sibling of
+`domain`/`services`/`adapters` would claim a cross-layer role they don't have, and nesting them
+gets the boundary for free from `import-linter`'s `layering` contract, which already keeps
+`domain`/`services` out of `rag.api`.
 
 Kept in sync by the `frontend-api-types` pre-commit hook, not by hand — see
 [enforcement.md](enforcement.md#backendfrontend-schema-sync).
