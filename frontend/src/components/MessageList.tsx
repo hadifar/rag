@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { ChatMessage } from '../types/chat';
 import { TextBubble } from './TextBubble';
 import { ToolBubble } from './ToolBubble';
@@ -10,7 +10,9 @@ type MessageListProps = {
   onOpenSource: (name: string) => void;
 };
 
-function MessageBubble({
+// Memoized: while an answer streams, only the bubble whose message changed re-renders
+// (and re-parses its markdown), not every earlier one.
+const MessageBubble = memo(function MessageBubble({
   message,
   onOpenSource,
 }: {
@@ -30,7 +32,7 @@ function MessageBubble({
     case 'sources':
       return <SourcesBubble {...message.content} onOpen={onOpenSource} />;
   }
-}
+});
 
 export function MessageList({ messages, onOpenSource }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);

@@ -4,7 +4,6 @@ import { AppLayout } from './components/layout/AppLayout';
 import { RequireAuth } from './components/layout/RequireAuth';
 import { AuthProvider } from './context/AuthContext';
 import { HomePage } from './pages/HomePage';
-import { ChatPage } from './pages/ChatPage';
 import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -19,8 +18,12 @@ const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          // One route for new (/chat) and existing (/chat/:id) chats
-          { path: 'chat/:conversationId?', element: <ChatPage /> },
+          // One route for new (/chat) and existing (/chat/:id) chats. Loaded on first
+          // visit: it pulls in the markdown renderer, which no other page needs.
+          {
+            path: 'chat/:conversationId?',
+            lazy: async () => ({ Component: (await import('./pages/ChatPage')).ChatPage }),
+          },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

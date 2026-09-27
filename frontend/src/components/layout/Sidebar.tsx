@@ -42,8 +42,7 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
       {({ isActive }) => (
         <>
           <Icon
-            className={`shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className={`size-4.5 shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
           />
           {!isCollapsed && label}
         </>
@@ -190,8 +189,7 @@ export function Sidebar() {
           }`}
         >
           <PencilSquareIcon
-            className="shrink-0 text-slate-400"
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className="size-4.5 shrink-0 text-slate-400"
           />
           {!isCollapsed && 'New chat'}
         </button>
@@ -217,8 +215,7 @@ export function Sidebar() {
           }`}
         >
           <ArrowRightStartOnRectangleIcon
-            className="shrink-0 text-slate-400"
-            style={{ height: '1.125rem', width: '1.125rem' }}
+            className="size-4.5 shrink-0 text-slate-400"
           />
           {!isCollapsed && 'Log out'}
         </button>
