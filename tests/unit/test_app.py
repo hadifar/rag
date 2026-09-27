@@ -15,6 +15,7 @@ from rag.api.routers.chat import SseEventType
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
+    CheckpointerConfig,
     LoggingObservability,
     OpenAILLM,
     PineconeConfig,
@@ -85,6 +86,7 @@ def _stub_settings() -> Settings:
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
         ),
         OBSERVABILITY=LoggingObservability(),
+        CHECKPOINTER=CheckpointerConfig(DATABASE_URL=SecretStr("unused")),
     )
 
 

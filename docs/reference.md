@@ -9,12 +9,12 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 | Concern | Choice |
 |---|---|
 | Language | Python ≥3.12, managed with `uv` |
-| Backend framework | FastAPI, LangGraph |
+| Backend framework | FastAPI, LangChain `create_agent` (on LangGraph) |
 | Frontend | React 19 + TypeScript + Vite, Tailwind CSS |
 | Retrieval | Hybrid search via the `pinecone` SDK's async client directly — Pinecone hosts the embedding models |
 | Auth | JWT (access + refresh) via `pyjwt`, `argon2-cffi` password hashing, users in Postgres — see [Authentication](#authentication) |
 | Observability | `logging` (default) or `langfuse` |
-| Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users storage) |
+| Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users + conversations) |
 | Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` — see [enforcement.md](enforcement.md) |
 
@@ -60,10 +60,11 @@ rag/
 migrations/                            # Alembic — `users` and `conversations` tables, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
-│   ├── api/                          # chat.ts (SSE client), settings.ts, auth.ts, kb.ts
+│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
 │   ├── components/                   # ui component
-│   ├── context/                      # AuthContext (access token in memory, refresh via httpOnly cookie)
-│   ├── hooks/                        # hooks
+│   ├── context/                      # AuthContext (access token in memory), ConversationsContext (sidebar list)
+│   ├── hooks/                        # useChat (streaming + history loading)
+│   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
 └── (Vite build served by nginx in Docker)
 
@@ -74,7 +75,7 @@ infra/                                 # Docker + Azure, no Python
 
 ## Services
 
-Three services, each with a narrow, ports-typed constructor. There is no separate embedding
+Five services, each with a narrow constructor. There is no separate embedding
 service — Pinecone's integrated inference embeds text server-side, so nothing in `rag/` ever
 calls an embedding model directly.
 
@@ -82,7 +83,9 @@ calls an embedding model directly.
 |---|---|---|
 | `retrieval_service` | hybrid (dense+sparse) similarity search, plus single-document lookup by `source_id` | `VectorStorePort` |
 | `ingestion_service` | load → chunk → upsert, source-agnostic (upsert triggers Pinecone-side embedding) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
-| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing | `BaseChatModel`, `retrieval_service`, checkpointer |
+| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `retrieval_service`, checkpointer |
+| `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
+| `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
 ## LLM provider
 
@@ -115,13 +118,12 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   answer and sources; tool calls aren't replayed).
 
 The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
-context manager, mirroring `open_vector_store()`) from `Settings.CHECKPOINTER`, a discriminated
-union selected by `CHECKPOINTER__BACKEND`:
-- `"memory"` (default) → `InMemorySaver`, for local dev; doesn't survive a restart or multiple
-  replicas.
-- `"postgres"` → `AsyncPostgresSaver`, reading `CHECKPOINTER__DATABASE_URL`; `checkpointer.setup()`
-  runs on connect (idempotent schema migration). Durable across restarts and safe for multiple
-  backend replicas.
+context manager, mirroring `open_vector_store()`): an `AsyncPostgresSaver` over a connection
+pool, reading `CHECKPOINTER__DATABASE_URL` (required). The pool replaces connections that die,
+so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
+(idempotent schema migration). Durable across restarts and safe for multiple backend replicas.
+There is deliberately no in-memory option: conversation rows always live in Postgres, so
+in-memory messages would leave every conversation empty after a restart.
 
 ## Authentication
 
@@ -208,7 +210,7 @@ app to pick it up immediately.
 
 ## API surface
 
-`chat`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
+`chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
 [Authentication](#authentication)); `auth` and `health` don't.
 
 - `POST /api/auth/login` — `{email, password}` → `{access_token, token_type}`, sets the refresh

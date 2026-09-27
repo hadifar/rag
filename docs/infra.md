@@ -31,8 +31,12 @@ Basic/Free/Shared).
 
 Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
 federated credential are one-time setup outside this template) and the Postgres server behind
-`CHECKPOINTER__DATABASE_URL` — not yet decided whether that's Azure Database for PostgreSQL or
-something else.
+`CHECKPOINTER__DATABASE_URL`/`AUTH__DATABASE_URL` — not yet decided whether that's Azure Database
+for PostgreSQL or something else.
+
+Not wired yet: `AUTH__DATABASE_URL`/`AUTH__JWT_SECRET` aren't in the backend's App Settings, and
+`AUTH` is required, so a backend deployed from this template currently fails at boot. Nothing
+runs `alembic upgrade head` on deploy either — see [limitation.md](limitation.md#infra--deployment).
 
 **Validate locally, without deploying:**
 

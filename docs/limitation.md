@@ -35,6 +35,21 @@
   has to delete each conversation's thread first.
 - Conversations created before the `conversations` table existed (checkpoint threads keyed by
   the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
+- Users/conversations (`AUTH__DATABASE_URL`, schema by Alembic) and messages
+  (`CHECKPOINTER__DATABASE_URL`, schema by `checkpointer.setup()` at boot) are two settings and
+  two schema owners for what is, in every deployment so far, the same database.
+- The whole thread is sent to the LLM every turn — no trimming or summarization — so long
+  conversations get slower and costlier per turn and can eventually exceed the context window.
+- The groundedness check runs after the answer has already streamed. When it asks for a
+  revision, the user sees the rejected draft and the revision in the same bubble; reopening the
+  conversation later shows only the revision.
+
+## Frontend
+- The access token (15 min) is only refreshed on page load — after it expires every API call
+  fails with 401 until the user reloads. Each `api/*.ts` module also does its own `fetch`,
+  headers and error handling; there's no shared client that could refresh-and-retry once.
+- The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write
+  endpoint), which misleads users.
 
 ## Security
 - Login/register are self-hosted, not a third-party identity provider — no self-serve signup
@@ -51,22 +66,25 @@
 
 ## Reliability
 - No retry/backoff around Pinecone calls (LLM calls already retry with a fallback, see `graph.py`) — `search_kb` has no error handling at all, so a transient Pinecone error propagates straight out of the graph mid-turn instead of degrading gracefully like the LLM path does
-- `ChatOpenAI` has no request timeout configured — a hung upstream call can hold a worker (and its Postgres checkpointer connection) open indefinitely rather than failing into the retry/fallback path
+- The SSE stream has no `error` or `done` event: a failure mid-turn (e.g. the Pinecone error above) just closes the connection, and the UI can only show a generic error
+- `ChatOpenAI` has no request timeout configured — a hung upstream call can hold a request open indefinitely rather than failing into the retry/fallback path
 - `/health/ready` does a real embed + hybrid-search round trip on every hit
 - Guardrail + verifier each add a full extra LLM call per turn, with no way to disable either
 
 ## Observability
-- Zero application logging anywhere in `rag/` — no `logging` usage at all. The only signal on failure is whatever uvicorn/App Service captures by default, plus LangChain/LangGraph traces in Langfuse *if* `LANGFUSE_ENABLED=true`
+- Almost no application logging: only the `logging` observability backend and a warning when title generation fails. `error_handlers.py` has no catch-all handler, so any exception that isn't a `RagError` becomes a bare 500 with nothing logged beyond uvicorn's default traceback, plus LangChain/LangGraph traces in Langfuse *if* `OBSERVABILITY__BACKEND=langfuse`
 - No error tracking or alerting (no Sentry or equivalent) — a production incident would be discovered by a user complaint, not by the system
 
 ## Scalability
 - `cli.py`'s `serve()` calls `uvicorn.run(...)` with no `workers=` — the app always runs as a single process today, even though the Postgres checkpointer would actually support scaling out
+- Within one process, all checkpoint reads/writes run one at a time: `AsyncPostgresSaver` holds its own `asyncio.Lock` around every query, even with the connection pool `checkpointer.py` now gives it (the pool is for reconnecting after a Postgres restart, not for concurrency). The queries are short and the lock isn't held during LLM calls, so this only matters at high request rates; more workers/replicas each get their own lock
 - `main.bicep`'s App Service Plan has no autoscale rule or instance count set, so it defaults to a single instance regardless of load
 - `ensure_indexes()` (see Data & ingestion) runs unguarded on every app boot — if multiple replicas cold-start at once against a not-yet-created index, nothing prevents a race on `create_index_for_model`
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 
 ## Testing & CI
-- `tests/unit/test_generation_graph.py` covers the guards' per-turn behavior with a scripted fake model; otherwise unit tests are wiring tests against stubs — no coverage of chunking, retry/fallback behavior, or answer quality
+- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, and the API wiring against stubs — no coverage of chunking, RRF, retry/fallback behavior, or answer quality
+- No frontend tests at all — `useChat`, the conversations context and the SSE parsing are only checked by `tsc`
 - Integration tests only run on manual `workflow_dispatch` (`integration-tests.yml`) — never automatically on push/PR to `master`, so there is no CI gate at all on retrieval or generation correctness before merge
 - CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to `master` doesn't build/push automatically
 - Nothing deploys automatically either — `infra/azure/main.bicep` must be applied by hand (`az deployment group create`); no deploy gate in CI
@@ -74,4 +92,4 @@
 
 ## Infra & deployment
 - The Postgres server behind `CHECKPOINTER__DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
-- `AUTH__DATABASE_URL`/`AUTH__JWT_SECRET` aren't wired into `main.bicep`/Key Vault at all yet — same gap as the checkpointer's `CHECKPOINTER__DATABASE_URL` above, plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)
+- `AUTH__DATABASE_URL`/`AUTH__JWT_SECRET` aren't wired into `main.bicep`/Key Vault at all yet. `AUTH` is a required setting, so a backend deployed from the current template fails `Settings` validation at boot — the Azure deploy is broken until this is wired. Same gap as the checkpointer's `CHECKPOINTER__DATABASE_URL` above, plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)

@@ -22,8 +22,9 @@ jobs:
       PINECONE__NAMESPACE: ${{ vars.PINECONE_NAMESPACE }}
 
       AUTH__DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
+      CHECKPOINTER__DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
       AUTH__JWT_SECRET: ci-integration-unused-jwt-secret-000000
-    # build_container opens the auth DB pool, so the tests need a reachable Postgres.
+    # build_container opens the auth and checkpointer pools, so the tests need Postgres.
     services:
       postgres:
         image: postgres:17-alpine

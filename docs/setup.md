@@ -38,10 +38,10 @@ uv run rag create-user you@example.com
 ```bash
 uv run python -m rag serve
 ```
-If `.env` has `CHECKPOINTER__BACKEND=postgres`, a Postgres instance must be reachable at
-`CHECKPOINTER__DATABASE_URL` — either `docker compose up -d postgres` (published on
-`localhost:5432`; adjust its host to `localhost` when running the app outside Docker) or set
-`CHECKPOINTER__BACKEND=memory` for a dependency-free local run.
+A Postgres instance must be reachable at `AUTH__DATABASE_URL` (users, conversations) and
+`CHECKPOINTER__DATABASE_URL` (messages) — e.g. `docker compose up -d postgres` (published on
+`localhost:5432`; adjust the URLs' host to `localhost` when running the app outside Docker).
+There's no in-memory mode.
 
 ### CLI
 ```bash

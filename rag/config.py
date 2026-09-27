@@ -28,12 +28,9 @@ class AzureOpenAILLM(BaseModel):
     API_VERSION: str
 
 
-class MemoryCheckpointer(BaseModel):
-    BACKEND: Literal["memory"] = "memory"
+class CheckpointerConfig(BaseModel):
+    """Where conversation messages are stored (LangGraph's Postgres checkpointer)."""
 
-
-class PostgresCheckpointer(BaseModel):
-    BACKEND: Literal["postgres"] = "postgres"
     DATABASE_URL: SecretStr
 
 
@@ -65,10 +62,6 @@ ObservabilityConfig = Annotated[
     LoggingObservability | LangfuseObservability, Field(discriminator="BACKEND")
 ]
 
-CheckpointerConfig = Annotated[
-    MemoryCheckpointer | PostgresCheckpointer, Field(discriminator="BACKEND")
-]
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -82,7 +75,7 @@ class Settings(BaseSettings):
     LLM: LLMConfig
     PINECONE: PineconeConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()
-    CHECKPOINTER: CheckpointerConfig = MemoryCheckpointer()
+    CHECKPOINTER: CheckpointerConfig
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

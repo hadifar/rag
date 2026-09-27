@@ -354,7 +354,6 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     {
       // Must match the port rag.config.Settings.PORT defaults to / the app binds.
       WEBSITES_PORT: '8000'
-      CHECKPOINTER__BACKEND: 'postgres'
 
       CHECKPOINTER__DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'

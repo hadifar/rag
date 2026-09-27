@@ -22,6 +22,7 @@ class Container:
     generation_service: GenerationService
     ingestion_service: IngestionService
     auth_service: AuthService
+    conversation_service: ConversationService
 
 
 @asynccontextmanager
@@ -74,7 +75,7 @@ threaded through existing chunkers. Give new chunks deterministic ids
 (`f"{source_id}::{chunk_index}"`, the existing convention) so re-running `rag ingest` upserts over
 old vectors instead of duplicating them.
 
-The LLM/observability/checkpointer backends below follow the same rule through a different
+The LLM/observability backends below follow the same rule through a different
 mechanism — a discriminated union matched in one place instead of a `Protocol` — but the constraint
 is identical: nothing downstream branches on which concrete implementation is active.
 
@@ -91,7 +92,7 @@ injected service, not in the route body — a route should read as "call the ser
 result." `app.py` imports the router object directly (`from rag.api.routers.chat import router as
 chat_router`) and does `app.include_router(chat_router, dependencies=...)` — the prefix lives on
 the router itself, not at inclusion time; `dependencies=` at inclusion time is for a uniform gate
-across every route in that router (e.g. `[Depends(get_current_user)]` on `chat`/`kb`/`settings`);
+across every route in that router (e.g. `[Depends(get_current_user)]` on `chat`/`conversations`/`kb`/`settings`);
 a single route needing something the others don't takes it as a per-route dependency instead
 (`@router.get(..., dependencies=[Depends(...)])` or a real parameter if the value is used, like
 `auth.py`'s `/me` using `current_user: CurrentUserDep`).
@@ -108,10 +109,29 @@ omitted); `rag/api/error_handlers.py`'s single `@app.exception_handler(RagError)
 `exc.status_code` polymorphically via Starlette's MRO-based dispatch, so a new domain error needs
 no change to `app.py` or `error_handlers.py` at all — just the `status_code` on the new class.
 
+## Adding a user-owned resource: check ownership in the service, answer 404
+
+Anything a user owns (today: conversations) is looked up by id *and* checked against the caller
+in the service (`ConversationService._get_owned`), never in the router. Missing and
+someone-else's both raise the same `ConversationNotFoundError` (404), so ids can't be probed. When
+the resource is used by a streaming endpoint, resolve it before the `StreamingResponse` starts
+(`start_turn`), so a bad id is a clean 404 instead of an error inside an already-200 stream.
+
+## Adding a new SSE event
+
+The `/api/chat/stream` wire format is hand-kept in four places; change all four together:
+1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
+2. its encoder in `_ENCODERS` in `rag/api/routers/chat.py` — `data` must be single-line JSON
+   (`json.dumps`/`model_dump_json`), never raw text, or a `\n\n` ends the event early;
+3. its `case` in `frontend/src/api/chat.ts` and its member of `ChatStreamEvent` in
+   `frontend/src/types/chat.ts`;
+4. `test_chat_stream_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only
+   check that catches the two sides drifting apart.
+
 ## Adding a new schema/DTO
 
-`rag/api/schema/` mirrors `rag/api/routers/` one module per feature (`chat.py`, `auth.py`,
-`settings.py`, `health.py`) rather than one flat file — a new feature gets its own schema module,
+`rag/api/schema/` mirrors `rag/api/routers/` one module per feature (`chat.py`,
+`conversations.py`, `auth.py`, `settings.py`, `health.py`) rather than one flat file — a new feature gets its own schema module,
 imported only by its own router. These are request/response DTOs for the wire format, not domain
 models — they live under `rag/api/` (not a top-level `rag/schema/`) because nothing outside
 `rag.api` ever imports them; promoting them to a sibling of `domain`/`services`/`adapters` would
@@ -132,13 +152,12 @@ re-instantiated per call.
 ## Adding a new backend behind a `Settings`-driven choice: extend the discriminated union, don't branch downstream
 
 Whenever a capability's concrete implementation should be selected by configuration rather than by
-call site — today: `LLM`, `OBSERVABILITY`, `CHECKPOINTER` — it's modeled as a discriminated union
+call site — today: `LLM`, `OBSERVABILITY` — it's modeled as a discriminated union
 in `config.py` (each backend its own Pydantic model, keyed by a `BACKEND` literal, populated
 straight from nested env vars like `OBSERVABILITY__PUBLIC_KEY`), resolved by a single `match` in
 the corresponding adapter (`adapters/llm_client.py`'s `build_llm`, `adapters/observability.py`'s
-`open_trace_config`, `adapters/checkpointer.py`'s `open_checkpointer`). Callers never branch on
-which backend is active — they just call `trace_config(name)`, use the checkpointer object, or (for
-`LLM`) get back a plain `BaseChatModel`. A new backend is a new model class in `config.py` plus a
+`open_trace_config`). Callers never branch on which backend is active — they just call
+`trace_config(name)`, or (for `LLM`) get back a plain `BaseChatModel`. A new backend is a new model class in `config.py` plus a
 new `case` in that one `match`, not a new code path exposed to callers.
 
 ## Adding a new secret

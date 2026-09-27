@@ -17,7 +17,8 @@ npm run preview  # serve the production build
 npm run lint     # oxlint
 ```
 
-The dev server proxies `/api` (covering `/api/chat`, `/api/health`, `/api/kb`, `/api/settings`) to
+The dev server proxies `/api` (covering `/api/auth`, `/api/chat`, `/api/conversations`, `/api/health`,
+`/api/kb`, `/api/settings`) to
 the backend at `http://localhost:8000` (see [vite.config.ts](vite.config.ts)), so start the
 backend first.
 
@@ -25,18 +26,21 @@ backend first.
 
 ```
 src/
-├── api/          # network calls (chat.ts streams SSE from /chat/stream)
+├── api/          # network calls (chat.ts streams SSE from /api/chat/stream; conversations.ts)
 ├── components/
-│   ├── layout/   # AppLayout, Sidebar (new chat, recent sessions, settings)
+│   ├── layout/   # AppLayout, RequireAuth, Sidebar (new chat, your conversations, settings)
 │   └── ...       # MessageList, Composer, and the tool/sources/typing bubbles it renders
-├── hooks/        # useMessageList (message list state), useChat (streaming + message assembly)
-├── pages/        # HomePage, ChatPage, SettingsPage, NotFoundPage
-├── types/        # shared types (chat messages/events, Settings)
+├── context/      # AuthContext (session), ConversationsContext (sidebar list, paging, delete)
+├── hooks/        # useChat (streaming, message assembly, loading a conversation's history)
+├── pages/        # HomePage, ChatPage, LoginPage, SettingsPage, NotFoundPage
+├── types/        # shared types (chat messages/events) + api.generated.ts from the backend's OpenAPI
+├── utils/        # pure helpers: conversation list updates, history → message bubbles
 ├── App.tsx       # router
 └── main.tsx      # entry point
 ```
 
-Routes: `/` (home), `/chat`, `/settings`. Any other path shows the 404 page.
+Routes: `/login`, `/` (home), `/chat` (new chat), `/chat/:conversationId`, `/settings`. Any other
+path shows the 404 page.
 
 ## Notes
 
@@ -46,7 +50,9 @@ Routes: `/` (home), `/chat`, `/settings`. Any other path shows the 404 page.
   renders whatever `query`/`output` the backend already computed rather than inspecting raw args.
 - **Typing indicator:** a real `typing` message appended in `useChat` and removed once the first
   real event for that turn arrives.
-- **New chat:** `ChatPage` is keyed on `location.key`, so navigating to `/chat` again remounts it
-  with a fresh conversation and thread id.
-- **Placeholders:** the recent sessions list in the sidebar is mock data, and the Settings page is
-  a static template with no write API yet.
+- **Conversations:** a new chat has no id until its first message — the server creates it and
+  sends the id as the stream's first event, and `useChat` switches the URL to `/chat/:id` without
+  remounting (so the answer keeps streaming). Any real navigation (sidebar, New chat, back)
+  aborts the current stream and loads the target conversation's history.
+- **Placeholders:** the Settings page is a static template with no write API yet — its Save
+  button doesn't persist anything.
