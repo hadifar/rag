@@ -1,4 +1,5 @@
-const API_BASE = 'api';
+// Absolute: a relative 'api' would resolve under nested routes like /chat/:id.
+const API_BASE = '/api';
 
 export function apiUrl(path: string): string {
   return `${API_BASE}/${path}`;
@@ -10,4 +11,17 @@ export function jsonPost(body: unknown) {
     headers: { 'Content-Type': 'application/json' } as Record<string, string>,
     body: JSON.stringify(body),
   };
+}
+
+export function authHeader(accessToken: string): Record<string, string> {
+  return { Authorization: `Bearer ${accessToken}` };
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }

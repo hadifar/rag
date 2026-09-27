@@ -46,5 +46,32 @@ def ingest(
     typer.echo(f"Ingested {report.documents} documents, {report.chunks} chunks")
 
 
+@app.command(name="create-user")
+def create_user(
+    email: str = typer.Argument(..., help="Email address for the new user"),
+    password: str = typer.Option(
+        ..., prompt=True, hide_input=True, confirmation_prompt=True
+    ),
+) -> None:
+    """Create a login for a user (there's no public signup endpoint)."""
+    import psycopg
+
+    from rag.container import build_container
+    from rag.domain.models import User
+
+    settings = get_settings()
+
+    async def run() -> User:
+        async with build_container(settings) as container:
+            return await container.auth_service.create_user(email, password)
+
+    try:
+        user = asyncio.run(run())
+    except psycopg.errors.UniqueViolation as exc:
+        raise typer.BadParameter(f"a user with email {email!r} already exists") from exc
+
+    typer.echo(f"Created user {user.email} ({user.id})")
+
+
 if __name__ == "__main__":
     app()

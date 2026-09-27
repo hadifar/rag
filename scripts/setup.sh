@@ -18,12 +18,14 @@ uv run pre-commit install
 if [ ! -f .env ]; then
     echo "==> Creating .env from .example.env"
     cp .example.env .env
-    echo "    Fill in PINECONE_API_KEY / your LLM provider key before running 'serve' or 'ingest'."
+    echo "    Fill in your LLM provider key and the database URLs before running 'serve' or 'ingest'."
 else
     echo "==> .env already exists, leaving it as-is"
 fi
 
 echo
 echo "Setup complete. Next:"
-echo "  uv run rag ingest   # build the vector index from data/"
-echo "  uv run rag serve    # start the API + UI"
+echo "  uv run alembic upgrade head        # create the users table"
+echo "  uv run rag create-user you@example.com   # there's no public signup"
+echo "  uv run rag ingest                  # build the vector index from data/"
+echo "  uv run rag serve                    # start the API + UI"

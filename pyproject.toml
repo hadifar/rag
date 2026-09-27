@@ -16,11 +16,14 @@ dependencies = [
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "typer>=0.27.2",
-    "pinecone>=6.0.0",
     "langfuse>=4.15.2",
     "langchain>=1.4.0",
     "langgraph-checkpoint-postgres>=3.1.2",
     "psycopg[binary,pool]>=3.3.6",
+    "pyjwt>=2.10.1",
+    "argon2-cffi>=25.1.0",
+    "alembic>=1.16.5",
+    "sqlalchemy>=2.0.44",
 ]
 
 [project.urls]
@@ -80,20 +83,20 @@ root_package = "rag"
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli"]
 
 [[tool.importlinter.contracts]]
 name = "services do not import adapters or entrypoints directly"
 type = "forbidden"
 source_modules = ["rag.services"]
-forbidden_modules = ["rag.adapters", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli"]
 
 [[tool.importlinter.contracts]]
-name = "only the composition root constructs adapters"
+name = "only the composition root constructs adapters or repositories"
 type = "forbidden"
 source_modules = ["rag.api", "rag.app", "rag.cli"]
-forbidden_modules = ["rag.adapters"]
-ignore_imports = ["rag.container -> rag.adapters.**"]
+forbidden_modules = ["rag.adapters", "rag.repository"]
+ignore_imports = ["rag.container -> rag.adapters.**", "rag.container -> rag.repository.**"]
 
 [[tool.importlinter.contracts]]
 name = "api does not import entrypoints"

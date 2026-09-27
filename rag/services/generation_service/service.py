@@ -6,9 +6,11 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from rag.domain.events import StreamEvent
+from rag.domain.models import HistoryMessage
 from rag.services.generation_service.graph import build_graph
 from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
+from rag.services.generation_service.turn import to_history
 from rag.services.retrieval_service.service import RetrievalService
 
 
@@ -26,6 +28,7 @@ class GenerationService:
     ):
         tools = [build_search_tool(ranking_service)]
         self._graph = build_graph(llm, tools, checkpointer)
+        self._checkpointer = checkpointer
         self._trace_config = trace_config
 
     async def stream_chat(
@@ -39,3 +42,10 @@ class GenerationService:
             self._graph, [HumanMessage(content=message)], config
         ):
             yield event
+
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        state = await self._graph.aget_state({"configurable": {"thread_id": thread_id}})
+        return to_history(state.values.get("messages", []))
+
+    async def delete_history(self, thread_id: str) -> None:
+        await self._checkpointer.adelete_thread(thread_id)

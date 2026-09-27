@@ -1,10 +1,6 @@
-"""The vocabulary of things that can happen during a chat turn.
-
-Produced by the generation service as it translates LangGraph's raw event
-stream, and consumed by the API layer to serialize them as SSE.
-"""
-
 from dataclasses import dataclass
+
+from rag.domain.models import Conversation
 
 
 @dataclass
@@ -31,4 +27,28 @@ class SourcesReady:
     sources: list[str]
 
 
-StreamEvent = TextDelta | ToolCallStart | ToolCallResult | SourcesReady
+@dataclass
+class ConversationReady:
+    """First event of every turn: the conversation the turn belongs to (newly created
+    or existing), so the client learns a new conversation's server-assigned id.
+    """
+
+    conversation: Conversation
+
+
+@dataclass
+class ConversationTitled:
+    """Last event of a new conversation's first turn: its generated title."""
+
+    conversation_id: str
+    title: str
+
+
+StreamEvent = (
+    ConversationReady
+    | TextDelta
+    | ToolCallStart
+    | ToolCallResult
+    | SourcesReady
+    | ConversationTitled
+)
