@@ -62,6 +62,10 @@ class ChunkerPort(Protocol):
   `dependency_overrides`, which is for tests.
 - On failure, raise a `rag.domain.errors.RagError` subclass with a `status_code: ClassVar[int]`,
   never `fastapi.HTTPException`. No change to `app.py` or `error_handlers.py` is needed.
+- Its frontend calls go in the matching `frontend/src/api/x.ts` (one module per router), through
+  `authFetch` from `api/client.ts` — never a bare `fetch` or a token passed in by the caller
+  (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`).
+  Request/response types come from the generated `Schemas`, not hand-written interfaces.
 
 ## Adding a user-owned resource: check ownership in the service, answer 404
 

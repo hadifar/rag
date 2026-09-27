@@ -3,27 +3,20 @@ import {
   fetchEventSource,
 } from '@microsoft/fetch-event-source';
 
-import { apiUrl, authHeader, jsonPost } from './base';
+import { apiUrl, authFetch, jsonPostInit } from './client';
 import type { Schemas } from '../types';
 import type { ChatStreamEvent } from '../types/chat';
 
 export type StreamChatArgs = Schemas['ChatRequest'] & {
-  accessToken: string;
   onEvent: (event: ChatStreamEvent) => void;
   signal?: AbortSignal;
 };
 
-export function streamChat({
-  accessToken,
-  onEvent,
-  signal,
-  ...request
-}: StreamChatArgs): Promise<void> {
-  const { headers, ...init } = jsonPost(request);
-
+export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
   return fetchEventSource(apiUrl('chat/stream'), {
-    ...init,
-    headers: { ...headers, ...authHeader(accessToken) },
+    ...jsonPostInit(request),
+    // A 401 arrives before any event, so refresh-and-retry can't replay a partial stream.
+    fetch: authFetch,
     signal,
     openWhenHidden: true, // Keep the stream alive in a backgrounded tab
 

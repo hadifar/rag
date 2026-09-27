@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { ApiError } from '../api/base';
+import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
 import { fetchConversationMessages } from '../api/conversations';
-import { useAuth } from '../context/AuthContext';
 import { useConversations } from '../context/ConversationsContext';
 import { conversationPath } from '../utils/conversations';
 import { historyToMessages } from '../utils/history';
@@ -63,7 +62,6 @@ function createStreamHandler(
 
 /** `conversationId` is the one in the URL; undefined for a new, not yet sent chat. */
 export function useChat(conversationId: string | undefined) {
-  const { accessToken } = useAuth();
   const { upsert, rename } = useConversations();
   const navigate = useNavigate();
   const { key: locationKey } = useLocation();
@@ -106,16 +104,16 @@ export function useChat(conversationId: string | undefined) {
     abortRef.current?.abort();
     conversationIdRef.current = conversationId;
     replaceMessages([]);
-    if (!conversationId || !accessToken) return;
+    if (!conversationId) return;
 
     const controller = new AbortController();
-    fetchConversationMessages(conversationId, accessToken, controller.signal)
+    fetchConversationMessages(conversationId, controller.signal)
       .then((history) => replaceMessages(historyToMessages(history)))
       .catch((err: unknown) => {
         if (!controller.signal.aborted) replaceMessages([assistantText(historyErrorText(err))]);
       });
     return () => controller.abort();
-  }, [conversationId, locationKey, accessToken, replaceMessages]);
+  }, [conversationId, locationKey, replaceMessages]);
 
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -168,7 +166,6 @@ export function useChat(conversationId: string | undefined) {
         await streamChat({
           message: text,
           conversation_id: conversationIdRef.current ?? null,
-          accessToken: accessToken ?? '',
           onEvent,
           signal: controller.signal,
         });
@@ -182,7 +179,7 @@ export function useChat(conversationId: string | undefined) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [appendMsg, updateMsg, deleteMsg, accessToken, upsert, rename, navigate],
+    [appendMsg, updateMsg, deleteMsg, upsert, rename, navigate],
   );
 
   return { messages, sendMessage };

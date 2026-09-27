@@ -1,7 +1,7 @@
-import { apiUrl, authHeader } from './base';
+import { apiUrl, authFetch } from './client';
 
-export async function openKbSource(name: string, accessToken: string): Promise<void> {
-  const res = await fetch(apiUrl(`kb/${name}`), { headers: authHeader(accessToken) });
+export async function openKbSource(name: string): Promise<void> {
+  const res = await authFetch(apiUrl(`kb/${name}`));
   if (!res.ok) {
     throw new Error(`failed to load source: ${res.status}`);
   }

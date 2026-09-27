@@ -117,11 +117,11 @@ the `ToolMessage` artifact, and the `sources` event is built from this turn's ar
 graph TD
     pages["pages/<br/>ChatPage, SettingsPage, HomePage, LoginPage, NotFoundPage"]
     guard["components/layout/RequireAuth<br/>redirects to /login if unauthenticated"]
-    authctx["context/AuthContext<br/>access token in memory, silent refresh on load"]
+    authctx["context/AuthContext<br/>session status + user, restore on load"]
     convctx["context/ConversationsContext<br/>sidebar list, paging, delete"]
     hooks["hooks/<br/>useChat"]
     utils["utils/<br/>pure list/history helpers"]
-    apiclient["api/<br/>chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
+    apiclient["api/<br/>client.ts (token, authFetch), chat.ts, conversations.ts, settings.ts, kb.ts, auth.ts"]
     components["components/<br/>Sidebar, MessageList, Composer, ToolBubble, SourcesBubble"]
     backend[["backend<br/>/api/*"]]
 
@@ -135,10 +135,9 @@ graph TD
     convctx --> apiclient
     convctx --> utils
     components -->|list| convctx
-    components -->|accessToken| authctx
     components -.->|renders state from| hooks
-    apiclient -->|fetch / fetchEventSource, Bearer token| backend
-    authctx -->|login/refresh/logout, credentials: include| apiclient
+    apiclient -->|authFetch: Bearer token, refresh + retry once on 401| backend
+    authctx -->|login/restore/logout; notified on session expiry| apiclient
 ```
 
 Components stay presenter-only: `useChat` owns the streaming/state logic (and follows a new

@@ -10,7 +10,6 @@ import {
   upsertConversation,
 } from '../utils/conversations';
 import type { Conversation } from '../utils/conversations';
-import { useAuth } from './AuthContext';
 
 type ListStatus = 'loading' | 'ready' | 'error';
 
@@ -29,7 +28,6 @@ type ConversationsContextValue = {
 const ConversationsContext = createContext<ConversationsContextValue | null>(null);
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
-  const { accessToken } = useAuth();
   const navigate = useNavigate();
   const openConversation = useMatch('/chat/:conversationId')?.params.conversationId;
 
@@ -39,9 +37,8 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
-    if (!accessToken) return;
     let cancelled = false;
-    listConversations(accessToken, null)
+    listConversations(null)
       .then((page) => {
         if (cancelled) return;
         setConversations(page.items);
@@ -54,19 +51,19 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, []);
 
   const loadMore = useCallback(async () => {
-    if (!accessToken || !nextCursor || isLoadingMore) return;
+    if (!nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
-      const page = await listConversations(accessToken, nextCursor);
+      const page = await listConversations(nextCursor);
       setConversations((list) => appendPage(list, page.items));
       setNextCursor(page.next_cursor);
     } finally {
       setIsLoadingMore(false);
     }
-  }, [accessToken, nextCursor, isLoadingMore]);
+  }, [nextCursor, isLoadingMore]);
 
   const upsert = useCallback((conversation: Conversation) => {
     setConversations((list) => upsertConversation(list, conversation));
@@ -78,12 +75,11 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
 
   const deleteConversation = useCallback(
     async (id: string) => {
-      if (!accessToken) return;
-      await apiDeleteConversation(id, accessToken);
+      await apiDeleteConversation(id);
       setConversations((list) => removeConversation(list, id));
       if (openConversation === id) navigate('/chat', { replace: true });
     },
-    [accessToken, openConversation, navigate]
+    [openConversation, navigate]
   );
 
   const value = useMemo(

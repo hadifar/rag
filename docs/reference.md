@@ -62,7 +62,7 @@ frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
 │   ├── components/                   # ui component
-│   ├── context/                      # AuthContext (access token in memory), ConversationsContext (sidebar list)
+│   ├── context/                      # AuthContext (session status + user), ConversationsContext (sidebar list)
 │   ├── hooks/                        # useChat (streaming + history loading)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
@@ -147,7 +147,10 @@ its own Postgres).
   for a password, `argon2-cffi` hashed) — there's no `POST /register`.
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
-  and kept in memory only (React context, never `localStorage`).
+  and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
+  `authFetch`, which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
+  if the refresh fails too, `AuthContext` switches to unauthenticated and `RequireAuth`
+  redirects to `/login`.
 - **Refresh token** — a longer-lived JWT (`AUTH__REFRESH_TOKEN_EXPIRE_DAYS`, default 7d), set as an
   httpOnly/SameSite=Lax cookie scoped to `/api/auth`, always `Secure` (TLS
   terminates at nginx/App Service, so the app can't tell https from the request; local dev over

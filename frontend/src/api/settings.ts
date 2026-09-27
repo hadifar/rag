@@ -1,10 +1,8 @@
-import { apiUrl, authHeader } from './base';
+import { apiUrl, authFetch } from './client';
 import type { Schemas } from '../types';
 
-export async function fetchSettings(
-  accessToken: string
-): Promise<Schemas['SettingsResponse']> {
-  const res = await fetch(apiUrl('settings'), { headers: authHeader(accessToken) });
+export async function fetchSettings(): Promise<Schemas['SettingsResponse']> {
+  const res = await authFetch(apiUrl('settings'));
   if (!res.ok) {
     throw new Error(`failed to load settings: ${res.status}`);
   }

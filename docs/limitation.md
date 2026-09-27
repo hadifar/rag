@@ -45,9 +45,6 @@
   conversation later shows only the revision.
 
 ## Frontend
-- The access token (15 min) is only refreshed on page load — after it expires every API call
-  fails with 401 until the user reloads. Each `api/*.ts` module also does its own `fetch`,
-  headers and error handling; there's no shared client that could refresh-and-retry once.
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write
   endpoint), which misleads users.
 
