@@ -12,3 +12,6 @@ class RetrievalService:
 
     async def get_document(self, source_id: str) -> Document | None:
         return await self._vector_store.aget_document(source_id)
+
+    async def ping(self) -> None:
+        await self._vector_store.aping()
