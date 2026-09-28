@@ -9,6 +9,24 @@ from rag.domain.events import StreamEvent, TextDelta
 from rag.domain.models import Conversation, HistoryMessage, IndexedDocument
 
 
+class FakeArchiveStore:
+    """In-memory ArchiveStorePort; names are sequential, so they sort like real ones."""
+
+    def __init__(self):
+        self.archives: dict[str, bytes] = {}
+
+    async def asave(self, data: bytes) -> str:
+        name = f"{len(self.archives):04d}.zip"
+        self.archives[name] = data
+        return name
+
+    async def aread(self, name: str) -> bytes:
+        return self.archives[name]
+
+    async def alatest(self) -> str | None:
+        return max(self.archives, default=None)
+
+
 class FakeDocumentIndex:
     """In-memory DocumentIndexPort; records each replace call to assert on what was
     (re-)embedded.

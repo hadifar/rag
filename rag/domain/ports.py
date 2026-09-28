@@ -43,6 +43,19 @@ class DocumentIndexPort(Protocol):
         ...
 
 
+class ArchiveStorePort(Protocol):
+    """Keeps every uploaded knowledge-base zip, so the index can always be rebuilt."""
+
+    async def asave(self, data: bytes) -> str:
+        """Stores `data` under a new name and returns it. Names sort by upload time."""
+        ...
+
+    async def aread(self, name: str) -> bytes: ...
+    async def alatest(self) -> str | None:
+        """The most recently saved archive's name, or None if there are none."""
+        ...
+
+
 class DocumentLoaderPort(Protocol):
     """Sync by design: ingestion is a batch CLI operation, not a shared-event-loop hot path."""
 

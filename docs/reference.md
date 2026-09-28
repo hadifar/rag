@@ -104,6 +104,13 @@ the source no longer has; `chunks` rows cascade from their `documents` row, so a
 shrank leaves no stale chunks. `rag ingest --force` re-embeds everything (after changing the
 embedding model or chunker). A source with no documents is refused rather than emptying the index.
 
+Uploaded zips are kept by an `ArchiveStorePort` (`adapters/archive_store.py`), picked by
+`KB_STORAGE__BACKEND`: `local` (`KB_STORAGE__DIR`, default `data/uploads`) or `azure_blob`
+(`KB_STORAGE__ACCOUNT_URL` + `KB_STORAGE__CONTAINER`, authenticated with
+`DefaultAzureCredential`). Each upload gets a new timestamp-prefixed name and nothing is
+overwritten, so `rag ingest --latest` can always rebuild the index from the newest one.
+`IngestionService.save_archive` validates a zip before storing it, so invalid ones are never kept.
+
 ## LLM provider
 
 `adapters/llm_client.py`'s `build_llm(settings)` returns a `BaseChatModel`, picked by matching

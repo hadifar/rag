@@ -2,8 +2,11 @@
 over the fixture knowledge base seeded by conftest's `seeded_kb`.
 """
 
+from pathlib import Path
+
 from langchain_core.documents import Document
 
+from rag.adapters.archive_store import LocalArchiveStore
 from rag.domain.models import IndexedDocument
 from rag.repository.document_repository import DocumentRepository
 from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
@@ -54,11 +57,12 @@ async def test_get_document_reassembles_chunks_in_order(
 
 
 async def test_reingesting_unchanged_documents_embeds_nothing(
-    seeded_kb: DocumentRepository,
+    seeded_kb: DocumentRepository, tmp_path: Path
 ) -> None:
-    report = await IngestionService(seeded_kb, MarkdownHeaderChunker()).ingest(
-        MarkdownFileLoader(FIXTURE_KB), remove_missing=False
+    service = IngestionService(
+        seeded_kb, MarkdownHeaderChunker(), LocalArchiveStore(tmp_path)
     )
+    report = await service.ingest(MarkdownFileLoader(FIXTURE_KB), remove_missing=False)
 
     assert (report.added, report.updated, report.chunks) == (0, 0, 0)
     assert report.unchanged == 3

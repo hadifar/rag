@@ -7,6 +7,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import ValidationError
 
+from rag.adapters.archive_store import LocalArchiveStore
 from rag.adapters.llm_client import build_embeddings
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
@@ -44,7 +45,9 @@ async def db_pool(
 
 @pytest.fixture
 async def seeded_kb(
-    integration_settings: Settings, db_pool: AsyncConnectionPool[AsyncConnection]
+    integration_settings: Settings,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
 ) -> AsyncGenerator[DocumentRepository]:
     """Ingests the small fixture knowledge base (source ids `it-*`, with facts that
     exist nowhere else, so a real knowledge base in the same database can't outrank
@@ -52,9 +55,10 @@ async def seeded_kb(
     any real knowledge base in the same database alone.
     """
     repository = DocumentRepository(db_pool, build_embeddings(integration_settings))
-    await IngestionService(repository, MarkdownHeaderChunker()).ingest(
-        MarkdownFileLoader(FIXTURE_KB), remove_missing=False
+    service = IngestionService(
+        repository, MarkdownHeaderChunker(), LocalArchiveStore(tmp_path)
     )
+    await service.ingest(MarkdownFileLoader(FIXTURE_KB), remove_missing=False)
     yield repository
     async with db_pool.connection() as conn:
         # Cascades to their chunks.

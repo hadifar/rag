@@ -1,8 +1,15 @@
+import asyncio
 import hashlib
 
-from rag.domain.errors import EmptyKnowledgeBaseError
+from rag.domain.errors import EmptyKnowledgeBaseError, NoArchiveError
 from rag.domain.models import IndexedDocument, IngestionReport, RawDocument
-from rag.domain.ports import ChunkerPort, DocumentIndexPort, DocumentLoaderPort
+from rag.domain.ports import (
+    ArchiveStorePort,
+    ChunkerPort,
+    DocumentIndexPort,
+    DocumentLoaderPort,
+)
+from rag.services.ingestion_service.loaders import ZipMarkdownLoader
 
 
 class IngestionService:
@@ -13,9 +20,36 @@ class IngestionService:
     failed run leaves the previous index intact.
     """
 
-    def __init__(self, index: DocumentIndexPort, chunker: ChunkerPort):
+    def __init__(
+        self,
+        index: DocumentIndexPort,
+        chunker: ChunkerPort,
+        archives: ArchiveStorePort,
+    ):
         self._index = index
         self._chunker = chunker
+        self._archives = archives
+
+    async def save_archive(self, archive: bytes) -> str:
+        """Validates the zip, then keeps it; returns its name. An invalid zip raises
+        InvalidArchiveError and is never stored.
+        """
+        await asyncio.to_thread(ZipMarkdownLoader, archive)
+        return await self._archives.asave(archive)
+
+    async def ingest_archive(
+        self, name: str, *, force: bool = False
+    ) -> IngestionReport:
+        archive = await self._archives.aread(name)
+        loader = await asyncio.to_thread(ZipMarkdownLoader, archive)
+        return await self.ingest(loader, force=force)
+
+    async def ingest_latest_archive(self, *, force: bool = False) -> IngestionReport:
+        """Rebuilds the index from the most recent upload (e.g. after losing the DB)."""
+        name = await self._archives.alatest()
+        if name is None:
+            raise NoArchiveError()
+        return await self.ingest_archive(name, force=force)
 
     async def ingest(
         self,

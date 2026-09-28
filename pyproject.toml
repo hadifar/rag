@@ -24,6 +24,8 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "alembic>=1.16.5",
     "sqlalchemy>=2.0.44",
+    "azure-storage-blob[aio]>=12.30.3",
+    "azure-identity>=1.25.3",
 ]
 
 [project.urls]

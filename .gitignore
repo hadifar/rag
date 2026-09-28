@@ -238,3 +238,6 @@ bin/__pycache__/
 
 # Knowledge base extracted from data/data.zip (scripts/setup.sh)
 data/*.md
+
+# Uploaded knowledge-base zips (KB_STORAGE__BACKEND=local)
+data/uploads/

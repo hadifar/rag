@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
+from rag.adapters.archive_store import open_archive_store
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
 from rag.adapters.llm_client import build_embeddings, build_llm
@@ -36,6 +37,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         open_checkpointer(settings) as checkpointer,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
+        open_archive_store(settings) as archive_store,
     ):
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
         ranking_service = RetrievalService(vector_store=vector_store)
@@ -50,7 +52,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         ingestion_service = IngestionService(
-            index=vector_store, chunker=WholeDocumentChunker()
+            index=vector_store, chunker=WholeDocumentChunker(), archives=archive_store
         )
 
         auth_service = AuthService(

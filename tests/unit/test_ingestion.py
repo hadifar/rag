@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from rag.domain.errors import EmptyKnowledgeBaseError, InvalidArchiveError
+from rag.adapters.archive_store import LocalArchiveStore
+from rag.domain.errors import (
+    EmptyKnowledgeBaseError,
+    InvalidArchiveError,
+    NoArchiveError,
+)
 from rag.domain.models import IngestionReport, RawDocument
 from rag.services.ingestion_service import loaders
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -14,7 +19,7 @@ from rag.services.ingestion_service.loaders import (
     loader_for_path,
 )
 from rag.services.ingestion_service.service import IngestionService
-from tests.unit.fakes import FakeDocumentIndex
+from tests.unit.fakes import FakeArchiveStore, FakeDocumentIndex
 
 
 def _zip(files: dict[str, str | bytes]) -> bytes:
@@ -33,6 +38,14 @@ class ListLoader:
 
     def load(self) -> list[RawDocument]:
         return self._documents
+
+
+def _service(
+    index: FakeDocumentIndex, archives: FakeArchiveStore | None = None
+) -> IngestionService:
+    return IngestionService(
+        index, WholeDocumentChunker(), archives or FakeArchiveStore()
+    )
 
 
 # --- ZipMarkdownLoader -------------------------------------------------------------
@@ -112,7 +125,7 @@ def test_loader_for_path_picks_directory_or_zip(tmp_path: Path) -> None:
 
 async def test_first_ingest_adds_everything() -> None:
     index = FakeDocumentIndex()
-    service = IngestionService(index, WholeDocumentChunker())
+    service = _service(index)
 
     report = await service.ingest(ListLoader({"a.md": "A", "b.md": "B"}))
 
@@ -124,7 +137,7 @@ async def test_first_ingest_adds_everything() -> None:
 
 async def test_reingest_embeds_only_changed_and_removes_missing() -> None:
     index = FakeDocumentIndex()
-    service = IngestionService(index, WholeDocumentChunker())
+    service = _service(index)
     await service.ingest(ListLoader({"same.md": "S", "edit.md": "v1", "gone.md": "G"}))
 
     report = await service.ingest(
@@ -142,7 +155,7 @@ async def test_reingest_embeds_only_changed_and_removes_missing() -> None:
 
 async def test_force_reembeds_unchanged_documents() -> None:
     index = FakeDocumentIndex()
-    service = IngestionService(index, WholeDocumentChunker())
+    service = _service(index)
     await service.ingest(ListLoader({"a.md": "A"}))
 
     report = await service.ingest(ListLoader({"a.md": "A"}), force=True)
@@ -152,7 +165,7 @@ async def test_force_reembeds_unchanged_documents() -> None:
 
 async def test_remove_missing_false_keeps_other_documents() -> None:
     index = FakeDocumentIndex({"other.md": "hash"})
-    service = IngestionService(index, WholeDocumentChunker())
+    service = _service(index)
 
     report = await service.ingest(ListLoader({"a.md": "A"}), remove_missing=False)
 
@@ -162,8 +175,59 @@ async def test_remove_missing_false_keeps_other_documents() -> None:
 
 async def test_an_empty_source_is_refused_instead_of_emptying_the_index() -> None:
     index = FakeDocumentIndex({"a.md": "hash"})
-    service = IngestionService(index, WholeDocumentChunker())
+    service = _service(index)
 
     with pytest.raises(EmptyKnowledgeBaseError):
         await service.ingest(ListLoader({}))
     assert index.replaced == []
+
+
+# --- Archives ------------------------------------------------------------------------
+
+
+async def test_save_archive_keeps_a_valid_zip() -> None:
+    archives = FakeArchiveStore()
+    archive = _zip({"a.md": "# A"})
+
+    name = await _service(FakeDocumentIndex(), archives).save_archive(archive)
+
+    assert archives.archives == {name: archive}
+
+
+async def test_save_archive_never_stores_an_invalid_zip() -> None:
+    archives = FakeArchiveStore()
+
+    with pytest.raises(InvalidArchiveError):
+        await _service(FakeDocumentIndex(), archives).save_archive(b"not a zip")
+    assert archives.archives == {}
+
+
+async def test_ingest_latest_archive_uses_the_newest_upload() -> None:
+    index = FakeDocumentIndex()
+    service = _service(index)
+    await service.save_archive(_zip({"old.md": "old"}))
+    await service.save_archive(_zip({"new.md": "new"}))
+
+    await service.ingest_latest_archive()
+
+    assert index.hashes.keys() == {"new.md"}
+
+
+async def test_ingest_latest_archive_without_uploads_raises() -> None:
+    with pytest.raises(NoArchiveError):
+        await _service(FakeDocumentIndex()).ingest_latest_archive()
+
+
+async def test_local_archive_store_round_trips_and_finds_the_latest(
+    tmp_path: Path,
+) -> None:
+    store = LocalArchiveStore(tmp_path / "uploads")
+    assert await store.alatest() is None
+
+    first = await store.asave(b"first")
+    second = await store.asave(b"second")
+
+    assert first < second
+    assert await store.alatest() == second
+    assert await store.aread(first) == b"first"
+    assert sorted(p.name for p in (tmp_path / "uploads").iterdir()) == [first, second]

@@ -35,6 +35,9 @@ def ingest(
             help="A .zip or directory of .md files; overrides KNOWLEDGE_BASE_SOURCE"
         ),
     ] = None,
+    latest: bool = typer.Option(
+        False, help="Ingest the most recently uploaded archive (from KB_STORAGE)"
+    ),
     force: bool = typer.Option(
         False, help="Re-embed unchanged documents too (after an embedding model change)"
     ),
@@ -46,25 +49,40 @@ def ingest(
     from rag.services.ingestion_service.loaders import loader_for_path
 
     settings = get_settings()
-    path = source or settings.KNOWLEDGE_BASE_SOURCE
-    if not path.exists():
-        raise typer.BadParameter(f"{path} doesn't exist", param_hint="--source")
+    path = _ingest_path(source, latest, settings.KNOWLEDGE_BASE_SOURCE)
 
     async def run() -> IngestionReport:
-        loader = loader_for_path(path)
         async with build_container(settings) as container:
+            if latest:
+                return await container.ingestion_service.ingest_latest_archive(
+                    force=force
+                )
+            loader = loader_for_path(path)
             return await container.ingestion_service.ingest(loader, force=force)
 
     try:
         report = asyncio.run(run())
     except RagError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--source") from exc
+        hint = "--latest" if latest else "--source"
+        raise typer.BadParameter(str(exc), param_hint=hint) from exc
 
     typer.echo(
-        f"Ingested {path}: {report.added} added, {report.updated} updated, "
+        f"Ingested {'the latest upload' if latest else path}: "
+        f"{report.added} added, {report.updated} updated, "
         f"{report.unchanged} unchanged, {report.removed} removed "
         f"({report.chunks} chunks embedded)"
     )
+
+
+def _ingest_path(source: Path | None, latest: bool, default: Path) -> Path:
+    if latest and source:
+        raise typer.BadParameter(
+            "use either --latest or --source", param_hint="--latest"
+        )
+    path = source or default
+    if not latest and not path.exists():
+        raise typer.BadParameter(f"{path} doesn't exist", param_hint="--source")
+    return path
 
 
 @app.command(name="create-user")

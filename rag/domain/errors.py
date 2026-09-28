@@ -35,6 +35,15 @@ class EmptyKnowledgeBaseError(RagError):
         super().__init__("The knowledge-base source contains no documents")
 
 
+class NoArchiveError(RagError):
+    """Raised when asked to ingest the latest uploaded archive, but none exists."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self):
+        super().__init__("No knowledge-base archive has been uploaded yet")
+
+
 class VectorStoreConfigurationError(RagError):
     """Raised when the configured vector store backend can't be used as configured."""
 
