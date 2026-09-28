@@ -21,8 +21,10 @@ def turn_tool_messages(messages: Sequence[BaseMessage]) -> list[ToolMessage]:
     return [m for m in current_turn(messages) if isinstance(m, ToolMessage)]
 
 
-def turn_sources(messages: Sequence[BaseMessage]) -> list[str]:
-    """Deduplicated source ids search_kb attached (as its artifact) this turn."""
+def turn_sources(messages: Sequence[BaseMessage]) -> list[str] | None:
+    """Deduplicated source ids search_kb attached (as its artifact) this turn; empty if
+    it searched and found nothing, None if it didn't search at all.
+    """
     return _sources(current_turn(messages))
 
 
@@ -52,12 +54,12 @@ def _split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]
     return [messages[start:end] for start, end in pairwise([*starts, len(messages)])]
 
 
-def _sources(turn: Sequence[BaseMessage]) -> list[str]:
-    return sorted(
-        {
-            source
-            for message in turn
-            if isinstance(message, ToolMessage) and isinstance(message.artifact, list)
-            for source in message.artifact
-        }
-    )
+def _sources(turn: Sequence[BaseMessage]) -> list[str] | None:
+    artifacts = [
+        message.artifact
+        for message in turn
+        if isinstance(message, ToolMessage) and isinstance(message.artifact, list)
+    ]
+    if not artifacts:
+        return None
+    return sorted({source for artifact in artifacts for source in artifact})

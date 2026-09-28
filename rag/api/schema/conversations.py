@@ -31,4 +31,4 @@ class ConversationPageResponse(BaseModel):
 class HistoryMessageResponse(BaseModel):
     role: Literal["user", "assistant"]
     text: str
-    sources: list[str]
+    sources: list[str] | None

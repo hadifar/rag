@@ -90,5 +90,8 @@
     // ════════════════════════════════════════════════════════════
     "git.autofetch": true,
     "git.confirmSync": false,
-    "diffEditor.ignoreTrimWhitespace": false
+    "diffEditor.ignoreTrimWhitespace": false,
+    "[markdown]": {
+        "diffEditor.ignoreTrimWhitespace": false
+    }
 }

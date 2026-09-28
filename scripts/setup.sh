@@ -18,21 +18,15 @@ uv run pre-commit install
 if [ ! -f .env ]; then
     echo "==> Creating .env from .example.env"
     cp .example.env .env
-    echo "    Fill in your LLM provider key and the database URLs before running 'serve' or 'ingest'."
+    echo "    Fill in the LLM__* and OBSERVABILITY__* values; DATABASE_URL and AUTH__JWT_SECRET work as-is for local dev."
 else
     echo "==> .env already exists, leaving it as-is"
 fi
 
-if ! compgen -G "data/*.md" >/dev/null; then
-    echo "==> Extracting knowledge base (data/data.zip)"
-    uv run python -m zipfile -e data/data.zip .
-else
-    echo "==> data/*.md already present, leaving it as-is"
-fi
-
 echo
 echo "Setup complete. Next:"
-echo "  uv run alembic upgrade head        # create the users table"
+echo "  docker compose up -d postgres      # local Postgres (pgvector) on localhost:5432"
+echo "  uv run alembic upgrade head        # apply migrations"
 echo "  uv run rag create-user you@example.com   # there's no public signup"
 echo "  uv run rag ingest                  # build the vector index from data/"
-echo "  uv run rag serve                    # start the API + UI"
+echo "  uv run rag serve                   # start the API on :8000 (UI: cd frontend && npm run dev)"

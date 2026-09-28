@@ -2,16 +2,15 @@ services:
   postgres:
     # Postgres with the pgvector extension
     image: pgvector/pgvector:pg17
+    # prod gets DATABASE_URL from Key Vault.
     environment:
       POSTGRES_DB: rag
       POSTGRES_USER: rag
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD: rag
     volumes:
       - pgdata:/var/lib/postgresql/data
-    secrets:
-      - postgres_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
       interval: 5s
@@ -23,6 +22,9 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.backend
     env_file: .env
+    # .env targets the host (localhost); inside the compose network it's `postgres`.
+    environment:
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +44,3 @@ services:
 
 volumes:
   pgdata:
-
-secrets:
-  postgres_password:
-    file: ./.secrets/postgres_password.txt

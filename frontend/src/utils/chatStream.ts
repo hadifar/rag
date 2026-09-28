@@ -48,9 +48,8 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
         }
         break;
       case 'sources':
-        if (event.sources.length > 0) {
-          append({ type: 'sources', content: { sources: event.sources } });
-        }
+        // Sent only when the answer searched; an empty list still gets its bubble.
+        append({ type: 'sources', content: { sources: event.sources } });
         break;
     }
   };

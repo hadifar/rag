@@ -266,7 +266,7 @@ export interface components {
             /** Text */
             text: string;
             /** Sources */
-            sources: string[];
+            sources: string[] | null;
         };
         /** LoginRequest */
         LoginRequest: {
