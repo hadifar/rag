@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "generate:types": "bash ../scripts/generate_frontend_types.sh",
+    "pretest:e2e": "playwright install chromium",
     "test:e2e": "playwright test",
     "test": "vitest"
   },

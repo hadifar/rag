@@ -6,19 +6,13 @@ git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 ```
-Then fill in `.env` (see .example.env) `LLM__API_KEY`, the database URLs, etc. The Postgres
-server needs the `pgvector` extension — the Docker Compose `postgres` service
-(`pgvector/pgvector:pg17`) has it; `alembic upgrade head` enables it.
+Then fill in `.env` (see .example.env).
 
-**The knowledge base ships zipped** — the repo holds only `data/data.zip`, not the `.md` files
-themselves. `scripts/setup.sh` extracts it into `data/` (skipped if `data/*.md` already exists); to
-do it by hand, from the repo root:
-```bash
-unzip data/data.zip   # extracts the .md files into data/
-```
-`KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at that folder, and `Dockerfile.backend`
-does `COPY data/ data/`, so unzip before `rag ingest` or `docker compose up --build`, or nothing
-gets ingested. To use your own knowledge base instead, put your `.md` files in `data/`.
+The knowledge base is the `.md` files in `data/`. `KNOWLEDGE_BASE_DIR` (default `data`) points
+`rag ingest` at that folder. The backend image doesn't contain `data/`: ingestion only writes
+chunks into Postgres, so it runs from the host (or with `data/` mounted, see [Docker](#docker)) and
+the serving container reads them from the database. To use your own knowledge base instead, put
+your `.md` files in `data/`.
 
 If running via Docker (below), also create the Postgres init password Docker Compose expects,
 gitignored and never read by the app itself:
@@ -83,6 +77,13 @@ done:
 ```bash
 docker compose exec backend alembic upgrade head
 docker compose exec backend rag create-user you@example.com
+```
+
+Then ingest the knowledge base (one-time, or after changing `data/`, or after a fresh `pgdata`
+volume). The image has no `data/`, so mount it (see [Setup](#setup)) into a one-off `backend`
+container; without this, chat answers have no sources:
+```bash
+docker compose run --rm -v "$PWD/data:/app/data:ro" backend ingest
 ```
 
 ```bash

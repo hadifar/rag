@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // which needs Postgres up, migrations applied and an LLM key in ../.env (see docs/setup.md).
 export default defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: 'list',

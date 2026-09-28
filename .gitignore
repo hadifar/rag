@@ -235,3 +235,6 @@ __marimo__/
 bin/__pycache__/
 
 .import_linter_cache/
+
+# Knowledge base extracted from data/data.zip (scripts/setup.sh)
+data/*.md
