@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from rag.domain.models import IngestionRun, IngestionRunStatus
+from rag.domain.models import IngestionRunStatus
 
 
 class IngestionRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     status: IngestionRunStatus
     started_at: datetime
@@ -18,17 +20,3 @@ class IngestionRunResponse(BaseModel):
     removed: int | None
     # Set once the run failed.
     error: str | None
-
-    @classmethod
-    def from_domain(cls, run: IngestionRun) -> "IngestionRunResponse":
-        return cls(
-            id=run.id,
-            status=run.status,
-            started_at=run.started_at,
-            finished_at=run.finished_at,
-            added=run.added,
-            updated=run.updated,
-            unchanged=run.unchanged,
-            removed=run.removed,
-            error=run.error,
-        )

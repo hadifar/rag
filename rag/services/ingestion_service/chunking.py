@@ -26,18 +26,7 @@ class MarkdownHeaderChunker:
                 for index, (start, end) in enumerate(pairwise(bounds))
             ]
 
-        return [self._make(document, index, text) for index, text in sections if text]
-
-    def _make(self, document: RawDocument, index: int, text: str) -> Document:
-        return Document(
-            id=f"{document.source_id}::{index}",
-            page_content=text,
-            metadata={
-                **document.metadata,
-                "source_id": document.source_id,
-                "chunk_index": index,
-            },
-        )
+        return [_chunk(document, index, text) for index, text in sections if text]
 
 
 class WholeDocumentChunker:
@@ -49,17 +38,16 @@ class WholeDocumentChunker:
 
     def chunk(self, document: RawDocument) -> list[Document]:
         text = document.text.strip()
-        if not text:
-            return []
+        return [_chunk(document, 0, text)] if text else []
 
-        return [
-            Document(
-                id=f"{document.source_id}::0",
-                page_content=text,
-                metadata={
-                    **document.metadata,
-                    "source_id": document.source_id,
-                    "chunk_index": 0,
-                },
-            )
-        ]
+
+def _chunk(document: RawDocument, index: int, text: str) -> Document:
+    return Document(
+        id=f"{document.source_id}::{index}",
+        page_content=text,
+        metadata={
+            **document.metadata,
+            "source_id": document.source_id,
+            "chunk_index": index,
+        },
+    )

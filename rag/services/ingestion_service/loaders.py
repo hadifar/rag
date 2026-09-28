@@ -3,7 +3,7 @@ import zipfile
 import zlib
 from collections import Counter
 from collections.abc import Iterator
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath
 
 from rag.domain.errors import InvalidArchiveError
 from rag.domain.models import RawDocument
@@ -27,11 +27,7 @@ class MarkdownFileLoader:
 
     def load(self) -> Iterator[RawDocument]:
         for path in sorted(self._directory.glob("*.md")):
-            yield RawDocument(
-                source_id=path.name,
-                text=path.read_text(),
-                metadata={"title": path.stem},
-            )
+            yield _raw_document(path, path.read_text())
 
 
 class ZipMarkdownLoader:
@@ -115,7 +111,11 @@ def _to_document(info: zipfile.ZipInfo, data: bytes) -> RawDocument:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise InvalidArchiveError(f"{info.filename} isn't UTF-8 text") from exc
-    path = PurePosixPath(info.filename)
+    return _raw_document(PurePosixPath(info.filename), text)
+
+
+def _raw_document(path: PurePath, text: str) -> RawDocument:
+    """The file name is the source_id, so a document keeps its id across folders."""
     return RawDocument(source_id=path.name, text=text, metadata={"title": path.stem})
 
 

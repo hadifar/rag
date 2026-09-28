@@ -56,7 +56,7 @@ async def stream(
 _ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, str]]] = {
     ConversationReady: lambda e: (
         SseEventType.CONVERSATION,
-        ConversationResponse.from_domain(e.conversation).model_dump_json(),
+        ConversationResponse.model_validate(e.conversation).model_dump_json(),
     ),
     TextDelta: lambda e: (SseEventType.TEXT, json.dumps({"text": e.text})),
     ToolCallStart: lambda e: (

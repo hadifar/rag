@@ -21,7 +21,7 @@ async def upload_knowledge_base(
     """
     run = await ingestion_service.start_upload(await file.read(), admin.id)
     background_tasks.add_task(ingestion_service.complete_run, run)
-    return IngestionRunResponse.from_domain(run)
+    return IngestionRunResponse.model_validate(run)
 
 
 # Declared before /{run_id}, so "latest" isn't parsed as a run id.
@@ -30,11 +30,11 @@ async def get_latest_run(
     ingestion_service: IngestionServiceDep,
 ) -> IngestionRunResponse | None:
     run = await ingestion_service.latest_run()
-    return IngestionRunResponse.from_domain(run) if run else None
+    return IngestionRunResponse.model_validate(run) if run else None
 
 
 @router.get("/{run_id}")
 async def get_run(
     run_id: uuid.UUID, ingestion_service: IngestionServiceDep
 ) -> IngestionRunResponse:
-    return IngestionRunResponse.from_domain(await ingestion_service.get_run(run_id))
+    return IngestionRunResponse.model_validate(await ingestion_service.get_run(run_id))

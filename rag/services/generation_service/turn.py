@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from itertools import pairwise
+from typing import TypeGuard
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
@@ -7,6 +8,11 @@ from rag.domain.models import HistoryMessage
 
 # Guards inject their instructions per model call instead of saving them to the
 # thread, so every HumanMessage in state is the user's and marks the start of a turn.
+
+
+def is_final_answer(message: BaseMessage | None) -> TypeGuard[AIMessage]:
+    """An answer to the user, as opposed to a model call that asks for tools."""
+    return isinstance(message, AIMessage) and not message.tool_calls
 
 
 def current_turn(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
@@ -36,9 +42,7 @@ def to_history(messages: Sequence[BaseMessage]) -> list[HistoryMessage]:
     history: list[HistoryMessage] = []
     for turn in _split_turns(messages):
         history.append(HistoryMessage(role="user", text=turn[0].text))
-        answers = [
-            m for m in turn if isinstance(m, AIMessage) and not m.tool_calls and m.text
-        ]
+        answers = [m for m in turn if is_final_answer(m) and m.text]
         if answers:
             history.append(
                 HistoryMessage(
