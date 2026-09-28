@@ -60,10 +60,10 @@ rag/
 migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
-│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
-│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles)
+│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts, ingestions.ts
+│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles), settings/ (knowledge-base upload)
 │   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
-│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers)
+│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers), useKbUpload (upload + run polling)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
 └── (Vite build served by nginx in Docker)
