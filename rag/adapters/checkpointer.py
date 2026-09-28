@@ -19,7 +19,7 @@ async def open_checkpointer(settings: Settings) -> AsyncGenerator[BaseCheckpoint
     dict rows, autocommit and no prepared statements on every connection.
     """
     async with _DictRowPool(
-        settings.DATABASE_URL.get_secret_value(),
+        settings.DATABASE.conninfo(),
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         check=_DictRowPool.check_connection,
         open=False,

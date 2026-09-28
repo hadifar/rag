@@ -18,7 +18,7 @@ async def pool(
     integration_settings: Settings,
 ) -> AsyncGenerator[AsyncConnectionPool[AsyncConnection]]:
     async with AsyncConnectionPool[AsyncConnection](
-        integration_settings.DATABASE_URL.get_secret_value(), open=False
+        integration_settings.DATABASE.conninfo(), open=False
     ) as pool:
         yield pool
 

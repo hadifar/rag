@@ -15,6 +15,7 @@ from rag.api.routers.chat import SseEventType
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
+    DatabaseConfig,
     LoggingObservability,
     OpenAILLM,
     Settings,
@@ -72,7 +73,7 @@ def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
         LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
-        DATABASE_URL=SecretStr("unused"),
+        DATABASE=DatabaseConfig(PASSWORD=SecretStr("unused")),
         AUTH=AuthConfig(
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
         ),

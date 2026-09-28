@@ -11,15 +11,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-def _database_url() -> str:
-    """The app's DATABASE_URL, adapted to SQLAlchemy's psycopg3 dialect."""
-    url = get_settings().DATABASE_URL.get_secret_value()
-    return url.replace("postgresql://", "postgresql+psycopg://", 1)
+# Only picks SQLAlchemy's psycopg3 dialect: the connection itself comes from the app's
+# DATABASE settings, passed straight to psycopg, so no credentials go through a URL.
+_DIALECT_URL = "postgresql+psycopg://"
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=_database_url(),
+        url=_DIALECT_URL,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -29,8 +28,12 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = _database_url()
-    connectable = engine_from_config(configuration, poolclass=pool.NullPool)
+    configuration["sqlalchemy.url"] = _DIALECT_URL
+    connectable = engine_from_config(
+        configuration,
+        poolclass=pool.NullPool,
+        connect_args=get_settings().DATABASE.connect_kwargs(),
+    )
 
     with connectable.connect() as connection:
         context.configure(connection=connection)

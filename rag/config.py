@@ -2,8 +2,45 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
+from psycopg.conninfo import make_conninfo
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class DatabaseConfig(BaseModel):
+    """The one Postgres database behind everything: users, conversations, knowledge-base
+    chunks (schema by Alembic) and conversation messages (LangGraph's checkpointer).
+
+    Split into fields rather than one URL so the host (plain config, e.g. `postgres` inside
+    Docker Compose) can be overridden on its own, and only PASSWORD is a secret.
+    """
+
+    HOST: str = "localhost"
+    PORT: int = 5432
+    NAME: str = "rag"
+    USER: str = "rag"
+    PASSWORD: SecretStr
+    # Secure by default: TLS, with the server's certificate checked against the system's
+    # CAs. Only a local or CI database without TLS sets "disable".
+    SSLMODE: Literal["disable", "verify-full"] = "verify-full"
+
+    def connect_kwargs(self) -> dict[str, str | int]:
+        """libpq connection parameters, for psycopg (`psycopg.connect(**kwargs)`)."""
+        kwargs: dict[str, str | int] = {
+            "host": self.HOST,
+            "port": self.PORT,
+            "dbname": self.NAME,
+            "user": self.USER,
+            "password": self.PASSWORD.get_secret_value(),
+            "sslmode": self.SSLMODE,
+        }
+        if self.SSLMODE == "verify-full":
+            kwargs["sslrootcert"] = "system"
+        return kwargs
+
+    def conninfo(self) -> str:
+        """The same parameters as a libpq conninfo string, quoted safely, for pools."""
+        return make_conninfo("", **self.connect_kwargs())
 
 
 class AuthConfig(BaseModel):
@@ -52,9 +89,7 @@ class Settings(BaseSettings):
         env_file=".env", env_nested_delimiter="__", case_sensitive=True, extra="forbid"
     )
 
-    # The one Postgres database behind everything: users, conversations, knowledge-base
-    # chunks (schema by Alembic) and conversation messages (LangGraph's checkpointer).
-    DATABASE_URL: SecretStr
+    DATABASE: DatabaseConfig
 
     AUTH: AuthConfig
 

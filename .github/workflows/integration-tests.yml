@@ -12,7 +12,8 @@ jobs:
       LLM__API_KEY: ${{ secrets.OPENAI_API_KEY }}
       LLM__MODEL: ${{ vars.OPENAI_MODEL }}
 
-      DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
+      DATABASE__PASSWORD: rag
+      DATABASE__SSLMODE: disable   # the throwaway service container has no TLS
       AUTH__JWT_SECRET: ci-integration-unused-jwt-secret-000000
     # build_container opens its Postgres pools, so the tests need a reachable Postgres.
     services:

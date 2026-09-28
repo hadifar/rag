@@ -7,6 +7,7 @@ from pydantic import SecretStr
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
+    DatabaseConfig,
     OpenAILLM,
     Settings,
 )
@@ -14,7 +15,7 @@ from rag.config import (
 _PLACEHOLDER_SETTINGS = Settings(
     _env_file=None,  # pyright: ignore[reportCallIssue] — ignore the real .env, only the schema shape matters here
     LLM=OpenAILLM(API_KEY=SecretStr("placeholder"), MODEL="placeholder"),
-    DATABASE_URL=SecretStr("placeholder"),
+    DATABASE=DatabaseConfig(PASSWORD=SecretStr("placeholder")),
     AUTH=AuthConfig(JWT_SECRET=SecretStr("placeholder")),
 )
 

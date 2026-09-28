@@ -15,7 +15,7 @@ async def open_db_pool(
     caller's scope and tears it down on exit.
     """
     pool = AsyncConnectionPool[AsyncConnection](
-        settings.DATABASE_URL.get_secret_value(),
+        settings.DATABASE.conninfo(),
         check=AsyncConnectionPool.check_connection,
         open=False,
     )
