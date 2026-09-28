@@ -49,6 +49,10 @@ param langfusePublicKey string
 @secure()
 param langfuseSecretKey string
 
+@description('HMAC key for signing access/refresh tokens — generate with `openssl rand -hex 32`.')
+@secure()
+param jwtSecret string
+
 @description('Selects rag/config.py:LLMConfig\'s backend — keep in sync with that Literal.')
 @allowed(['openai', 'azure_openai'])
 param llmProvider string = 'openai'
@@ -74,6 +78,7 @@ var secretsToStore = [
   { name: 'llm-api-key', value: llmApiKey }
   { name: 'langfuse-public-key', value: langfusePublicKey }
   { name: 'langfuse-secret-key', value: langfuseSecretKey }
+  { name: 'jwt-secret', value: jwtSecret }
 ]
 
 var llmAppSettings = llmProvider == 'azure_openai'
@@ -354,6 +359,7 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
       OBSERVABILITY__PUBLIC_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-public-key/)'
       OBSERVABILITY__SECRET_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/langfuse-secret-key/)'
+      AUTH__JWT_SECRET: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/jwt-secret/)'
 
       // Previously wired to an unused LANGFUSE_ENABLED app setting Settings never read, so
       // this flag had no actual effect — it now genuinely selects the backend.

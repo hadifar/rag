@@ -55,7 +55,8 @@ az deployment group what-if \
   --template-file infra/azure/main.bicep \
   --parameters infra/azure/main.parameters.local.json \
   --parameters databaseUrl=<...> llmApiKey=<...> \
-               langfusePublicKey=<...> langfuseSecretKey=<...>
+               langfusePublicKey=<...> langfuseSecretKey=<...> \
+               jwtSecret=<...>
 ```
 
 `main.parameters.local.json` (gitignored) holds your real, deployment-specific values —
@@ -64,9 +65,10 @@ local file. `llmApiKey` works for either `llmProvider` — an OpenAI key for `"o
 OpenAI key for `"azure_openai"` (which also needs `azureOpenAiEndpoint`/`azureOpenAiDeployment`/
 `azureOpenAiApiVersion` set in your parameters file).
 
-**Deploy:** same command with `az deployment group create` in place of `what-if`. Pass the four
+**Deploy:** same command with `az deployment group create` in place of `what-if`. Pass the five
 secure params on the command line or via env-var substitution — never add them to either
-parameters file that's committed.
+parameters file that's committed. Generate `jwtSecret` with `openssl rand -hex 32`; rotating it
+invalidates every issued token, logging all users out.
 
 **Why `--mode Complete`:** the default (`Incremental`) only adds/updates resources — anything
 removed from the template, or orphaned by renaming a resource's `name:` property (Azure can't
