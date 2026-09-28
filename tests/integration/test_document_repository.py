@@ -5,14 +5,13 @@ over the fixture knowledge base seeded by conftest's `seeded_kb`.
 from pathlib import Path
 
 from langchain_core.documents import Document
+from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
 
-from rag.adapters.archive_store import LocalArchiveStore
 from rag.domain.models import IndexedDocument
 from rag.repository.document_repository import DocumentRepository
-from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
 from rag.services.ingestion_service.loaders import MarkdownFileLoader
-from rag.services.ingestion_service.service import IngestionService
-from tests.integration.conftest import FIXTURE_KB
+from tests.integration.conftest import FIXTURE_KB, ingestion_service
 
 
 async def _top_sources(repository: DocumentRepository, query: str) -> list[str]:
@@ -57,11 +56,11 @@ async def test_get_document_reassembles_chunks_in_order(
 
 
 async def test_reingesting_unchanged_documents_embeds_nothing(
-    seeded_kb: DocumentRepository, tmp_path: Path
+    seeded_kb: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
 ) -> None:
-    service = IngestionService(
-        seeded_kb, MarkdownHeaderChunker(), LocalArchiveStore(tmp_path)
-    )
+    service = ingestion_service(seeded_kb, db_pool, tmp_path)
     report = await service.ingest(MarkdownFileLoader(FIXTURE_KB), remove_missing=False)
 
     assert (report.added, report.updated, report.chunks) == (0, 0, 0)

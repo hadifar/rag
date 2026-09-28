@@ -241,7 +241,8 @@ app to pick it up immediately.
 ## API surface
 
 `chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
-[Authentication](#authentication)); `auth` and `health` don't.
+[Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
+`auth` and `health` don't.
 
 Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
 class attribute (500 on the base). `api/error_handlers.py` registers one
@@ -252,7 +253,7 @@ there, so the response status comes from the exception class itself.
   cookie.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
-- `GET /api/auth/me` — returns `{id, email}` for the caller's access token.
+- `GET /api/auth/me` — returns `{id, email, is_admin}` for the caller's access token.
 - `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
   events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
@@ -262,6 +263,14 @@ there, so the response status comes from the exception class itself.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — queries the `chunks` table (fails if Postgres is unreachable or
   the migrations haven't run); no embedding or LLM call, so probes cost nothing.
+- `POST /api/ingestions` — multipart `file` (a `.zip` of `.md` files, ≤ 20 MB) → 202 with a
+  `running` run `{id, status, started_at, finished_at, added, updated, unchanged, removed,
+  error}`. The zip is validated (400) and stored before the response; the ingestion itself runs
+  as a background task afterwards. 409 if another run is still going (a partial unique index
+  allows one `running` row), 413 if too large.
+- `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
+  404 if unknown.
+- `GET /api/ingestions/latest` — the most recent run, or `null`.
 - `GET /api/kb/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).

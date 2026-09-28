@@ -32,6 +32,27 @@ class IngestionReport:
     chunks: int
 
 
+IngestionRunStatus = Literal["running", "succeeded", "failed"]
+
+
+@dataclass(frozen=True)
+class IngestionRun:
+    """One ingestion of an uploaded archive. The counts are set once it succeeds."""
+
+    id: uuid.UUID
+    status: IngestionRunStatus
+    archive_name: str
+    created_by: uuid.UUID | None
+    started_at: datetime
+    finished_at: datetime | None = None
+    added: int | None = None
+    updated: int | None = None
+    unchanged: int | None = None
+    removed: int | None = None
+    chunks: int | None = None
+    error: str | None = None
+
+
 @dataclass(frozen=True)
 class User:
     id: uuid.UUID

@@ -1,4 +1,5 @@
 import io
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -6,12 +7,15 @@ import pytest
 
 from rag.adapters.archive_store import LocalArchiveStore
 from rag.domain.errors import (
+    ArchiveTooLargeError,
     EmptyKnowledgeBaseError,
+    IngestionInProgressError,
+    IngestionRunNotFoundError,
     InvalidArchiveError,
     NoArchiveError,
 )
 from rag.domain.models import IngestionReport, RawDocument
-from rag.services.ingestion_service import loaders
+from rag.services.ingestion_service import loaders, service
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.loaders import (
     MarkdownFileLoader,
@@ -19,7 +23,11 @@ from rag.services.ingestion_service.loaders import (
     loader_for_path,
 )
 from rag.services.ingestion_service.service import IngestionService
-from tests.unit.fakes import FakeArchiveStore, FakeDocumentIndex
+from tests.unit.fakes import (
+    FakeArchiveStore,
+    FakeDocumentIndex,
+    FakeIngestionRunRepository,
+)
 
 
 def _zip(files: dict[str, str | bytes]) -> bytes:
@@ -41,10 +49,15 @@ class ListLoader:
 
 
 def _service(
-    index: FakeDocumentIndex, archives: FakeArchiveStore | None = None
+    index: FakeDocumentIndex,
+    archives: FakeArchiveStore | None = None,
+    runs: FakeIngestionRunRepository | None = None,
 ) -> IngestionService:
     return IngestionService(
-        index, WholeDocumentChunker(), archives or FakeArchiveStore()
+        index,
+        WholeDocumentChunker(),
+        archives or FakeArchiveStore(),
+        runs or FakeIngestionRunRepository(),
     )
 
 
@@ -231,3 +244,87 @@ async def test_local_archive_store_round_trips_and_finds_the_latest(
     assert await store.alatest() == second
     assert await store.aread(first) == b"first"
     assert sorted(p.name for p in (tmp_path / "uploads").iterdir()) == [first, second]
+
+
+# --- Runs ----------------------------------------------------------------------------
+
+
+async def test_upload_run_stores_the_archive_then_records_the_report() -> None:
+    index, archives, runs = (
+        FakeDocumentIndex(),
+        FakeArchiveStore(),
+        FakeIngestionRunRepository(),
+    )
+    ingestion = _service(index, archives, runs)
+
+    run = await ingestion.start_upload(_zip({"a.md": "A", "b.md": "B"}), user_id=None)
+    assert run.status == "running"
+    assert archives.archives.keys() == {run.archive_name}
+
+    await ingestion.complete_run(run)
+
+    done = await ingestion.get_run(run.id)
+    assert (done.status, done.added, done.chunks, done.error) == (
+        "succeeded",
+        2,
+        2,
+        None,
+    )
+    assert index.hashes.keys() == {"a.md", "b.md"}
+
+
+async def test_upload_while_a_run_is_going_is_refused_and_not_stored() -> None:
+    archives = FakeArchiveStore()
+    ingestion = _service(FakeDocumentIndex(), archives)
+    await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
+
+    with pytest.raises(IngestionInProgressError):
+        await ingestion.start_upload(_zip({"b.md": "B"}), user_id=None)
+    assert len(archives.archives) == 1
+
+
+async def test_upload_over_the_size_limit_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(service, "MAX_ARCHIVE_BYTES", 10)
+
+    with pytest.raises(ArchiveTooLargeError):
+        await _service(FakeDocumentIndex()).start_upload(b"x" * 11, user_id=None)
+
+
+async def test_invalid_upload_starts_no_run() -> None:
+    runs = FakeIngestionRunRepository()
+
+    with pytest.raises(InvalidArchiveError):
+        await _service(FakeDocumentIndex(), runs=runs).start_upload(b"nope", None)
+    assert runs.runs == {}
+
+
+async def test_a_failing_run_records_the_error_and_frees_the_slot() -> None:
+    class BrokenIndex(FakeDocumentIndex):
+        async def areplace_documents(self, documents, *, removed) -> None:
+            raise ConnectionError("embedding API down")
+
+    ingestion = _service(BrokenIndex())
+    run = await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
+
+    await ingestion.complete_run(run)  # doesn't raise
+
+    failed = await ingestion.get_run(run.id)
+    assert failed.status == "failed"
+    assert failed.error is not None and "unexpectedly" in failed.error
+    await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)  # slot is free
+
+
+async def test_interrupted_runs_are_failed_at_startup() -> None:
+    ingestion = _service(FakeDocumentIndex())
+    run = await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
+
+    assert await ingestion.fail_interrupted_runs() == 1
+    assert (await ingestion.get_run(run.id)).status == "failed"
+    assert await ingestion.latest_run() is not None
+
+
+async def test_unknown_run_raises() -> None:
+    with pytest.raises(IngestionRunNotFoundError):
+        await _service(FakeDocumentIndex()).get_run(uuid.uuid4())

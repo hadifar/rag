@@ -26,6 +26,7 @@ dependencies = [
     "sqlalchemy>=2.0.44",
     "azure-storage-blob[aio]>=12.30.3",
     "azure-identity>=1.25.3",
+    "python-multipart>=0.0.32",
 ]
 
 [project.urls]

@@ -8,6 +8,7 @@ from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -44,6 +45,13 @@ def get_auth_service(container: ContainerDep) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_ingestion_service(container: ContainerDep) -> IngestionService:
+    return container.ingestion_service
+
+
+IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
 def get_conversation_service(container: ContainerDep) -> ConversationService:

@@ -35,6 +35,31 @@ class EmptyKnowledgeBaseError(RagError):
         super().__init__("The knowledge-base source contains no documents")
 
 
+class ArchiveTooLargeError(RagError):
+    """Raised when an uploaded knowledge-base zip is over the size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The archive is larger than {max_bytes // (1024 * 1024)} MB")
+
+
+class IngestionInProgressError(RagError):
+    """Raised when an ingestion is started while another one is still running."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self):
+        super().__init__("Another ingestion is still running; try again when it ends")
+
+
+class IngestionRunNotFoundError(RagError):
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, run_id: object):
+        super().__init__(f"No ingestion run found for id={run_id!r}")
+
+
 class NoArchiveError(RagError):
     """Raised when asked to ingest the latest uploaded archive, but none exists."""
 

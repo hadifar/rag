@@ -11,6 +11,7 @@ from rag.adapters.observability import open_trace_config
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
+from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -52,7 +53,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         ingestion_service = IngestionService(
-            index=vector_store, chunker=WholeDocumentChunker(), archives=archive_store
+            index=vector_store,
+            chunker=WholeDocumentChunker(),
+            archives=archive_store,
+            runs=IngestionRunRepository(db_pool),
         )
 
         auth_service = AuthService(

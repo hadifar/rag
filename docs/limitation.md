@@ -1,7 +1,14 @@
 # Limitations — Production Readiness
 
 ## Data & ingestion
-- `rag ingest` is a manual, one-shot CLI step — nothing triggers it on a doc change
+- Uploads (`POST /api/ingestions`) run as an in-process background task: a backend restart
+  mid-run kills it, and the next startup marks it failed, so the admin has to upload again
+  (safe: the index is only swapped in one transaction at the end). That startup sweep assumes a
+  single backend instance: with several, one restarting would mark another's live run failed
+- `rag ingest` doesn't take part in the one-run-at-a-time rule — running it while an upload is
+  being ingested can make one of the two fail (the other still completes)
+- `rag ingest --latest` rebuilds from the newest *stored* upload, which is the newest *valid* zip
+  but not necessarily one that ingested successfully (e.g. if embedding failed)
 - `WholeDocumentChunker` puts an entire file into one record — no size-aware chunking for docs past the embedding model's input limit
 - `MarkdownHeaderChunker` exists and is arguably the better default, but nothing wires it up — `container.py` hardcodes `WholeDocumentChunker`, so the better chunker is dead code with no way to select it
 - Only local markdown is supported — no PDF, Confluence, wiki, etc. loaders

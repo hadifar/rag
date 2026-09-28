@@ -11,6 +11,7 @@ from rag.adapters.archive_store import LocalArchiveStore
 from rag.adapters.llm_client import build_embeddings
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
+from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
 from rag.services.ingestion_service.loaders import MarkdownFileLoader
 from rag.services.ingestion_service.service import IngestionService
@@ -43,6 +44,20 @@ async def db_pool(
         yield pool
 
 
+def ingestion_service(
+    repository: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
+) -> IngestionService:
+    """Chunks by markdown heading, so the fixture docs split into several chunks."""
+    return IngestionService(
+        repository,
+        MarkdownHeaderChunker(),
+        LocalArchiveStore(tmp_path),
+        IngestionRunRepository(db_pool),
+    )
+
+
 @pytest.fixture
 async def seeded_kb(
     integration_settings: Settings,
@@ -55,10 +70,9 @@ async def seeded_kb(
     any real knowledge base in the same database alone.
     """
     repository = DocumentRepository(db_pool, build_embeddings(integration_settings))
-    service = IngestionService(
-        repository, MarkdownHeaderChunker(), LocalArchiveStore(tmp_path)
+    await ingestion_service(repository, db_pool, tmp_path).ingest(
+        MarkdownFileLoader(FIXTURE_KB), remove_missing=False
     )
-    await service.ingest(MarkdownFileLoader(FIXTURE_KB), remove_missing=False)
     yield repository
     async with db_pool.connection() as conn:
         # Cascades to their chunks.

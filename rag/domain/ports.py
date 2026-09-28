@@ -12,6 +12,8 @@ from rag.domain.models import (
     Conversation,
     HistoryMessage,
     IndexedDocument,
+    IngestionReport,
+    IngestionRun,
     RawDocument,
     User,
 )
@@ -56,8 +58,25 @@ class ArchiveStorePort(Protocol):
         ...
 
 
+class IngestionRunRepositoryPort(Protocol):
+    async def create(
+        self, archive_name: str, created_by: uuid.UUID | None
+    ) -> IngestionRun:
+        """Starts a run as `running`; raises IngestionInProgressError if one already is."""
+        ...
+
+    async def get(self, run_id: uuid.UUID) -> IngestionRun | None: ...
+    async def latest(self) -> IngestionRun | None: ...
+    async def running(self) -> IngestionRun | None: ...
+    async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None: ...
+    async def fail(self, run_id: uuid.UUID, error: str) -> None: ...
+    async def fail_running(self, error: str) -> int:
+        """Marks every still-running run failed; returns how many there were."""
+        ...
+
+
 class DocumentLoaderPort(Protocol):
-    """Sync by design: ingestion is a batch CLI operation, not a shared-event-loop hot path."""
+    """Sync by design: parsing is CPU-only. The API runs it via asyncio.to_thread."""
 
     def load(self) -> Iterable[RawDocument]: ...
 

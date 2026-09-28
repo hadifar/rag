@@ -1,6 +1,8 @@
 import asyncio
+import io
 import json
 import uuid
+import zipfile
 from collections.abc import Generator
 from datetime import timedelta
 from typing import cast
@@ -24,10 +26,14 @@ from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.generation_service.service import GenerationService
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
+    FakeArchiveStore,
     FakeConversationRepository,
+    FakeDocumentIndex,
+    FakeIngestionRunRepository,
     FakeTitleModel,
     FakeUserRepository,
     StubChatEngine,
@@ -36,6 +42,7 @@ from tests.unit.fakes import (
 _TEST_EMAIL = "test@example.com"
 _TEST_PASSWORD = "correct horse battery staple"
 _OTHER_EMAIL = "other@example.com"
+_ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
@@ -78,6 +85,7 @@ def client() -> Generator[TestClient]:
     auth_service = _build_auth_service()
     asyncio.run(auth_service.create_user(_TEST_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
+    asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
     chat_engine = StubChatEngine(
         extra_events=[
@@ -89,7 +97,12 @@ def client() -> Generator[TestClient]:
     container = Container(
         ranking_service=cast(RetrievalService, _StubRetrievalService()),
         generation_service=cast(GenerationService, chat_engine),
-        ingestion_service=cast(IngestionService, object()),
+        ingestion_service=IngestionService(
+            FakeDocumentIndex(),
+            WholeDocumentChunker(),
+            FakeArchiveStore(),
+            FakeIngestionRunRepository(),
+        ),
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
@@ -483,3 +496,57 @@ def test_conversation_endpoints_require_auth(
     client: TestClient, method: str, path: str
 ) -> None:
     assert client.request(method, path).status_code == 401
+
+
+def _kb_zip() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("kb/a.md", "# A")
+        archive.writestr("kb/b.md", "# B")
+    return buffer.getvalue()
+
+
+def _upload(client: TestClient, headers: dict[str, str], data: bytes):
+    return client.post(
+        "/api/ingestions",
+        headers=headers,
+        files={"file": ("kb.zip", data, "application/zip")},
+    )
+
+
+def test_admin_upload_runs_ingestion_in_the_background(client: TestClient) -> None:
+    headers = _login(client, _ADMIN_EMAIL)
+    assert client.get("/api/ingestions/latest", headers=headers).json() is None
+
+    response = _upload(client, headers, _kb_zip())
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "running"
+    # TestClient runs background tasks before returning, so the run has ended.
+    run = client.get(f"/api/ingestions/{response.json()['id']}", headers=headers)
+    assert run.json()["status"] == "succeeded"
+    assert run.json()["added"] == 2
+    latest = client.get("/api/ingestions/latest", headers=headers)
+    assert latest.json()["id"] == response.json()["id"]
+
+
+def test_upload_rejects_an_invalid_zip(client: TestClient) -> None:
+    response = _upload(client, _login(client, _ADMIN_EMAIL), b"not a zip")
+
+    assert response.status_code == 400
+    assert "not a zip file" in response.json()["detail"]
+
+
+def test_ingestions_are_admin_only(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    assert _upload(client, auth_headers, _kb_zip()).status_code == 403
+    assert client.get("/api/ingestions/latest", headers=auth_headers).status_code == 403
+    assert client.get("/api/ingestions/latest").status_code == 401
+
+
+def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
+    response = client.get(
+        f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
+    )
+    assert response.status_code == 404

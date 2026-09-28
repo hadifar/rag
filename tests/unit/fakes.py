@@ -1,12 +1,20 @@
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
 from langchain_core.messages import AIMessage
 
+from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import StreamEvent, TextDelta
-from rag.domain.models import Conversation, HistoryMessage, IndexedDocument, User
+from rag.domain.models import (
+    Conversation,
+    HistoryMessage,
+    IndexedDocument,
+    IngestionReport,
+    IngestionRun,
+    User,
+)
 
 
 class FakeUserRepository:
@@ -40,6 +48,53 @@ class FakeUserRepository:
             return None
         self._users[user.id] = replace(user, is_admin=is_admin)
         return self._users[user.id]
+
+
+class FakeIngestionRunRepository:
+    """In-memory IngestionRunRepositoryPort, one running run at a time like the real one."""
+
+    def __init__(self):
+        self.runs: dict[uuid.UUID, IngestionRun] = {}
+        self._clock = datetime(2026, 1, 1, tzinfo=UTC)
+
+    async def create(
+        self, archive_name: str, created_by: uuid.UUID | None
+    ) -> IngestionRun:
+        if await self.running() is not None:
+            raise IngestionInProgressError()
+        self._clock += timedelta(seconds=1)
+        run = IngestionRun(
+            id=uuid.uuid4(),
+            status="running",
+            archive_name=archive_name,
+            created_by=created_by,
+            started_at=self._clock,
+        )
+        self.runs[run.id] = run
+        return run
+
+    async def get(self, run_id: uuid.UUID) -> IngestionRun | None:
+        return self.runs.get(run_id)
+
+    async def latest(self) -> IngestionRun | None:
+        return max(self.runs.values(), key=lambda r: r.started_at, default=None)
+
+    async def running(self) -> IngestionRun | None:
+        return next((r for r in self.runs.values() if r.status == "running"), None)
+
+    async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None:
+        self.runs[run_id] = replace(
+            self.runs[run_id], status="succeeded", **asdict(report)
+        )
+
+    async def fail(self, run_id: uuid.UUID, error: str) -> None:
+        self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
+
+    async def fail_running(self, error: str) -> int:
+        running = [r for r in self.runs.values() if r.status == "running"]
+        for run in running:
+            await self.fail(run.id, error)
+        return len(running)
 
 
 class FakeArchiveStore:
