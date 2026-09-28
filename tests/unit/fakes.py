@@ -198,12 +198,18 @@ class FakeConversationRepository:
 
 
 class StubChatEngine:
-    """ChatEnginePort that echoes the message, and records threads it was asked
-    to delete.
+    """ChatEnginePort that echoes the message, answers title requests with `title`,
+    and records threads it was asked to delete.
     """
 
-    def __init__(self, extra_events: list[StreamEvent] | None = None):
+    def __init__(
+        self,
+        extra_events: list[StreamEvent] | None = None,
+        title: str | None = "Generated title",
+    ):
         self.extra_events = extra_events or []
+        self.title = title
+        self.title_requests: list[tuple[str, str]] = []
         self.threads: dict[str, list[HistoryMessage]] = {}
         self.deleted_threads: list[str] = []
 
@@ -220,6 +226,10 @@ class StubChatEngine:
         yield TextDelta(text=reply)
         for event in self.extra_events:
             yield event
+
+    async def generate_title(self, question: str, answer: str) -> str | None:
+        self.title_requests.append((question, answer))
+        return self.title
 
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         return self.threads.get(thread_id, [])

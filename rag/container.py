@@ -70,7 +70,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
             chat_engine=generation_service,
-            title_model=llm,
         )
 
         yield Container(

@@ -1,14 +1,10 @@
-import asyncio
 import base64
 import binascii
 import json
-import logging
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
-
-from langchain_core.runnables import Runnable
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.events import (
@@ -20,20 +16,7 @@ from rag.domain.events import (
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import ChatEnginePort, ConversationRepositoryPort
 
-logger = logging.getLogger(__name__)
-
-TITLE_PROMPT = (
-    "Write a title of at most 6 words for a support conversation that starts with the "
-    "exchange below. Reply with the title only, without quotes or a trailing period.\n\n"
-    "USER:\n{question}\n\nASSISTANT:\n{answer}"
-)
-
 FALLBACK_TITLE_LENGTH = 60
-MAX_TITLE_LENGTH = 80
-# Only the start of the answer is needed to title it; caps the title call's cost.
-TITLE_ANSWER_EXCERPT = 1000
-# The stream stays open until the title arrives; don't hold it on a slow LLM.
-TITLE_TIMEOUT_SECONDS = 10
 
 
 @dataclass(frozen=True)
@@ -47,11 +30,9 @@ class ConversationService:
         self,
         repository: ConversationRepositoryPort,
         chat_engine: ChatEnginePort,
-        title_model: Runnable,
     ):
         self._repository = repository
         self._chat_engine = chat_engine
-        self._title_model = title_model
 
     async def start_turn(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID | None, message: str
@@ -90,7 +71,7 @@ class ConversationService:
             yield event
 
         if turn.is_new:
-            title = await self._generate_title(message, "".join(answer))
+            title = await self._chat_engine.generate_title(message, "".join(answer))
             if title is not None:
                 await self._repository.set_title(conversation.id, title)
                 yield ConversationTitled(
@@ -129,35 +110,12 @@ class ConversationService:
             raise ConversationNotFoundError(conversation_id)
         return conversation
 
-    async def _generate_title(self, question: str, answer: str) -> str | None:
-        """An LLM-written title, or None to keep the fallback. Never raises: a failed
-        title must not fail the turn the user already got an answer for.
-        """
-        prompt = TITLE_PROMPT.format(
-            question=question, answer=answer[:TITLE_ANSWER_EXCERPT]
-        )
-        try:
-            async with asyncio.timeout(TITLE_TIMEOUT_SECONDS):
-                reply = await self._title_model.ainvoke(prompt)
-        except Exception:
-            logger.warning(
-                "Title generation failed; keeping the fallback", exc_info=True
-            )
-            return None
-        return _clean_title(str(reply.content))
-
 
 def _fallback_title(message: str) -> str:
     title = " ".join(message.split())
     if len(title) <= FALLBACK_TITLE_LENGTH:
         return title
     return title[: FALLBACK_TITLE_LENGTH - 1].rstrip() + "…"
-
-
-def _clean_title(raw: str) -> str | None:
-    first_line = raw.strip().splitlines()[0] if raw.strip() else ""
-    title = first_line.strip().strip("\"'`").strip().rstrip(".")
-    return title[:MAX_TITLE_LENGTH] or None
 
 
 def _encode_cursor(conversation: Conversation) -> str:

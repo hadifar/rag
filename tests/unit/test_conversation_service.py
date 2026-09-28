@@ -2,7 +2,6 @@ import uuid
 from typing import cast
 
 import pytest
-from langchain_core.runnables import Runnable
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.events import (
@@ -12,22 +11,18 @@ from rag.domain.events import (
     TextDelta,
 )
 from rag.services.conversation_service.service import ConversationService
-from tests.unit.fakes import FakeConversationRepository, FakeTitleModel, StubChatEngine
+from tests.unit.fakes import FakeConversationRepository, StubChatEngine
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
 
 
 def _service(
-    title_model: FakeTitleModel | None = None,
+    engine: StubChatEngine | None = None,
 ) -> tuple[ConversationService, FakeConversationRepository, StubChatEngine]:
     repository = FakeConversationRepository()
-    engine = StubChatEngine()
-    service = ConversationService(
-        repository=repository,
-        chat_engine=engine,
-        title_model=cast(Runnable, title_model or FakeTitleModel()),
-    )
+    engine = engine or StubChatEngine()
+    service = ConversationService(repository=repository, chat_engine=engine)
     return service, repository, engine
 
 
@@ -52,8 +47,7 @@ async def test_first_message_creates_a_conversation_owned_by_the_sender() -> Non
 
 
 async def test_new_conversation_gets_a_generated_title_as_the_last_event() -> None:
-    title_model = FakeTitleModel(reply='"Password reset."\nextra line')
-    service, repository, _ = _service(title_model)
+    service, repository, engine = _service(StubChatEngine(title="Password reset"))
 
     events = await _send(service, ALICE, "How do I reset my password?")
 
@@ -62,12 +56,14 @@ async def test_new_conversation_gets_a_generated_title_as_the_last_event() -> No
         conversation_id=str(conversation_id), title="Password reset"
     )
     assert repository.rows[conversation_id].title == "Password reset"
-    # The title prompt sees both sides of the first exchange.
-    assert "echo: How do I reset my password?" in title_model.prompts[0]
+    # The title is generated from both sides of the first exchange.
+    assert engine.title_requests == [
+        ("How do I reset my password?", "echo: How do I reset my password?")
+    ]
 
 
 async def test_failed_title_generation_keeps_the_fallback_title() -> None:
-    service, repository, _ = _service(FakeTitleModel(error=RuntimeError("LLM down")))
+    service, repository, _ = _service(StubChatEngine(title=None))
 
     events = await _send(service, ALICE, "  How do I\nreset my password?  ")
 
@@ -78,7 +74,7 @@ async def test_failed_title_generation_keeps_the_fallback_title() -> None:
 
 
 async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
-    service, repository, _ = _service(FakeTitleModel(error=RuntimeError()))
+    service, repository, _ = _service(StubChatEngine(title=None))
 
     await _send(service, ALICE, "word " * 50)
 
@@ -88,8 +84,7 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
 
 
 async def test_follow_up_message_reuses_the_conversation_and_is_not_retitled() -> None:
-    title_model = FakeTitleModel()
-    service, repository, engine = _service(title_model)
+    service, repository, engine = _service()
     first = await _send(service, ALICE, "first")
     conversation_id = cast(ConversationReady, first[0]).conversation.id
 
@@ -97,7 +92,7 @@ async def test_follow_up_message_reuses_the_conversation_and_is_not_retitled() -
 
     assert cast(ConversationReady, second[0]).conversation.id == conversation_id
     assert not any(isinstance(e, ConversationTitled) for e in second)
-    assert len(title_model.prompts) == 1
+    assert len(engine.title_requests) == 1
     assert len(repository.rows) == 1
     assert len(engine.threads[str(conversation_id)]) == 4
 

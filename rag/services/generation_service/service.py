@@ -9,6 +9,7 @@ from rag.domain.events import StreamEvent
 from rag.domain.models import HistoryMessage
 from rag.services.generation_service.graph import build_graph
 from rag.services.generation_service.streaming import stream_events
+from rag.services.generation_service.title import generate_title
 from rag.services.generation_service.tools import build_search_tool
 from rag.services.generation_service.turn import to_history
 from rag.services.retrieval_service.service import RetrievalService
@@ -27,6 +28,7 @@ class GenerationService:
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
         tools = [build_search_tool(ranking_service)]
+        self._llm = llm
         self._graph = build_graph(llm, tools, checkpointer)
         self._checkpointer = checkpointer
         self._trace_config = trace_config
@@ -42,6 +44,9 @@ class GenerationService:
             self._graph, [HumanMessage(content=message)], config
         ):
             yield event
+
+    async def generate_title(self, question: str, answer: str) -> str | None:
+        return await generate_title(self._llm, question, answer)
 
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         state = await self._graph.aget_state({"configurable": {"thread_id": thread_id}})

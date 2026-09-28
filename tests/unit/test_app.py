@@ -10,7 +10,6 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
 from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
@@ -34,7 +33,6 @@ from tests.unit.fakes import (
     FakeConversationRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
-    FakeTitleModel,
     FakeUserRepository,
     StubChatEngine,
 )
@@ -92,7 +90,8 @@ def client() -> Generator[TestClient]:
             ToolCallStart(name="search", query="hi"),
             ToolCallResult(name="search", output="stub result"),
             SourcesReady(sources=["doc-a", "doc-b"]),
-        ]
+        ],
+        title="Greeting",
     )
     container = Container(
         ranking_service=cast(RetrievalService, _StubRetrievalService()),
@@ -107,7 +106,6 @@ def client() -> Generator[TestClient]:
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
             chat_engine=chat_engine,
-            title_model=cast(Runnable, FakeTitleModel(reply="Greeting")),
         ),
     )
     app = create_app(container=container, settings=_stub_settings())
