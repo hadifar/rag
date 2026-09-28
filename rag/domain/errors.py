@@ -76,6 +76,15 @@ class InvalidTokenError(RagError):
         super().__init__(f"Invalid token: {reason}")
 
 
+class AdminRequiredError(RagError):
+    """Raised when a signed-in user who isn't an admin calls an admin-only endpoint."""
+
+    status_code: ClassVar[int] = 403
+
+    def __init__(self):
+        super().__init__("Admin access required")
+
+
 class ConversationNotFoundError(RagError):
     """Raised when a conversation doesn't exist or belongs to another user.
 

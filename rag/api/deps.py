@@ -63,3 +63,10 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+def get_current_admin(user: CurrentUserDep) -> User:
+    return AuthService.require_admin(user)
+
+
+AdminUserDep = Annotated[User, Depends(get_current_admin)]

@@ -91,6 +91,7 @@ def create_user(
     password: str = typer.Option(
         ..., prompt=True, hide_input=True, confirmation_prompt=True
     ),
+    admin: bool = typer.Option(False, help="Allow replacing the knowledge base"),
 ) -> None:
     """Create a login for a user (there's no public signup endpoint)."""
     import psycopg
@@ -102,14 +103,41 @@ def create_user(
 
     async def run() -> User:
         async with build_container(settings) as container:
-            return await container.auth_service.create_user(email, password)
+            return await container.auth_service.create_user(
+                email, password, is_admin=admin
+            )
 
     try:
         user = asyncio.run(run())
     except psycopg.errors.UniqueViolation as exc:
         raise typer.BadParameter(f"a user with email {email!r} already exists") from exc
 
-    typer.echo(f"Created user {user.email} ({user.id})")
+    role = " (admin)" if user.is_admin else ""
+    typer.echo(f"Created user {user.email}{role} ({user.id})")
+
+
+@app.command(name="set-admin")
+def set_admin(
+    email: str = typer.Argument(..., help="Email address of an existing user"),
+    revoke: bool = typer.Option(False, help="Remove admin rights instead"),
+) -> None:
+    """Grant (or revoke) admin rights: admins can replace the knowledge base."""
+    from rag.container import build_container
+    from rag.domain.errors import UserNotFoundError
+    from rag.domain.models import User
+
+    settings = get_settings()
+
+    async def run() -> User:
+        async with build_container(settings) as container:
+            return await container.auth_service.set_admin(email, not revoke)
+
+    try:
+        user = asyncio.run(run())
+    except UserNotFoundError as exc:
+        raise typer.BadParameter(f"no user with email {email!r}") from exc
+
+    typer.echo(f"{user.email} is {'now' if user.is_admin else 'no longer'} an admin")
 
 
 if __name__ == "__main__":

@@ -27,8 +27,10 @@ migrations (`users`, `conversations`, `chunks`, `documents`) and create a user (
 created out-of-band):
 ```bash
 uv run alembic upgrade head
-uv run rag create-user you@example.com
+uv run rag create-user you@example.com --admin
 ```
+Only admins can replace the knowledge base from the Settings page. Leave out `--admin` for regular
+users; `uv run rag set-admin <email> [--revoke]` changes it for an existing user.
 
 ## Running
 

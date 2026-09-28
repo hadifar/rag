@@ -38,6 +38,8 @@ class User:
     email: str
     hashed_password: str
     created_at: datetime
+    # Admins can replace the knowledge base; granted out-of-band (`rag set-admin`).
+    is_admin: bool = False
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from rag.domain.errors import (
+    AdminRequiredError,
     InvalidCredentialsError,
     InvalidTokenError,
     UserNotFoundError,
@@ -36,8 +37,24 @@ class AuthService:
         self._refresh_ttl = refresh_ttl
         self._hasher = PasswordHasher()
 
-    async def create_user(self, email: str, password: str) -> User:
-        return await self._user_repository.create(email, self._hasher.hash(password))
+    async def create_user(
+        self, email: str, password: str, *, is_admin: bool = False
+    ) -> User:
+        return await self._user_repository.create(
+            email, self._hasher.hash(password), is_admin=is_admin
+        )
+
+    async def set_admin(self, email: str, is_admin: bool) -> User:
+        user = await self._user_repository.set_admin(email, is_admin)
+        if user is None:
+            raise UserNotFoundError(email)
+        return user
+
+    @staticmethod
+    def require_admin(user: User) -> User:
+        if not user.is_admin:
+            raise AdminRequiredError()
+        return user
 
     async def authenticate(self, email: str, password: str) -> User:
         user = await self._user_repository.get_by_email(email)

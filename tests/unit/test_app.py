@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import cast
 
 import pytest
@@ -21,38 +21,21 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
-from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
-from tests.unit.fakes import FakeConversationRepository, FakeTitleModel, StubChatEngine
+from tests.unit.fakes import (
+    FakeConversationRepository,
+    FakeTitleModel,
+    FakeUserRepository,
+    StubChatEngine,
+)
 
 _TEST_EMAIL = "test@example.com"
 _TEST_PASSWORD = "correct horse battery staple"
 _OTHER_EMAIL = "other@example.com"
-
-
-class _FakeUserRepository:
-    def __init__(self):
-        self._users: dict[uuid.UUID, User] = {}
-
-    async def get_by_email(self, email: str) -> User | None:
-        return next((u for u in self._users.values() if u.email == email), None)
-
-    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
-        return self._users.get(user_id)
-
-    async def create(self, email: str, hashed_password: str) -> User:
-        user = User(
-            id=uuid.uuid4(),
-            email=email,
-            hashed_password=hashed_password,
-            created_at=datetime.now(UTC),
-        )
-        self._users[user.id] = user
-        return user
 
 
 class _StubRetrievalService:
@@ -82,7 +65,7 @@ def _stub_settings() -> Settings:
 
 def _build_auth_service() -> AuthService:
     return AuthService(
-        user_repository=_FakeUserRepository(),
+        user_repository=FakeUserRepository(),
         jwt_secret="test-secret-that-is-long-enough-32b",
         jwt_algorithm="HS256",
         access_ttl=timedelta(minutes=15),
@@ -194,6 +177,7 @@ def test_me_endpoint_returns_current_user(
     response = client.get("/api/auth/me", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["email"] == _TEST_EMAIL
+    assert response.json()["is_admin"] is False
 
 
 def test_refresh_endpoint_issues_new_access_token(client: TestClient) -> None:

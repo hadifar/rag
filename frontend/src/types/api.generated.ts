@@ -303,6 +303,8 @@ export interface components {
             id: string;
             /** Email */
             email: string;
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** ValidationError */
         ValidationError: {

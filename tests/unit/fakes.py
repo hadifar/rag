@@ -6,7 +6,40 @@ from datetime import UTC, datetime, timedelta
 from langchain_core.messages import AIMessage
 
 from rag.domain.events import StreamEvent, TextDelta
-from rag.domain.models import Conversation, HistoryMessage, IndexedDocument
+from rag.domain.models import Conversation, HistoryMessage, IndexedDocument, User
+
+
+class FakeUserRepository:
+    """In-memory UserRepositoryPort."""
+
+    def __init__(self):
+        self._users: dict[uuid.UUID, User] = {}
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        return self._users.get(user_id)
+
+    async def create(
+        self, email: str, hashed_password: str, *, is_admin: bool = False
+    ) -> User:
+        user = User(
+            id=uuid.uuid4(),
+            email=email,
+            hashed_password=hashed_password,
+            created_at=datetime.now(UTC),
+            is_admin=is_admin,
+        )
+        self._users[user.id] = user
+        return user
+
+    async def set_admin(self, email: str, is_admin: bool) -> User | None:
+        user = await self.get_by_email(email)
+        if user is None:
+            return None
+        self._users[user.id] = replace(user, is_admin=is_admin)
+        return self._users[user.id]
 
 
 class FakeArchiveStore:
