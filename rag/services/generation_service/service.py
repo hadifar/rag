@@ -23,11 +23,11 @@ class GenerationService:
     def __init__(
         self,
         llm: BaseChatModel,
-        ranking_service: RetrievalService,
+        retrieval_service: RetrievalService,
         checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
-        tools = [build_search_tool(ranking_service)]
+        tools = [build_search_tool(retrieval_service)]
         self._llm = llm
         self._graph = build_graph(llm, tools, checkpointer)
         self._checkpointer = checkpointer

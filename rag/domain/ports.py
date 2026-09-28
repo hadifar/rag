@@ -118,7 +118,7 @@ class ConversationRepositoryPort(Protocol):
     async def delete(self, conversation_id: uuid.UUID) -> None: ...
 
 
-class ChatEnginePort(Protocol):
+class GenerationPort(Protocol):
     """Runs chat turns and owns their message history, keyed by thread id."""
 
     def stream_chat(

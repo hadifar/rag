@@ -14,7 +14,7 @@ from rag.domain.events import (
     TextDelta,
 )
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import ChatEnginePort, ConversationRepositoryPort
+from rag.domain.ports import ConversationRepositoryPort, GenerationPort
 
 FALLBACK_TITLE_LENGTH = 60
 
@@ -29,10 +29,10 @@ class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        chat_engine: ChatEnginePort,
+        generation: GenerationPort,
     ):
         self._repository = repository
-        self._chat_engine = chat_engine
+        self._generation = generation
 
     async def start_turn(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID | None, message: str
@@ -65,13 +65,13 @@ class ConversationService:
         yield ConversationReady(conversation=conversation)
 
         answer: list[str] = []
-        async for event in self._chat_engine.stream_chat(message, str(conversation.id)):
+        async for event in self._generation.stream_chat(message, str(conversation.id)):
             if isinstance(event, TextDelta):
                 answer.append(event.text)
             yield event
 
         if turn.is_new:
-            title = await self._chat_engine.generate_title(message, "".join(answer))
+            title = await self._generation.generate_title(message, "".join(answer))
             if title is not None:
                 await self._repository.set_title(conversation.id, title)
                 yield ConversationTitled(
@@ -92,13 +92,13 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         await self._get_owned(user_id, conversation_id)
-        return await self._chat_engine.get_history(str(conversation_id))
+        return await self._generation.get_history(str(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         await self._get_owned(user_id, conversation_id)
         # Messages first: if this fails, the row is still there to retry the delete,
         # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._chat_engine.delete_history(str(conversation_id))
+        await self._generation.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
 
     async def _get_owned(

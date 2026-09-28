@@ -34,7 +34,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakeUserRepository,
-    StubChatEngine,
+    StubGeneration,
 )
 
 _TEST_EMAIL = "test@example.com"
@@ -85,7 +85,7 @@ def client() -> Generator[TestClient]:
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
-    chat_engine = StubChatEngine(
+    generation = StubGeneration(
         extra_events=[
             ToolCallStart(name="search", query="hi"),
             ToolCallResult(name="search", output="stub result"),
@@ -94,8 +94,8 @@ def client() -> Generator[TestClient]:
         title="Greeting",
     )
     container = Container(
-        ranking_service=cast(RetrievalService, _StubRetrievalService()),
-        generation_service=cast(GenerationService, chat_engine),
+        retrieval_service=cast(RetrievalService, _StubRetrievalService()),
+        generation_service=cast(GenerationService, generation),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -105,7 +105,7 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
-            chat_engine=chat_engine,
+            generation=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())
@@ -133,7 +133,7 @@ def test_live_endpoint_ok(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_endpoint_exercises_ranking_service(client: TestClient) -> None:
+def test_ready_endpoint_exercises_retrieval_service(client: TestClient) -> None:
     response = client.get("/api/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

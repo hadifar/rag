@@ -197,8 +197,8 @@ class FakeConversationRepository:
         self.rows.pop(conversation_id, None)
 
 
-class StubChatEngine:
-    """ChatEnginePort that echoes the message, answers title requests with `title`,
+class StubGeneration:
+    """GenerationPort that echoes the message, answers title requests with `title`,
     and records threads it was asked to delete.
     """
 

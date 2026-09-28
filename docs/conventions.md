@@ -96,7 +96,7 @@ The `/api/chat/stream` wire format is hand-kept in four places; change all four 
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 
 - Write a `build_*(dependency) -> callable` closure, assembled wherever its owning service is
-  built (example: `build_search_tool(ranking_service)` in `tools.py`).
+  built (example: `build_search_tool(retrieval_service)` in `tools.py`).
 - Never a module-level global (e.g. a module-level `@tool` function), and never a client
   re-instantiated per call.
 

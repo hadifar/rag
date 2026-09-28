@@ -33,11 +33,11 @@ def get_container(request: Request) -> Container:
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-def get_ranking_service(container: ContainerDep) -> RetrievalService:
-    return container.ranking_service
+def get_retrieval_service(container: ContainerDep) -> RetrievalService:
+    return container.retrieval_service
 
 
-RankingServiceDep = Annotated[RetrievalService, Depends(get_ranking_service)]
+RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
 
 
 def get_auth_service(container: ContainerDep) -> AuthService:
