@@ -1,20 +1,64 @@
-from rag.domain.models import IngestionReport
-from rag.domain.ports import ChunkerPort, DocumentLoaderPort, VectorStorePort
+import hashlib
+
+from rag.domain.errors import EmptyKnowledgeBaseError
+from rag.domain.models import IndexedDocument, IngestionReport, RawDocument
+from rag.domain.ports import ChunkerPort, DocumentIndexPort, DocumentLoaderPort
 
 
 class IngestionService:
-    def __init__(self, vector_store: VectorStorePort, chunker: ChunkerPort):
-        self._vector_store = vector_store
+    """Makes the index match a source.
+
+    Only new or changed documents (by content hash) are chunked and embedded, and
+    documents the source no longer has are removed — all in one transaction, so a
+    failed run leaves the previous index intact.
+    """
+
+    def __init__(self, index: DocumentIndexPort, chunker: ChunkerPort):
+        self._index = index
         self._chunker = chunker
 
-    async def ingest(self, loader: DocumentLoaderPort) -> IngestionReport:
+    async def ingest(
+        self,
+        loader: DocumentLoaderPort,
+        *,
+        force: bool = False,
+        remove_missing: bool = True,
+    ) -> IngestionReport:
+        """`force` re-embeds unchanged documents too (e.g. after changing the
+        embedding model or chunker); `remove_missing=False` only adds and updates.
+        """
         documents = list(loader.load())
-        chunks = [
-            chunk for document in documents for chunk in self._chunker.chunk(document)
+        if not documents:
+            raise EmptyKnowledgeBaseError()
+
+        stored = await self._index.alist_content_hashes()
+        changed = [
+            IndexedDocument(
+                document.source_id, content_hash, self._chunker.chunk(document)
+            )
+            for document, content_hash in _with_hashes(documents)
+            if force or stored.get(document.source_id) != content_hash
         ]
+        removed = (
+            sorted(stored.keys() - {document.source_id for document in documents})
+            if remove_missing
+            else []
+        )
 
-        if chunks:
-            ids = [chunk.id for chunk in chunks if chunk.id is not None]
-            await self._vector_store.aadd_documents(chunks, ids=ids)
+        await self._index.areplace_documents(changed, removed=removed)
 
-        return IngestionReport(documents=len(documents), chunks=len(chunks))
+        added = sum(1 for document in changed if document.source_id not in stored)
+        return IngestionReport(
+            added=added,
+            updated=len(changed) - added,
+            unchanged=len(documents) - len(changed),
+            removed=len(removed),
+            chunks=sum(len(document.chunks) for document in changed),
+        )
+
+
+def _with_hashes(documents: list[RawDocument]) -> list[tuple[RawDocument, str]]:
+    return [
+        (document, hashlib.sha256(document.text.encode()).hexdigest())
+        for document in documents
+    ]

@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from typing import Annotated
 
 import typer
 import uvicorn
@@ -28,22 +29,42 @@ def serve(
 
 @app.command()
 def ingest(
-    source: str = typer.Option(None, help="Override KNOWLEDGE_BASE_DIR from settings"),
+    source: Annotated[
+        Path | None,
+        typer.Option(
+            help="A .zip or directory of .md files; overrides KNOWLEDGE_BASE_SOURCE"
+        ),
+    ] = None,
+    force: bool = typer.Option(
+        False, help="Re-embed unchanged documents too (after an embedding model change)"
+    ),
 ) -> None:
-    """Load the markdown KB, embed, upsert into the vector store."""
+    """Make the index match the knowledge base: embed new/changed docs, drop removed ones."""
     from rag.container import build_container
+    from rag.domain.errors import RagError
     from rag.domain.models import IngestionReport
-    from rag.services.ingestion_service.loaders import MarkdownFileLoader
+    from rag.services.ingestion_service.loaders import loader_for_path
 
     settings = get_settings()
-    loader = MarkdownFileLoader(Path(source) if source else settings.KNOWLEDGE_BASE_DIR)
+    path = source or settings.KNOWLEDGE_BASE_SOURCE
+    if not path.exists():
+        raise typer.BadParameter(f"{path} doesn't exist", param_hint="--source")
 
     async def run() -> IngestionReport:
+        loader = loader_for_path(path)
         async with build_container(settings) as container:
-            return await container.ingestion_service.ingest(loader)
+            return await container.ingestion_service.ingest(loader, force=force)
 
-    report = asyncio.run(run())
-    typer.echo(f"Ingested {report.documents} documents, {report.chunks} chunks")
+    try:
+        report = asyncio.run(run())
+    except RagError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--source") from exc
+
+    typer.echo(
+        f"Ingested {path}: {report.added} added, {report.updated} updated, "
+        f"{report.unchanged} unchanged, {report.removed} removed "
+        f"({report.chunks} chunks embedded)"
+    )
 
 
 @app.command(name="create-user")

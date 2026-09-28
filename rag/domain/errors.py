@@ -17,6 +17,24 @@ class DocumentNotFoundError(RagError):
         self.source_id = source_id
 
 
+class InvalidArchiveError(RagError):
+    """Raised when a knowledge-base zip can't be read, or its contents are rejected."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self, reason: str):
+        super().__init__(f"Invalid knowledge-base archive: {reason}")
+
+
+class EmptyKnowledgeBaseError(RagError):
+    """Raised when a source has no documents; ingesting it would empty the index."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self):
+        super().__init__("The knowledge-base source contains no documents")
+
+
 class VectorStoreConfigurationError(RagError):
     """Raised when the configured vector store backend can't be used as configured."""
 

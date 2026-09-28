@@ -58,7 +58,8 @@ class Settings(BaseSettings):
 
     AUTH: AuthConfig
 
-    KNOWLEDGE_BASE_DIR: Path = Path("data")
+    # What `rag ingest` reads by default: a .zip of .md files, or a directory of them.
+    KNOWLEDGE_BASE_SOURCE: Path = Path("data/data.zip")
 
     LLM: LLMConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()

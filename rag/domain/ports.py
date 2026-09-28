@@ -8,19 +8,38 @@ from typing import Protocol
 from langchain_core.documents import Document
 
 from rag.domain.events import StreamEvent
-from rag.domain.models import Conversation, HistoryMessage, RawDocument, User
+from rag.domain.models import (
+    Conversation,
+    HistoryMessage,
+    IndexedDocument,
+    RawDocument,
+    User,
+)
 
 
 class VectorStorePort(Protocol):
     async def asimilarity_search_with_score(
         self, query: str, k: int
     ) -> list[tuple[Document, float]]: ...
-    async def aadd_documents(
-        self, documents: list[Document], *, ids: list[str]
-    ) -> list[str]: ...
     async def aget_document(self, source_id: str) -> Document | None: ...
     async def aping(self) -> None:
         """Raises if the store can't serve queries; must be cheap (readiness probe)."""
+        ...
+
+
+class DocumentIndexPort(Protocol):
+    """The write side of the knowledge base: what's indexed, and replacing it."""
+
+    async def alist_content_hashes(self) -> dict[str, str]:
+        """source_id -> content hash, for every indexed document."""
+        ...
+
+    async def areplace_documents(
+        self, documents: list[IndexedDocument], *, removed: list[str]
+    ) -> None:
+        """Re-indexes `documents` (embedding their chunks) and drops `removed`, all in
+        one transaction.
+        """
         ...
 
 

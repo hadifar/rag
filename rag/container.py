@@ -50,7 +50,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         ingestion_service = IngestionService(
-            vector_store=vector_store, chunker=WholeDocumentChunker()
+            index=vector_store, chunker=WholeDocumentChunker()
         )
 
         auth_service = AuthService(

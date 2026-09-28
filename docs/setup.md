@@ -8,18 +8,22 @@ bash scripts/setup.sh
 ```
 Then fill in `.env` (see .example.env).
 
-The knowledge base is the `.md` files in `data/`. `KNOWLEDGE_BASE_DIR` (default `data`) points
-`rag ingest` at that folder. The backend image doesn't contain `data/`: ingestion only writes
-chunks into Postgres, so it runs from the host (or with `data/` mounted, see [Docker](#docker)) and
-the serving container reads them from the database. To use your own knowledge base instead, put
-your `.md` files in `data/`.
+The knowledge base is `data/data.zip`, a zip of `.md` files (folders inside it don't matter; each
+file's name is its id). `KNOWLEDGE_BASE_SOURCE` (default `data/data.zip`) points `rag ingest` at
+it; it can also be a directory of `.md` files, and `rag ingest --source <path>` overrides it for
+one run. The backend image doesn't contain `data/`: ingestion only writes chunks into Postgres,
+so it runs from the host (or with `data/` mounted, see [Docker](#docker)) and the serving
+container reads them from the database.
+
+Ingestion makes the index match the source: re-running it embeds only new or changed files and
+removes files that are gone, so it's cheap to run after every change.
 
 The default `DATABASE_URL` in `.example.env` already matches the local `postgres` compose service
 (user/password `rag`, bound to `127.0.0.1:5432` only) — no change needed for local dev. That one
 database holds everything: users, conversations, their messages and the knowledge-base chunks.
 
 For login, set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand -hex 32`). Before serving for the first time — and after pulling changes that add a migration — apply the
-migrations (`users`, `conversations`, `chunks`) and create a user (there's no public signup — accounts are
+migrations (`users`, `conversations`, `chunks`, `documents`) and create a user (there's no public signup — accounts are
 created out-of-band):
 ```bash
 uv run alembic upgrade head
@@ -41,7 +45,7 @@ A Postgres instance (with pgvector) must be reachable at `DATABASE_URL` — e.g.
 
 ### CLI
 ```bash
-uv run rag ingest   # embeds data/*.md and upserts the chunks into Postgres — run once before serving
+uv run rag ingest   # indexes data/data.zip into Postgres — run before serving, and after changing it
 uv run rag serve
 ```
 

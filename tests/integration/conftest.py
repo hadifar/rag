@@ -48,12 +48,14 @@ async def seeded_kb(
 ) -> AsyncGenerator[DocumentRepository]:
     """Ingests the small fixture knowledge base (source ids `it-*`, with facts that
     exist nowhere else, so a real knowledge base in the same database can't outrank
-    it), and removes it afterwards. Uses real embeddings.
+    it), and removes it afterwards. Uses real embeddings. `remove_missing=False` leaves
+    any real knowledge base in the same database alone.
     """
     repository = DocumentRepository(db_pool, build_embeddings(integration_settings))
     await IngestionService(repository, MarkdownHeaderChunker()).ingest(
-        MarkdownFileLoader(FIXTURE_KB)
+        MarkdownFileLoader(FIXTURE_KB), remove_missing=False
     )
     yield repository
     async with db_pool.connection() as conn:
-        await conn.execute("DELETE FROM chunks WHERE source_id LIKE 'it-%'")
+        # Cascades to their chunks.
+        await conn.execute("DELETE FROM documents WHERE source_id LIKE 'it-%'")

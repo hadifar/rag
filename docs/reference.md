@@ -57,7 +57,7 @@ rag/
 │   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
 │   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
-migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), no ORM models elsewhere
+migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
 │   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
@@ -83,7 +83,7 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 | Service | Responsibility | Depends on |
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
-| `ingestion_service` | load → chunk → upsert, source-agnostic (the upsert embeds each chunk) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
+| `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic | `DocumentLoaderPort`, `ChunkerPort`, `DocumentIndexPort` |
 | `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `retrieval_service`, checkpointer |
 | `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -93,9 +93,16 @@ the Postgres pools and tracing, constructs every adapter, repository and service
 connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
 `ContainerDep`/`SettingsDep` in `api/deps.py` read it.
 
-Ingestion today has one `DocumentLoaderPort` (`MarkdownFileLoader`) and two `ChunkerPort`s:
-`WholeDocumentChunker` (wired in by default) and `MarkdownHeaderChunker`. Chunk ids are
-`f"{source_id}::{chunk_index}"`, so re-running `rag ingest` upserts over existing chunks.
+Ingestion today has two `DocumentLoaderPort`s — `MarkdownFileLoader` (a directory) and
+`ZipMarkdownLoader` (a `.zip`, read in memory, with member-count and uncompressed-size caps);
+`loader_for_path` picks one — and two `ChunkerPort`s: `WholeDocumentChunker` (wired in by
+default) and `MarkdownHeaderChunker`. Both loaders use the file's basename as `source_id`.
+
+Ingestion makes the index match the source. The `documents` table holds each indexed document's
+content hash. A re-run chunks and embeds only documents whose hash changed, and deletes documents
+the source no longer has; `chunks` rows cascade from their `documents` row, so a document that
+shrank leaves no stale chunks. `rag ingest --force` re-embeds everything (after changing the
+embedding model or chunker). A source with no documents is refused rather than emptying the index.
 
 ## LLM provider
 

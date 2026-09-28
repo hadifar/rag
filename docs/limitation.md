@@ -2,11 +2,10 @@
 
 ## Data & ingestion
 - `rag ingest` is a manual, one-shot CLI step — nothing triggers it on a doc change
-- Re-ingesting never deletes vectors for removed source files
 - `WholeDocumentChunker` puts an entire file into one record — no size-aware chunking for docs past the embedding model's input limit
 - `MarkdownHeaderChunker` exists and is arguably the better default, but nothing wires it up — `container.py` hardcodes `WholeDocumentChunker`, so the better chunker is dead code with no way to select it
 - Only local markdown is supported — no PDF, Confluence, wiki, etc. loaders
-- No embedding-model versioning: changing `LLM__EMBEDDING_MODEL`/`LLM__EMBEDDING_DEPLOYMENT` leaves old vectors from the previous model silently mixed in with new ones (same dimensions, different meaning), with no re-embed/migration path. The vector size itself is fixed at 1536 by migration `0003`, so only `text-embedding-3-*` models fit
+- No embedding-model versioning: changing `LLM__EMBEDDING_MODEL`/`LLM__EMBEDDING_DEPLOYMENT` leaves old vectors from the previous model silently mixed in with new ones (same dimensions, different meaning) — unchanged documents are skipped on re-ingest, so nothing re-embeds them unless you remember `rag ingest --force`. The vector size itself is fixed at 1536 by migration `0003`, so only `text-embedding-3-*` models fit
 - Every search makes one embedding API call, and every ingested chunk one embedding (batched) — retrieval now depends on the LLM provider being up, not just Postgres
 
 ## Retrieval

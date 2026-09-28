@@ -6,7 +6,29 @@ from datetime import UTC, datetime, timedelta
 from langchain_core.messages import AIMessage
 
 from rag.domain.events import StreamEvent, TextDelta
-from rag.domain.models import Conversation, HistoryMessage
+from rag.domain.models import Conversation, HistoryMessage, IndexedDocument
+
+
+class FakeDocumentIndex:
+    """In-memory DocumentIndexPort; records each replace call to assert on what was
+    (re-)embedded.
+    """
+
+    def __init__(self, hashes: dict[str, str] | None = None):
+        self.hashes = dict(hashes or {})
+        self.replaced: list[tuple[list[IndexedDocument], list[str]]] = []
+
+    async def alist_content_hashes(self) -> dict[str, str]:
+        return dict(self.hashes)
+
+    async def areplace_documents(
+        self, documents: list[IndexedDocument], *, removed: list[str]
+    ) -> None:
+        self.replaced.append((documents, removed))
+        for source_id in removed:
+            del self.hashes[source_id]
+        for document in documents:
+            self.hashes[document.source_id] = document.content_hash
 
 
 class FakeConversationRepository:
