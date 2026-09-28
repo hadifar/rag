@@ -2,7 +2,7 @@ services:
   postgres:
     # Postgres with the pgvector extension
     image: pgvector/pgvector:pg17
-    # Throwaway local-dev credentials; prod gets DATABASE_URL from Key Vault.
+    # prod gets DATABASE_URL from Key Vault.
     environment:
       POSTGRES_DB: rag
       POSTGRES_USER: rag
