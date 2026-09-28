@@ -14,16 +14,9 @@ chunks into Postgres, so it runs from the host (or with `data/` mounted, see [Do
 the serving container reads them from the database. To use your own knowledge base instead, put
 your `.md` files in `data/`.
 
-If running via Docker (below), also create the Postgres init password Docker Compose expects,
-gitignored and never read by the app itself:
-```bash
-mkdir -p .secrets
-openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
-```
-Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
-directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
-That one database holds everything: users, conversations, their messages and the
-knowledge-base chunks.
+The default `DATABASE_URL` in `.example.env` already matches the local `postgres` compose service
+(user/password `rag`, bound to `127.0.0.1:5432` only) — no change needed for local dev. That one
+database holds everything: users, conversations, their messages and the knowledge-base chunks.
 
 For login, set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand -hex 32`). Before serving for the first time — and after pulling changes that add a migration — apply the
 migrations (`users`, `conversations`, `chunks`) and create a user (there's no public signup — accounts are
@@ -42,17 +35,9 @@ uv run python -m rag serve
 A Postgres instance (with pgvector) must be reachable at `DATABASE_URL` — e.g.
 `docker compose up -d postgres` (published on `localhost:5432`). There's no in-memory mode.
 
-The host in `DATABASE_URL` depends on where the app runs. The name `postgres` only resolves inside
-the compose network, so outside Docker it fails with `failed to resolve host 'postgres'`:
-
-| App runs | `DATABASE_URL` host |
-|---|---|
-| on your machine (`uv run …`, `rag serve`, `rag create-user`, `alembic`) | `localhost` |
-| in the `backend` container (`docker compose up`) | `postgres` |
-
-The `backend` container reads the same `.env` (`env_file: .env`), so keep `.env` on one of the two and
-override the other on the command line, e.g.
-`DATABASE_URL=postgresql://rag:<password>@localhost:5432/rag uv run rag serve`.
+`.env`'s `DATABASE_URL` points at `localhost`, which is right for anything run on your machine
+(`uv run …`, `alembic`). The `backend` container overrides it with the `postgres` host in
+`docker-compose.yml` (`environment:` beats `env_file:`), so the same `.env` works for both.
 
 ### CLI
 ```bash
@@ -68,8 +53,6 @@ Starts `postgres` (checkpointer + auth/users storage, published on `localhost:54
 and the frontend (nginx) on `http://localhost:3000`; the `backend` container isn't published to
 the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
 frontend URL for both the UI and the API.
-
-Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup) above.
 
 Once the stack is up, apply the `users` table migration and create a login (one-time, or after a
 fresh `pgdata` volume) — the backend serves fine without this, but nothing can log in until it's

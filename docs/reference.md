@@ -202,11 +202,10 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 ## Secrets management
 
 **Local dev** — all secrets live in `.env` (gitignored, never committed), loaded by
-`pydantic-settings`. The one exception is the `postgres` container's own init password: it's
-passed via a Docker Compose secret file (`.secrets/postgres_password.txt`, also gitignored,
-referenced in `docker-compose.yml`'s `secrets:` block) rather than an env var, so it never has to
-round-trip through `Settings` at all — the app connects to Postgres using
-`DATABASE_URL` (which already contains the password), not `POSTGRES_PASSWORD`.
+`pydantic-settings`. The exception is the local `postgres` compose service, which uses fixed
+throwaway credentials (`rag`/`rag`) hardcoded in `docker-compose.yml` and bound to `127.0.0.1`
+only — it holds nothing worth protecting, and a real password would just have to be kept in sync
+with `DATABASE_URL` by hand.
 
 **Prod (Azure App Service)** — secrets are stored in Azure Key Vault and exposed to the app as
 *Key Vault references* in App Service's Application Settings. App Service resolves these (via the
