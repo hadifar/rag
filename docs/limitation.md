@@ -94,5 +94,7 @@
 - No continuous-deployment hook from the registry to the Web Apps — after pushing a new image, they need a manual `az webapp restart` to actually pull it
 
 ## Infra & deployment
+- The knowledge-base Storage Account keeps a public endpoint (Entra ID/RBAC only, shared keys off): a private endpoint would also need the backend Web App VNet-integrated for outbound traffic, which only the frontend is today
+- `AzureBlobArchiveStore` has no automated test (Azurite doesn't accept `DefaultAzureCredential`); its first real exercise is an upload on a deployed backend
 - The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
 - `AUTH__JWT_SECRET` isn't wired into `main.bicep`/Key Vault yet. It's required, so a backend deployed from the current template fails `Settings` validation at boot — the Azure deploy is broken until this is wired. Plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)

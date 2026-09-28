@@ -29,6 +29,20 @@ internet — the only way to it is through the frontend's nginx. This requires t
 (`appServicePlanSku` default bumped from `B1` to `S1` — Private Endpoints aren't supported on
 Basic/Free/Shared).
 
+**Knowledge-base archives:** a Storage Account (`kbStorageAccountName`, globally unique) with a
+`kb-archives` blob container keeps every zip uploaded from the Settings page, so the index can be
+rebuilt from them. Shared-key access is disabled, so it's Entra ID only: the backend's identity
+gets `Storage Blob Data Contributor` on that one container, and its App Settings point
+`KB_STORAGE__*` at it (no secret involved, `DefaultAzureCredential` uses the Managed Identity).
+Blob soft delete keeps a deleted archive restorable for 7 days. The account keeps a public
+endpoint (RBAC still applies) because the backend Web App has no outbound VNet integration yet —
+see [limitation.md](limitation.md#infra--deployment).
+
+Loading the knowledge base after a deploy: sign in as an admin (create one with
+`rag create-user <email> --admin`, run where `DATABASE_URL` points at the production database)
+and upload the zip under **Settings → Knowledge base**. To rebuild the index from the last upload
+instead, run `rag ingest --latest` in the backend container (App Service SSH console).
+
 Not provisioned: the CI service principal itself (its Azure AD app registration and GitHub OIDC
 federated credential are one-time setup outside this template) and the Postgres server behind
 `DATABASE_URL` (Key Vault secret `database-url`) — not yet decided whether that's Azure Database

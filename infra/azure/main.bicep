@@ -12,6 +12,14 @@ param keyVaultName string
 @description('Globally unique Azure Container Registry name (letters/numbers only).')
 param acrName string
 
+@description('Globally unique Storage Account name (3-24 lowercase letters/numbers) for uploaded knowledge-base zips.')
+@minLength(3)
+@maxLength(24)
+param kbStorageAccountName string
+
+@description('Blob container the uploaded knowledge-base zips go in.')
+param kbArchiveContainerName string = 'kb-archives'
+
 @description('Container Registry SKU.')
 param acrSku string = 'Basic'
 
@@ -72,6 +80,7 @@ param langfuseHost string = 'https://cloud.langfuse.com'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
 var secretsToStore = [
   { name: 'database-url', value: databaseUrl }
@@ -127,6 +136,46 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-pr
     // Pulls authenticate via the Web App's Managed Identity (AcrPull role, below),
     // not registry admin credentials.
     adminUserEnabled: false
+  }
+}
+
+// Keeps every knowledge-base zip uploaded through the Settings page (the backend's
+// KB_STORAGE__BACKEND=azure_blob), so the index can be rebuilt from them. Access is
+// Entra ID only: shared keys are off, so the only way in is the backend's Managed
+// Identity (role below) or a person's own RBAC role — no account key to leak.
+resource kbStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: kbStorageAccountName
+  location: location
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    allowSharedKeyAccess: false
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    // Public endpoint, RBAC-only: the backend Web App has no outbound VNet integration,
+    // so a private endpoint isn't reachable from it yet (see docs/limitation.md).
+    publicNetworkAccess: 'Enabled'
+  }
+
+  resource blobService 'blobServices' = {
+    name: 'default'
+    properties: {
+      // A deleted or overwritten archive can be restored for a week.
+      deleteRetentionPolicy: {
+        enabled: true
+        days: 7
+      }
+    }
+
+    resource kbArchives 'containers' = {
+      name: kbArchiveContainerName
+      properties: {
+        publicAccess: 'None'
+      }
+    }
   }
 }
 
@@ -329,6 +378,21 @@ resource frontendAcrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@
   }
 }
 
+// "Storage Blob Data Contributor" on just the archive container (not the whole
+// account) — the backend stores and reads uploaded zips with its own identity.
+resource kbArchivesContributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kbStorage::blobService::kbArchives.id, backendWebApp.id, storageBlobDataContributorRoleId)
+  scope: kbStorage::blobService::kbArchives
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
+    principalId: backendWebApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // "AcrPush" — lets the CI service principal (GitHub OIDC identity) push images it
 // builds, without a registry admin password.
 resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -365,6 +429,11 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
       // this flag had no actual effect — it now genuinely selects the backend.
       OBSERVABILITY__BACKEND: langfuseEnabled ? 'langfuse' : 'logging'
       OBSERVABILITY__HOST: langfuseHost
+
+      // Not secrets: DefaultAzureCredential picks up the Web App's Managed Identity.
+      KB_STORAGE__BACKEND: 'azure_blob'
+      KB_STORAGE__ACCOUNT_URL: kbStorage.properties.primaryEndpoints.blob
+      KB_STORAGE__CONTAINER: kbArchiveContainerName
     },
     llmAppSettings
   )
@@ -391,3 +460,4 @@ output frontendWebAppName string = frontendWebApp.name
 output frontendWebAppHostName string = frontendWebApp.properties.defaultHostName
 output keyVaultUri string = keyVault.properties.vaultUri
 output acrLoginServer string = containerRegistry.properties.loginServer
+output kbStorageAccountName string = kbStorage.name

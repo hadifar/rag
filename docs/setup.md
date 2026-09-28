@@ -60,20 +60,23 @@ and the frontend (nginx) on `http://localhost:3000`; the `backend` container isn
 the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
 frontend URL for both the UI and the API.
 
-Once the stack is up, apply the `users` table migration and create a login (one-time, or after a
-fresh `pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
+Once the stack is up, apply the migrations and create a login (one-time, or after a fresh
+`pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
 done:
 ```bash
 docker compose exec backend alembic upgrade head
-docker compose exec backend rag create-user you@example.com
+docker compose exec backend rag create-user you@example.com --admin
 ```
 
-Then ingest the knowledge base (one-time, or after changing `data/`, or after a fresh `pgdata`
-volume). The image has no `data/`, so mount it (see [Setup](#setup)) into a one-off `backend`
-container; without this, chat answers have no sources:
+Then load the knowledge base (one-time, or after a fresh `pgdata` volume); without it, chat
+answers have no sources. Either upload a zip from the UI (**Settings → Knowledge base**, admins
+only), or ingest `data/data.zip` from the command line. The image has no `data/`, so mount it
+into a one-off `backend` container:
 ```bash
 docker compose run --rm -v "$PWD/data:/app/data:ro" backend ingest
 ```
+Uploaded zips are kept in the `kbuploads` volume, so after losing `pgdata` the last upload can
+be re-indexed without uploading it again: `docker compose exec backend rag ingest --latest`.
 
 ```bash
 docker compose down   # stop and remove the containers
