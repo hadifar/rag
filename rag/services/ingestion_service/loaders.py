@@ -2,59 +2,35 @@ import io
 import zipfile
 import zlib
 from collections import Counter
-from collections.abc import Iterator
 from pathlib import Path, PurePath, PurePosixPath
 
 from rag.domain.errors import InvalidArchiveError
 from rag.domain.models import RawDocument
-from rag.domain.ports import DocumentLoaderPort
 
 # Zip-bomb guards: a small upload can declare, or inflate to, far more than it looks.
 MAX_ARCHIVE_MEMBERS = 1000
 MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 
 
-class MarkdownFileLoader:
-    """Concrete DocumentLoaderPort for the local markdown knowledge base.
-
-    Adding a new source (PDFs, Confluence, ...) means writing another class with
-    the same load() -> Iterable[RawDocument] shape — IngestionService, chunking,
-    and the vector store adapter stay untouched.
-    """
-
-    def __init__(self, directory: Path):
-        self._directory = directory
-
-    def load(self) -> Iterator[RawDocument]:
-        for path in sorted(self._directory.glob("*.md")):
-            yield _raw_document(path, path.read_text())
+def load_path(path: Path) -> list[RawDocument]:
+    """A directory of .md files, or a .zip of them."""
+    return load_directory(path) if path.is_dir() else load_archive(path.read_bytes())
 
 
-class ZipMarkdownLoader:
-    """DocumentLoaderPort for a zipped knowledge base: every .md file in it, at any depth.
+def load_directory(directory: Path) -> list[RawDocument]:
+    """Every .md file directly in `directory`."""
+    return [
+        _raw_document(path, path.read_text()) for path in sorted(directory.glob("*.md"))
+    ]
+
+
+def load_archive(archive: bytes) -> list[RawDocument]:
+    """Every .md file in a zip, at any depth. Raises InvalidArchiveError for a bad one.
 
     Read in memory, never extracted, so member paths like `../../x` can't write
-    anywhere. As with MarkdownFileLoader the basename is the source_id, so folders
-    inside the zip don't change ids, and two files with the same basename are rejected.
-    The archive is validated here, up front, so a bad one fails before anything is
-    embedded.
+    anywhere. The basename is the source_id, as for a directory, so folders inside
+    the zip don't change ids, and two files with the same basename are rejected.
     """
-
-    def __init__(self, archive: bytes):
-        self._documents = _read_archive(archive)
-
-    def load(self) -> Iterator[RawDocument]:
-        yield from self._documents
-
-
-def loader_for_path(path: Path) -> DocumentLoaderPort:
-    """A directory of .md files, or a .zip of them."""
-    if path.is_dir():
-        return MarkdownFileLoader(path)
-    return ZipMarkdownLoader(path.read_bytes())
-
-
-def _read_archive(archive: bytes) -> list[RawDocument]:
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(archive))
     except zipfile.BadZipFile as exc:

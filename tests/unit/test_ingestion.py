@@ -17,11 +17,7 @@ from rag.domain.errors import (
 from rag.domain.models import IngestionReport, RawDocument
 from rag.services.ingestion_service import loaders, service
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
-from rag.services.ingestion_service.loaders import (
-    MarkdownFileLoader,
-    ZipMarkdownLoader,
-    loader_for_path,
-)
+from rag.services.ingestion_service.loaders import load_archive, load_path
 from rag.services.ingestion_service.service import IngestionService
 from tests.unit.fakes import (
     FakeArchiveStore,
@@ -38,14 +34,8 @@ def _zip(files: dict[str, str | bytes]) -> bytes:
     return buffer.getvalue()
 
 
-class ListLoader:
-    def __init__(self, documents: dict[str, str]):
-        self._documents = [
-            RawDocument(source_id=k, text=v) for k, v in documents.items()
-        ]
-
-    def load(self) -> list[RawDocument]:
-        return self._documents
+def _documents(texts: dict[str, str]) -> list[RawDocument]:
+    return [RawDocument(source_id=k, text=v) for k, v in texts.items()]
 
 
 def _service(
@@ -61,20 +51,20 @@ def _service(
     )
 
 
-# --- ZipMarkdownLoader -------------------------------------------------------------
+# --- load_archive -------------------------------------------------------------------
 
 
-def test_zip_loader_reads_markdown_at_any_depth_keyed_by_basename() -> None:
+def test_load_archive_reads_markdown_at_any_depth_keyed_by_basename() -> None:
     archive = _zip({"top.md": "# Top", "kb/nested/deep.md": "# Deep"})
 
-    documents = {d.source_id: d for d in ZipMarkdownLoader(archive).load()}
+    documents = {d.source_id: d for d in load_archive(archive)}
 
     assert documents.keys() == {"top.md", "deep.md"}
     assert documents["deep.md"].text == "# Deep"
     assert documents["deep.md"].metadata == {"title": "deep"}
 
 
-def test_zip_loader_skips_non_markdown_hidden_and_macos_metadata() -> None:
+def test_load_archive_skips_non_markdown_hidden_and_macos_metadata() -> None:
     archive = _zip(
         {
             "kb/a.md": "# A",
@@ -85,13 +75,13 @@ def test_zip_loader_skips_non_markdown_hidden_and_macos_metadata() -> None:
         }
     )
 
-    assert [d.source_id for d in ZipMarkdownLoader(archive).load()] == ["a.md"]
+    assert [d.source_id for d in load_archive(archive)] == ["a.md"]
 
 
-def test_zip_loader_strips_a_utf8_bom() -> None:
+def test_load_archive_strips_a_utf8_bom() -> None:
     archive = _zip({"a.md": "﻿# A".encode()})
 
-    assert next(iter(ZipMarkdownLoader(archive).load())).text == "# A"
+    assert next(iter(load_archive(archive))).text == "# A"
 
 
 @pytest.mark.parametrize(
@@ -103,34 +93,36 @@ def test_zip_loader_strips_a_utf8_bom() -> None:
         (_zip({"a.md": b"\xff\xfe\xfa"}), "isn't UTF-8"),
     ],
 )
-def test_zip_loader_rejects_bad_archives(archive: bytes, reason: str) -> None:
+def test_load_archive_rejects_bad_archives(archive: bytes, reason: str) -> None:
     with pytest.raises(InvalidArchiveError, match=reason):
-        ZipMarkdownLoader(archive)
+        load_archive(archive)
 
 
-def test_zip_loader_caps_the_uncompressed_size(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_archive_caps_the_uncompressed_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(loaders, "MAX_UNCOMPRESSED_BYTES", 10)
     archive = _zip({"a.md": "12345", "b.md": "678901"})
 
     with pytest.raises(InvalidArchiveError, match="uncompressed"):
-        ZipMarkdownLoader(archive)
+        load_archive(archive)
 
 
-def test_zip_loader_caps_the_member_count(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_archive_caps_the_member_count(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(loaders, "MAX_ARCHIVE_MEMBERS", 1)
     archive = _zip({"a.md": "a", "b.md": "b"})
 
     with pytest.raises(InvalidArchiveError, match="more than 1"):
-        ZipMarkdownLoader(archive)
+        load_archive(archive)
 
 
-def test_loader_for_path_picks_directory_or_zip(tmp_path: Path) -> None:
+def test_load_path_reads_a_directory_or_a_zip(tmp_path: Path) -> None:
     (tmp_path / "a.md").write_text("# A")
     zip_path = tmp_path / "kb.zip"
     zip_path.write_bytes(_zip({"b.md": "# B"}))
 
-    assert isinstance(loader_for_path(tmp_path), MarkdownFileLoader)
-    assert isinstance(loader_for_path(zip_path), ZipMarkdownLoader)
+    assert [d.source_id for d in load_path(tmp_path)] == ["a.md"]
+    assert [d.source_id for d in load_path(zip_path)] == ["b.md"]
 
 
 # --- IngestionService ---------------------------------------------------------------
@@ -140,7 +132,7 @@ async def test_first_ingest_adds_everything() -> None:
     index = FakeDocumentIndex()
     service = _service(index)
 
-    report = await service.ingest(ListLoader({"a.md": "A", "b.md": "B"}))
+    report = await service.ingest(_documents({"a.md": "A", "b.md": "B"}))
 
     assert report == IngestionReport(
         added=2, updated=0, unchanged=0, removed=0, chunks=2
@@ -151,10 +143,10 @@ async def test_first_ingest_adds_everything() -> None:
 async def test_reingest_embeds_only_changed_and_removes_missing() -> None:
     index = FakeDocumentIndex()
     service = _service(index)
-    await service.ingest(ListLoader({"same.md": "S", "edit.md": "v1", "gone.md": "G"}))
+    await service.ingest(_documents({"same.md": "S", "edit.md": "v1", "gone.md": "G"}))
 
     report = await service.ingest(
-        ListLoader({"same.md": "S", "edit.md": "v2", "new.md": "N"})
+        _documents({"same.md": "S", "edit.md": "v2", "new.md": "N"})
     )
 
     assert report == IngestionReport(
@@ -169,9 +161,9 @@ async def test_reingest_embeds_only_changed_and_removes_missing() -> None:
 async def test_force_reembeds_unchanged_documents() -> None:
     index = FakeDocumentIndex()
     service = _service(index)
-    await service.ingest(ListLoader({"a.md": "A"}))
+    await service.ingest(_documents({"a.md": "A"}))
 
-    report = await service.ingest(ListLoader({"a.md": "A"}), force=True)
+    report = await service.ingest(_documents({"a.md": "A"}), force=True)
 
     assert (report.updated, report.unchanged, report.chunks) == (1, 0, 1)
 
@@ -180,7 +172,7 @@ async def test_remove_missing_false_keeps_other_documents() -> None:
     index = FakeDocumentIndex({"other.md": "hash"})
     service = _service(index)
 
-    report = await service.ingest(ListLoader({"a.md": "A"}), remove_missing=False)
+    report = await service.ingest(_documents({"a.md": "A"}), remove_missing=False)
 
     assert report.removed == 0
     assert index.hashes.keys() == {"other.md", "a.md"}
@@ -191,7 +183,7 @@ async def test_an_empty_source_is_refused_instead_of_emptying_the_index() -> Non
     service = _service(index)
 
     with pytest.raises(EmptyKnowledgeBaseError):
-        await service.ingest(ListLoader({}))
+        await service.ingest(_documents({}))
     assert index.replaced == []
 
 

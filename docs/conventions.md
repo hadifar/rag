@@ -28,23 +28,20 @@ Follows PEP 20 and the
 
 ## Adding a new implementation of an existing capability: satisfy the `Protocol`, don't branch on type
 
-- A new variant (ingestion source, chunking strategy, tool, …) is a new class satisfying an
+- A new variant (chunking strategy, archive store, tool, …) is a new class satisfying an
   existing (or new) `Protocol` in `rag.domain.ports`, wired in `container.py`.
 - Never add an `if kind == ...` / `isinstance(...)` branch in the code that *consumes* the
   capability — that's the abstraction being bypassed rather than extended.
 
 ```python
-class DocumentLoaderPort(Protocol):
-    def load(self) -> Iterable[RawDocument]: ...
-
-
 class ChunkerPort(Protocol):
     def chunk(self, document: RawDocument) -> list[Document]: ...
 ```
 
-- Example: a new source (PDF, Confluence) is a new `DocumentLoaderPort` class; `IngestionService`,
-  the chunkers and the repository stay untouched. A new chunking strategy is a new `ChunkerPort`
-  class, not a parameter threaded through existing chunkers.
+- Example: a new chunking strategy is a new `ChunkerPort` class, not a parameter threaded
+  through the existing chunker.
+- A new ingestion source (PDF, Confluence) is just a `load_*` function in `loaders.py` that
+  returns `list[RawDocument]`; `IngestionService.ingest` takes documents, not a loader.
 
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 

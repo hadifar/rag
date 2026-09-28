@@ -10,7 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from rag.domain.models import IndexedDocument
 from rag.repository.document_repository import DocumentRepository
-from rag.services.ingestion_service.loaders import MarkdownFileLoader
+from rag.services.ingestion_service.loaders import load_directory
 from tests.integration.conftest import FIXTURE_KB, ingestion_service
 
 
@@ -40,13 +40,12 @@ async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> N
     assert scores == sorted(scores, reverse=True)
 
 
-async def test_get_document_reassembles_chunks_in_order(
+async def test_get_document_returns_the_whole_document(
     seeded_kb: DocumentRepository,
 ) -> None:
     document = await seeded_kb.aget_document("it-plans-and-pricing.md")
 
     assert document is not None
-    # MarkdownHeaderChunker split it into three sections; they come back in order.
     assert (
         document.page_content.index("# AtlasFlow Plans")
         < document.page_content.index("## Starter")
@@ -61,7 +60,7 @@ async def test_reingesting_unchanged_documents_embeds_nothing(
     tmp_path: Path,
 ) -> None:
     service = ingestion_service(seeded_kb, db_pool, tmp_path)
-    report = await service.ingest(MarkdownFileLoader(FIXTURE_KB), remove_missing=False)
+    report = await service.ingest(load_directory(FIXTURE_KB), remove_missing=False)
 
     assert (report.added, report.updated, report.chunks) == (0, 0, 0)
     assert report.unchanged == 3
@@ -70,7 +69,7 @@ async def test_reingesting_unchanged_documents_embeds_nothing(
 async def test_replacing_a_document_drops_its_old_chunks(
     seeded_kb: DocumentRepository,
 ) -> None:
-    source_id = "it-plans-and-pricing.md"  # three chunks, shrinking to one
+    source_id = "it-plans-and-pricing.md"
     chunk = Document(
         id=f"{source_id}::0",
         page_content="# Replaced",

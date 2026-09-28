@@ -87,7 +87,7 @@ class DocumentRepository:
             (
                 chunk.id,
                 chunk.metadata["source_id"],
-                chunk.metadata.get("chunk_index", 0),
+                chunk.metadata["chunk_index"],
                 chunk.page_content,
                 Jsonb(chunk.metadata),
                 _to_vector_literal(vector),
@@ -132,13 +132,13 @@ class DocumentRepository:
             )
             rows = await cur.fetchall()
         return [
-            (Document(page_content=content, metadata=_metadata(metadata)), float(score))
+            (Document(page_content=content, metadata=metadata), float(score))
             for content, metadata, score in rows
         ]
 
     async def aget_document(self, source_id: str) -> Document | None:
-        """Reassembles a document from its chunks, in order — works whether the chunker
-        produced one chunk (WholeDocumentChunker) or many (MarkdownHeaderChunker).
+        """Reassembles a document from its chunks, in order, so it doesn't depend on
+        how many chunks the chunker cut it into.
         """
         async with self._pool.connection() as conn:
             cur = await conn.execute(
@@ -151,7 +151,7 @@ class DocumentRepository:
             return None
         return Document(
             page_content="\n\n".join(content for content, _ in rows),
-            metadata=_metadata(rows[0][1]),
+            metadata=rows[0][1],
         )
 
     async def aping(self) -> None:
@@ -168,7 +168,3 @@ def _to_vector_literal(vector: Sequence[float]) -> str:
     and take auth down with it, since the pool is shared.
     """
     return json.dumps(list(vector), separators=(",", ":"))
-
-
-def _metadata(value: object) -> dict:
-    return value if isinstance(value, dict) else {}

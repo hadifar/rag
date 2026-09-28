@@ -17,10 +17,8 @@ def is_final_answer(message: BaseMessage | None) -> TypeGuard[AIMessage]:
 
 def current_turn(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
     """The messages from the user's latest message onward."""
-    for index in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[index], HumanMessage):
-            return messages[index:]
-    return messages
+    turns = _split_turns(messages)
+    return turns[-1] if turns else messages
 
 
 def turn_tool_messages(messages: Sequence[BaseMessage]) -> list[ToolMessage]:

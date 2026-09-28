@@ -12,8 +12,8 @@ from rag.adapters.llm_client import build_embeddings
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
-from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
-from rag.services.ingestion_service.loaders import MarkdownFileLoader
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
+from rag.services.ingestion_service.loaders import load_directory
 from rag.services.ingestion_service.service import IngestionService
 
 FIXTURE_KB = Path(__file__).parent / "fixtures" / "kb"
@@ -49,10 +49,9 @@ def ingestion_service(
     db_pool: AsyncConnectionPool[AsyncConnection],
     tmp_path: Path,
 ) -> IngestionService:
-    """Chunks by markdown heading, so the fixture docs split into several chunks."""
     return IngestionService(
         repository,
-        MarkdownHeaderChunker(),
+        WholeDocumentChunker(),
         LocalArchiveStore(tmp_path),
         IngestionRunRepository(db_pool),
     )
@@ -71,7 +70,7 @@ async def seeded_kb(
     """
     repository = DocumentRepository(db_pool, build_embeddings(integration_settings))
     await ingestion_service(repository, db_pool, tmp_path).ingest(
-        MarkdownFileLoader(FIXTURE_KB), remove_missing=False
+        load_directory(FIXTURE_KB), remove_missing=False
     )
     yield repository
     async with db_pool.connection() as conn:

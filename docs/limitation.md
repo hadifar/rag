@@ -10,7 +10,6 @@
 - `rag ingest --latest` rebuilds from the newest *stored* upload, which is the newest *valid* zip
   but not necessarily one that ingested successfully (e.g. if embedding failed)
 - `WholeDocumentChunker` puts an entire file into one record — no size-aware chunking for docs past the embedding model's input limit
-- `MarkdownHeaderChunker` exists and is arguably the better default, but nothing wires it up — `container.py` hardcodes `WholeDocumentChunker`, so the better chunker is dead code with no way to select it
 - Only local markdown is supported — no PDF, Confluence, wiki, etc. loaders
 - No embedding-model versioning: changing `LLM__EMBEDDING_MODEL`/`LLM__EMBEDDING_DEPLOYMENT` leaves old vectors from the previous model silently mixed in with new ones (same dimensions, different meaning) — unchanged documents are skipped on re-ingest, so nothing re-embeds them unless you remember `rag ingest --force`. The vector size itself is fixed at 1536 by migration `0003`, so only `text-embedding-3-*` models fit
 - Every search makes one embedding API call, and every ingested chunk one embedding (batched) — retrieval now depends on the LLM provider being up, not just Postgres
@@ -86,7 +85,7 @@
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 
 ## Testing & CI
-- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, `AuthService`, ingestion (zip loader, index sync, upload runs) and the API wiring against stubs — no unit coverage of the chunkers, RRF, retry/fallback behavior, or answer quality
+- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, `AuthService`, ingestion (archive loading, index sync, upload runs) and the API wiring against stubs — no unit coverage of the chunker, RRF, retry/fallback behavior, or answer quality
 - Frontend tests (Vitest unit/integration, Playwright e2e) run only locally — no CI job runs them, so a frontend regression isn't caught before merge
 - Integration tests only run on manual `workflow_dispatch` (`integration-tests.yml`) — never automatically on push/PR to `master`, so there is no CI gate at all on retrieval or generation correctness before merge
 - CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to `master` doesn't build/push automatically

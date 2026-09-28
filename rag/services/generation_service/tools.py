@@ -13,16 +13,11 @@ def build_search_tool(retrieval_service: RetrievalService) -> BaseTool:
         if not results:
             return "No relevant documentation found.", []
 
+        documents = [doc for doc, _score in results]
         content = "\n\n".join(
-            f"[source: {doc.metadata.get('source_id')}]\n{doc.page_content}"
-            for doc, _score in results
+            f"[source: {doc.metadata['source_id']}]\n{doc.page_content}"
+            for doc in documents
         )
-
-        sources = [
-            doc.metadata["source_id"]
-            for doc, _score in results
-            if doc.metadata.get("source_id")
-        ]
-        return content, sources
+        return content, [doc.metadata["source_id"] for doc in documents]
 
     return search_kb

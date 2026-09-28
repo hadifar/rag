@@ -1,7 +1,7 @@
 """Contracts every service depends on instead of a concrete SDK."""
 
 import uuid
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Protocol
 
@@ -73,12 +73,6 @@ class IngestionRunRepositoryPort(Protocol):
     async def fail_running(self, error: str) -> int:
         """Marks every still-running run failed; returns how many there were."""
         ...
-
-
-class DocumentLoaderPort(Protocol):
-    """Sync by design: parsing is CPU-only. The API runs it via asyncio.to_thread."""
-
-    def load(self) -> Iterable[RawDocument]: ...
 
 
 class ChunkerPort(Protocol):

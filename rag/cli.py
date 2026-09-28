@@ -59,19 +59,24 @@ def ingest(
 ) -> None:
     """Make the index match the knowledge base: embed new/changed docs, drop removed ones."""
     from rag.domain.errors import RagError
-    from rag.domain.models import IngestionReport
-    from rag.services.ingestion_service.loaders import loader_for_path
+    from rag.services.ingestion_service.loaders import load_path
 
     path = _ingest_path(source, latest, get_settings().KNOWLEDGE_BASE_SOURCE)
 
-    async def run(container: "Container") -> IngestionReport:
-        if latest:
-            return await container.ingestion_service.ingest_latest_archive(force=force)
-        loader = loader_for_path(path)
-        return await container.ingestion_service.ingest(loader, force=force)
-
     try:
-        report = _run(run)
+        if latest:
+            report = _run(
+                lambda container: container.ingestion_service.ingest_latest_archive(
+                    force=force
+                )
+            )
+        else:
+            documents = load_path(path)
+            report = _run(
+                lambda container: container.ingestion_service.ingest(
+                    documents, force=force
+                )
+            )
     except RagError as exc:
         hint = "--latest" if latest else "--source"
         raise typer.BadParameter(str(exc), param_hint=hint) from exc

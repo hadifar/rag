@@ -21,10 +21,9 @@ from rag.domain.ports import (
     ArchiveStorePort,
     ChunkerPort,
     DocumentIndexPort,
-    DocumentLoaderPort,
     IngestionRunRepositoryPort,
 )
-from rag.services.ingestion_service.loaders import ZipMarkdownLoader
+from rag.services.ingestion_service.loaders import load_archive
 
 logger = logging.getLogger(__name__)
 
@@ -103,15 +102,15 @@ class IngestionService:
         """Validates the zip, then keeps it; returns its name. An invalid zip raises
         InvalidArchiveError and is never stored.
         """
-        await asyncio.to_thread(ZipMarkdownLoader, archive)
+        await asyncio.to_thread(load_archive, archive)
         return await self._archives.asave(archive)
 
     async def ingest_archive(
         self, name: str, *, force: bool = False
     ) -> IngestionReport:
         archive = await self._archives.aread(name)
-        loader = await asyncio.to_thread(ZipMarkdownLoader, archive)
-        return await self.ingest(loader, force=force)
+        documents = await asyncio.to_thread(load_archive, archive)
+        return await self.ingest(documents, force=force)
 
     async def ingest_latest_archive(self, *, force: bool = False) -> IngestionReport:
         """Rebuilds the index from the most recent upload (e.g. after losing the DB)."""
@@ -122,7 +121,7 @@ class IngestionService:
 
     async def ingest(
         self,
-        loader: DocumentLoaderPort,
+        documents: list[RawDocument],
         *,
         force: bool = False,
         remove_missing: bool = True,
@@ -130,7 +129,6 @@ class IngestionService:
         """`force` re-embeds unchanged documents too (e.g. after changing the
         embedding model or chunker); `remove_missing=False` only adds and updates.
         """
-        documents = list(loader.load())
         if not documents:
             raise EmptyKnowledgeBaseError()
 
