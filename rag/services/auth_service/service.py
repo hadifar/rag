@@ -10,6 +10,7 @@ from rag.domain.errors import (
     AdminRequiredError,
     InvalidCredentialsError,
     InvalidTokenError,
+    UserEmailNotFoundError,
     UserNotFoundError,
 )
 from rag.domain.models import User
@@ -47,7 +48,7 @@ class AuthService:
     async def set_admin(self, email: str, is_admin: bool) -> User:
         user = await self._user_repository.set_admin(email, is_admin)
         if user is None:
-            raise UserNotFoundError(email)
+            raise UserEmailNotFoundError(email)
         return user
 
     @staticmethod

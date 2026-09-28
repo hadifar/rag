@@ -69,10 +69,6 @@ class NoArchiveError(RagError):
         super().__init__("No knowledge-base archive has been uploaded yet")
 
 
-class VectorStoreConfigurationError(RagError):
-    """Raised when the configured vector store backend can't be used as configured."""
-
-
 class InvalidCredentialsError(RagError):
     """Raised when a login attempt's email/password don't match a user."""
 
@@ -90,6 +86,24 @@ class UserNotFoundError(RagError):
     def __init__(self, user_id: object):
         super().__init__(f"No user found for id={user_id!r}")
         self.user_id = user_id
+
+
+class UserEmailNotFoundError(RagError):
+    """Raised when a user lookup by email finds nothing (e.g. granting admin rights)."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, email: str):
+        super().__init__(f"No user found for email={email!r}")
+
+
+class UserAlreadyExistsError(RagError):
+    """Raised when creating a user with an email another user already has."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, email: str):
+        super().__init__(f"A user with email={email!r} already exists")
 
 
 class InvalidTokenError(RagError):

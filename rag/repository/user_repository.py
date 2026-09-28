@@ -1,5 +1,8 @@
 import uuid
 
+from psycopg.errors import UniqueViolation
+
+from rag.domain.errors import UserAlreadyExistsError
 from rag.domain.models import User
 from rag.repository.base_repository import BaseRepository
 
@@ -22,14 +25,17 @@ class UserRepository(BaseRepository[User]):
     async def create(
         self, email: str, hashed_password: str, *, is_admin: bool = False
     ) -> User:
-        user = await self._fetch_one(
-            f"""
-            INSERT INTO users (id, email, hashed_password, is_admin)
-            VALUES (gen_random_uuid(), %s, %s, %s)
-            RETURNING {_COLUMNS}
-            """,
-            (email, hashed_password, is_admin),
-        )
+        try:
+            user = await self._fetch_one(
+                f"""
+                INSERT INTO users (id, email, hashed_password, is_admin)
+                VALUES (gen_random_uuid(), %s, %s, %s)
+                RETURNING {_COLUMNS}
+                """,
+                (email, hashed_password, is_admin),
+            )
+        except UniqueViolation as exc:
+            raise UserAlreadyExistsError(email) from exc
         assert user is not None  # INSERT ... RETURNING always yields a row
         return user
 

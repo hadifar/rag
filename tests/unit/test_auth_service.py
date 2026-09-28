@@ -7,6 +7,7 @@ from rag.domain.errors import (
     AdminRequiredError,
     InvalidCredentialsError,
     InvalidTokenError,
+    UserEmailNotFoundError,
     UserNotFoundError,
 )
 from rag.services.auth_service.service import AuthService
@@ -96,7 +97,7 @@ async def test_set_admin_grants_and_revokes(auth_service: AuthService) -> None:
 
 
 async def test_set_admin_unknown_email_raises(auth_service: AuthService) -> None:
-    with pytest.raises(UserNotFoundError):
+    with pytest.raises(UserEmailNotFoundError):
         await auth_service.set_admin("nobody@example.com", True)
 
 

@@ -35,6 +35,6 @@ async def generate_title(model: Runnable, question: str, answer: str) -> str | N
 
 
 def _clean_title(raw: str) -> str | None:
-    first_line = raw.strip().splitlines()[0] if raw.strip() else ""
+    first_line = next(iter(raw.strip().splitlines()), "")
     title = first_line.strip().strip("\"'`").strip().rstrip(".")
     return title[:MAX_TITLE_LENGTH] or None

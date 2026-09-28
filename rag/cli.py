@@ -1,13 +1,28 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 import uvicorn
 
 from rag.config import get_settings
 
+if TYPE_CHECKING:
+    from rag.container import Container
+
 app = typer.Typer(add_completion=False, help="RAG — CLI")
+
+
+def _run[T](command: Callable[["Container"], Awaitable[T]]) -> T:
+    """Runs one command against a container that's opened for it and closed after."""
+    from rag.container import build_container
+
+    async def main() -> T:
+        async with build_container(get_settings()) as container:
+            return await command(container)
+
+    return asyncio.run(main())
 
 
 @app.command()
@@ -43,25 +58,20 @@ def ingest(
     ),
 ) -> None:
     """Make the index match the knowledge base: embed new/changed docs, drop removed ones."""
-    from rag.container import build_container
     from rag.domain.errors import RagError
     from rag.domain.models import IngestionReport
     from rag.services.ingestion_service.loaders import loader_for_path
 
-    settings = get_settings()
-    path = _ingest_path(source, latest, settings.KNOWLEDGE_BASE_SOURCE)
+    path = _ingest_path(source, latest, get_settings().KNOWLEDGE_BASE_SOURCE)
 
-    async def run() -> IngestionReport:
-        async with build_container(settings) as container:
-            if latest:
-                return await container.ingestion_service.ingest_latest_archive(
-                    force=force
-                )
-            loader = loader_for_path(path)
-            return await container.ingestion_service.ingest(loader, force=force)
+    async def run(container: "Container") -> IngestionReport:
+        if latest:
+            return await container.ingestion_service.ingest_latest_archive(force=force)
+        loader = loader_for_path(path)
+        return await container.ingestion_service.ingest(loader, force=force)
 
     try:
-        report = asyncio.run(run())
+        report = _run(run)
     except RagError as exc:
         hint = "--latest" if latest else "--source"
         raise typer.BadParameter(str(exc), param_hint=hint) from exc
@@ -94,22 +104,15 @@ def create_user(
     admin: bool = typer.Option(False, help="Allow replacing the knowledge base"),
 ) -> None:
     """Create a login for a user (there's no public signup endpoint)."""
-    import psycopg
-
-    from rag.container import build_container
-    from rag.domain.models import User
-
-    settings = get_settings()
-
-    async def run() -> User:
-        async with build_container(settings) as container:
-            return await container.auth_service.create_user(
-                email, password, is_admin=admin
-            )
+    from rag.domain.errors import UserAlreadyExistsError
 
     try:
-        user = asyncio.run(run())
-    except psycopg.errors.UniqueViolation as exc:
+        user = _run(
+            lambda container: container.auth_service.create_user(
+                email, password, is_admin=admin
+            )
+        )
+    except UserAlreadyExistsError as exc:
         raise typer.BadParameter(f"a user with email {email!r} already exists") from exc
 
     role = " (admin)" if user.is_admin else ""
@@ -122,19 +125,13 @@ def set_admin(
     revoke: bool = typer.Option(False, help="Remove admin rights instead"),
 ) -> None:
     """Grant (or revoke) admin rights: admins can replace the knowledge base."""
-    from rag.container import build_container
-    from rag.domain.errors import UserNotFoundError
-    from rag.domain.models import User
-
-    settings = get_settings()
-
-    async def run() -> User:
-        async with build_container(settings) as container:
-            return await container.auth_service.set_admin(email, not revoke)
+    from rag.domain.errors import UserEmailNotFoundError
 
     try:
-        user = asyncio.run(run())
-    except UserNotFoundError as exc:
+        user = _run(
+            lambda container: container.auth_service.set_admin(email, not revoke)
+        )
+    except UserEmailNotFoundError as exc:
         raise typer.BadParameter(f"no user with email {email!r}") from exc
 
     typer.echo(f"{user.email} is {'now' if user.is_admin else 'no longer'} an admin")

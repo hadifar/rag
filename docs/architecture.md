@@ -104,7 +104,7 @@ graph TD
   and streamed by `model`.
 - **`GroundednessGuard`** checks each final answer against **this turn's** `search_kb` results
   (`after_model`), and on an ungrounded one jumps back to `model` with a revision instruction,
-  capped at `MAX_VERIFY_ATTEMPTS`. It keeps no state: a rejected answer stays in the thread, so
+  capped at `MAX_REVISIONS`. It keeps no state: a rejected answer stays in the thread, so
   the revisions so far are this turn's final answers minus one.
 - **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
 
