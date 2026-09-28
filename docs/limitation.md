@@ -41,7 +41,7 @@
   has to delete each conversation's thread first.
 - Conversations created before the `conversations` table existed (checkpoint threads keyed by
   the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
-- One database, two schema owners: Alembic owns `users`/`conversations`/`chunks`, while
+- One database, two schema owners: Alembic owns `users`/`conversations`/`documents`/`chunks`/`ingestion_runs`, while
   LangGraph's `checkpointer.setup()` creates and migrates its own checkpoint tables at every
   boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
@@ -86,8 +86,8 @@
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 
 ## Testing & CI
-- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, and the API wiring against stubs — no coverage of chunking, RRF, retry/fallback behavior, or answer quality
-- No frontend tests at all — `useChat`, the conversations context and the SSE parsing are only checked by `tsc`
+- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, `AuthService`, ingestion (zip loader, index sync, upload runs) and the API wiring against stubs — no unit coverage of the chunkers, RRF, retry/fallback behavior, or answer quality
+- Frontend tests (Vitest unit/integration, Playwright e2e) run only locally — no CI job runs them, so a frontend regression isn't caught before merge
 - Integration tests only run on manual `workflow_dispatch` (`integration-tests.yml`) — never automatically on push/PR to `master`, so there is no CI gate at all on retrieval or generation correctness before merge
 - CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to `master` doesn't build/push automatically
 - Nothing deploys automatically either — `infra/azure/main.bicep` must be applied by hand (`az deployment group create`); no deploy gate in CI
@@ -97,4 +97,4 @@
 - The knowledge-base Storage Account keeps a public endpoint (Entra ID/RBAC only, shared keys off): a private endpoint would also need the backend Web App VNet-integrated for outbound traffic, which only the frontend is today
 - `AzureBlobArchiveStore` has no automated test (Azurite doesn't accept `DefaultAzureCredential`); its first real exercise is an upload on a deployed backend
 - The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
-- `AUTH__JWT_SECRET` isn't wired into `main.bicep`/Key Vault yet. It's required, so a backend deployed from the current template fails `Settings` validation at boot — the Azure deploy is broken until this is wired. Plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)
+- No deploy step runs `alembic upgrade head` against whatever Postgres ends up provisioned — nothing automates it today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)

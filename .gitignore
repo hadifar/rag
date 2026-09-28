@@ -236,7 +236,7 @@ bin/__pycache__/
 
 .import_linter_cache/
 
-# Knowledge base extracted from data/data.zip (scripts/setup.sh)
+# Knowledge base, if data/data.zip is unzipped by hand (rag ingest reads the zip directly)
 data/*.md
 
 # Uploaded knowledge-base zips (KB_STORAGE__BACKEND=local)

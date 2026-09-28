@@ -48,8 +48,7 @@ federated credential are one-time setup outside this template) and the Postgres 
 `DATABASE_URL` (Key Vault secret `database-url`) — not yet decided whether that's Azure Database
 for PostgreSQL or something else.
 
-Not wired yet: `AUTH__JWT_SECRET` isn't in the backend's App Settings, and it's required, so a backend deployed from this template currently fails at boot. Whatever
-Postgres gets provisioned also needs the `vector` extension allowed (on Azure Database for
+Not wired yet: whatever Postgres gets provisioned needs the `vector` extension allowed (on Azure Database for
 PostgreSQL: add `VECTOR` to the `azure.extensions` server parameter) before `alembic upgrade head`. Nothing
 runs `alembic upgrade head` on deploy either — see [limitation.md](limitation.md#infra--deployment).
 

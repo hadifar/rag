@@ -27,6 +27,6 @@ echo
 echo "Setup complete. Next:"
 echo "  docker compose up -d postgres      # local Postgres (pgvector) on localhost:5432"
 echo "  uv run alembic upgrade head        # apply migrations"
-echo "  uv run rag create-user you@example.com   # there's no public signup"
-echo "  uv run rag ingest                  # build the vector index from data/"
+echo "  uv run rag create-user you@example.com --admin   # no public signup; admins can upload the KB"
+echo "  uv run rag ingest                  # index data/data.zip (or upload a zip in Settings)"
 echo "  uv run rag serve                   # start the API on :8000 (UI: cd frontend && npm run dev)"

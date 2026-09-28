@@ -14,8 +14,8 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 | Retrieval | Hybrid search in Postgres: `pgvector` (HNSW, cosine) + full-text (`tsvector`, GIN), fused by reciprocal rank; embeddings from the LLM provider (`text-embedding-3-*`) |
 | Auth | JWT (access + refresh) via `pyjwt`, `argon2-cffi` password hashing, users in Postgres — see [Authentication](#authentication) |
 | Observability | `logging` (default) or `langfuse` |
-| Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users + conversations) |
-| Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
+| Local dev | Docker Compose — `backend` (FastAPI/uvicorn; uploaded knowledge-base zips on the `kbuploads` volume), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users + conversations + knowledge base) |
+| Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)); uploaded knowledge-base zips in Azure Blob Storage |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` — see [enforcement.md](enforcement.md) |
 
 ## Layout
@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
@@ -44,12 +44,14 @@ rag/
 │   ├── llm_client.py
 │   ├── checkpointer.py
 │   ├── observability.py
+│   ├── archive_store.py              # uploaded knowledge-base zips: local disk or Azure Blob (KB_STORAGE)
 │   └── db.py                         # the app's Postgres pool (users, conversations, documents)
 │
 ├── repository/                       # concrete persistence implementing a domain port — same
 │   ├── user_repository.py            # composition-root-only rule as adapters/, just a distinct kind of infra
 │   ├── conversation_repository.py
-│   └── document_repository.py        # knowledge-base chunks: pgvector + full-text hybrid search
+│   ├── document_repository.py        # knowledge-base documents + chunks: pgvector + full-text hybrid search
+│   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
 │   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. SettingsDep/CurrentUserDep
@@ -83,7 +85,7 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 | Service | Responsibility | Depends on |
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
-| `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic | `DocumentLoaderPort`, `ChunkerPort`, `DocumentIndexPort` |
+| `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `DocumentLoaderPort`, `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
 | `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `retrieval_service`, checkpointer |
 | `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -162,6 +164,9 @@ its own Postgres).
 
 - **No public signup.** Accounts are created out-of-band via `rag create-user <email>` (prompts
   for a password, `argon2-cffi` hashed) — there's no `POST /register`.
+- **Admins** — `users.is_admin` (`rag create-user --admin`, or `rag set-admin <email>
+  [--revoke]` for an existing user) gates the knowledge-base upload (`/api/ingestions`); the
+  frontend shows it only when `GET /api/auth/me` says `is_admin`.
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
   and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
@@ -176,9 +181,10 @@ its own Postgres).
   revocation store, so a stolen refresh token stays valid until it naturally expires (see
   [limitation.md](limitation.md#security)).
 - **Gating** — `get_current_user` (`api/deps.py`) is applied as a router-level dependency to
-  `chat`/`kb`/`settings`; `auth` and `health` stay open (health is a liveness/readiness probe hit
+  `chat`/`conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
+  `ingestions`; `auth` and `health` stay open (health is a liveness/readiness probe hit
   by infra with no session — see [conventions.md](conventions.md)).
-- **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`) in the app's
+- **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`, `is_admin`) in the app's
   one Postgres database (`DATABASE_URL`); schema is a plain Alembic
   migration (`migrations/versions/0001_create_users_table.py`), not auto-created like the
   checkpointer's own `.setup()`.

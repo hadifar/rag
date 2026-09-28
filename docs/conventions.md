@@ -102,13 +102,13 @@ The `/api/chat/stream` wire format is hand-kept in four places; change all four 
 
 ## Adding a new backend behind a `Settings`-driven choice: extend the discriminated union, don't branch downstream
 
-- For a capability selected by configuration (today: `LLM`, `OBSERVABILITY`), add a new Pydantic
+- For a capability selected by configuration (today: `LLM`, `OBSERVABILITY`, `KB_STORAGE`), add a new Pydantic
   model to the discriminated union in `config.py`, keyed by its `BACKEND` literal and populated
   from nested env vars (`OBSERVABILITY__PUBLIC_KEY`).
 - Add one `case` to the single `match` in the matching adapter (`llm_client.py`'s `build_llm`,
-  `observability.py`'s `open_trace_config`).
-- Callers never branch on the active backend — they get a plain `BaseChatModel` or call
-  `trace_config(name)`.
+  `observability.py`'s `open_trace_config`, `archive_store.py`'s `open_archive_store`).
+- Callers never branch on the active backend — they get a plain `BaseChatModel`, call
+  `trace_config(name)`, or use an `ArchiveStorePort`.
 
 ## Adding a new secret
 
