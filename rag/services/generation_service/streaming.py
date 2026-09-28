@@ -33,7 +33,7 @@ async def stream_events(
 
     final_state = await graph.aget_state(config)
     sources = turn_sources(final_state.values.get("messages", []))
-    if sources:
+    if sources is not None:
         yield SourcesReady(sources=sources)
 
 

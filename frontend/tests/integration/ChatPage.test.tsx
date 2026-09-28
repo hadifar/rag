@@ -75,7 +75,7 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<Schemas['HistoryMessageResponse'][]>([
-          { role: 'user', text: 'How long is data kept?', sources: [] },
+          { role: 'user', text: 'How long is data kept?', sources: null },
           { role: 'assistant', text: 'Ninety days.', sources: ['11-data-retention-policy.md'] },
         ]),
       ),
@@ -85,6 +85,23 @@ describe('ChatPage', () => {
     expect(await screen.findByText('Ninety days.')).toBeInTheDocument();
     expect(screen.getByText('How long is data kept?')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '11-data-retention-policy.md' })).toBeInTheDocument();
+  });
+
+  it('says none were found only for answers that searched', async () => {
+    server.use(
+      http.get('/api/conversations/:id/messages', () =>
+        HttpResponse.json<Schemas['HistoryMessageResponse'][]>([
+          { role: 'user', text: 'hi', sources: null },
+          { role: 'assistant', text: 'Hello!', sources: null },
+          { role: 'user', text: 'Who won the cup?', sources: null },
+          { role: 'assistant', text: "I don't know.", sources: [] },
+        ]),
+      ),
+    );
+    renderChat('/chat/c1');
+
+    expect(await screen.findByText("I don't know.")).toBeInTheDocument();
+    expect(screen.getAllByText('— none found')).toHaveLength(1);
   });
 
   it('explains when the conversation in the URL does not exist', async () => {

@@ -36,11 +36,11 @@ describe('createBubbleHandler', () => {
     });
   });
 
-  it('skips an empty sources list', () => {
+  it('still shows a sources bubble when the search found nothing', () => {
     const { append, handle } = setup();
 
     handle({ type: 'sources', sources: [] });
 
-    expect(append).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledExactlyOnceWith({ type: 'sources', content: { sources: [] } });
   });
 });

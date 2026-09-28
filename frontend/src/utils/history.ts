@@ -7,7 +7,8 @@ export function historyToMessages(history: Schemas['HistoryMessageResponse'][]):
       return [{ type: 'text', content: { text: message.text }, position: 'right' }];
     }
     const answer: ChatMessageInput = { type: 'text', content: { text: message.text } };
-    return message.sources.length > 0
+    // null: the answer didn't search; [] searched and found nothing (still shown).
+    return message.sources !== null
       ? [answer, { type: 'sources', content: { sources: message.sources } }]
       : [answer];
   });

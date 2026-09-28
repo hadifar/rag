@@ -45,4 +45,5 @@ class ConversationPage:
 class HistoryMessage:
     role: Literal["user", "assistant"]
     text: str
-    sources: list[str] = field(default_factory=list)
+    # None unless the turn searched the knowledge base; empty if it found nothing.
+    sources: list[str] | None = None

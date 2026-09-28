@@ -22,7 +22,9 @@ class ToolCallResult:
 
 @dataclass
 class SourcesReady:
-    """The deduplicated sources used across the whole turn, once the graph run finishes"""
+    """The deduplicated sources used across the whole turn, once the graph run finishes.
+    Only sent if the turn searched; empty means the search found nothing.
+    """
 
     sources: list[str]
 

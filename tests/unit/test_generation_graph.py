@@ -105,10 +105,17 @@ class _ScriptedChatModel(BaseChatModel):
         )
 
 
+_NO_RESULTS_QUERY = "nothing"
+
+
 class _StubRetrievalService:
-    """Returns one document whose source_id is the query itself."""
+    """Returns one document whose source_id is the query itself, or none for
+    _NO_RESULTS_QUERY.
+    """
 
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
+        if query == _NO_RESULTS_QUERY:
+            return []
         return [
             (
                 Document(
@@ -182,6 +189,26 @@ async def test_sources_cover_only_the_current_turn() -> None:
 
     assert _sources(await chat.send("first")) == ["pricing"]
     assert _sources(await chat.send("second")) == ["security"]
+
+
+async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search(_NO_RESULTS_QUERY), _answer("I don't know.")]
+    )
+
+    events = await _Chat(model).send("first")
+
+    assert [e for e in events if isinstance(e, SourcesReady)] == [
+        SourcesReady(sources=[])
+    ]
+
+
+async def test_a_turn_without_a_search_sends_no_sources() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    events = await _Chat(model).send("hello")
+
+    assert not any(isinstance(e, SourcesReady) for e in events)
 
 
 async def test_ungrounded_answer_is_revised_again_in_a_later_turn() -> None:
@@ -289,20 +316,25 @@ async def test_history_shows_each_question_with_its_final_answer_and_sources() -
             _answer("wrong"),
             _answer("revised"),
             _answer("You're welcome!"),
+            _search(_NO_RESULTS_QUERY),
+            _answer("I don't know."),
         ],
         groundedness_verdicts=["UNGROUNDED"],
     )
     chat = _Chat(model)
     await chat.send("How much?")
     await chat.send("thanks")
+    await chat.send("Who won the cup?")
 
     history = to_history(await chat.saved_messages())
 
     assert [(m.role, m.text, m.sources) for m in history] == [
-        ("user", "How much?", []),
+        ("user", "How much?", None),
         ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
-        ("user", "thanks", []),
-        ("assistant", "You're welcome!", []),
+        ("user", "thanks", None),
+        ("assistant", "You're welcome!", None),  # didn't search
+        ("user", "Who won the cup?", None),
+        ("assistant", "I don't know.", []),  # searched, found nothing
     ]
 
 
