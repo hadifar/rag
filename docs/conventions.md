@@ -28,23 +28,20 @@ Follows PEP 20 and the
 
 ## Adding a new implementation of an existing capability: satisfy the `Protocol`, don't branch on type
 
-- A new variant (ingestion source, chunking strategy, tool, …) is a new class satisfying an
+- A new variant (chunking strategy, archive store, tool, …) is a new class satisfying an
   existing (or new) `Protocol` in `rag.domain.ports`, wired in `container.py`.
 - Never add an `if kind == ...` / `isinstance(...)` branch in the code that *consumes* the
   capability — that's the abstraction being bypassed rather than extended.
 
 ```python
-class DocumentLoaderPort(Protocol):
-    def load(self) -> Iterable[RawDocument]: ...
-
-
 class ChunkerPort(Protocol):
     def chunk(self, document: RawDocument) -> list[Document]: ...
 ```
 
-- Example: a new source (PDF, Confluence) is a new `DocumentLoaderPort` class; `IngestionService`,
-  the chunkers and the repository stay untouched. A new chunking strategy is a new `ChunkerPort`
-  class, not a parameter threaded through existing chunkers.
+- Example: a new chunking strategy is a new `ChunkerPort` class, not a parameter threaded
+  through the existing chunker.
+- A new ingestion source (PDF, Confluence) is just a `load_*` function in `loaders.py` that
+  returns `list[RawDocument]`; `IngestionService.ingest` takes documents, not a loader.
 
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 
@@ -96,19 +93,19 @@ The `/api/chat/stream` wire format is hand-kept in four places; change all four 
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 
 - Write a `build_*(dependency) -> callable` closure, assembled wherever its owning service is
-  built (example: `build_search_tool(ranking_service)` in `tools.py`).
+  built (example: `build_search_tool(retrieval_service)` in `tools.py`).
 - Never a module-level global (e.g. a module-level `@tool` function), and never a client
   re-instantiated per call.
 
 ## Adding a new backend behind a `Settings`-driven choice: extend the discriminated union, don't branch downstream
 
-- For a capability selected by configuration (today: `LLM`, `OBSERVABILITY`), add a new Pydantic
+- For a capability selected by configuration (today: `LLM`, `OBSERVABILITY`, `KB_STORAGE`), add a new Pydantic
   model to the discriminated union in `config.py`, keyed by its `BACKEND` literal and populated
   from nested env vars (`OBSERVABILITY__PUBLIC_KEY`).
 - Add one `case` to the single `match` in the matching adapter (`llm_client.py`'s `build_llm`,
-  `observability.py`'s `open_trace_config`).
-- Callers never branch on the active backend — they get a plain `BaseChatModel` or call
-  `trace_config(name)`.
+  `observability.py`'s `open_trace_config`, `archive_store.py`'s `open_archive_store`).
+- Callers never branch on the active backend — they get a plain `BaseChatModel`, call
+  `trace_config(name)`, or use an `ArchiveStorePort`.
 
 ## Adding a new secret
 

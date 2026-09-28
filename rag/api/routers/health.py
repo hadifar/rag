@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from rag.api.deps import RankingServiceDep
+from rag.api.deps import RetrievalServiceDep
 from rag.api.schema.health import HealthResponse
 
 router = APIRouter(prefix="/api/health", tags=["health"])
@@ -12,6 +12,6 @@ async def live() -> HealthResponse:
 
 
 @router.get("/ready")
-async def ready(ranking_service: RankingServiceDep) -> HealthResponse:
-    await ranking_service.ping()
+async def ready(retrieval_service: RetrievalServiceDep) -> HealthResponse:
+    await retrieval_service.ping()
     return HealthResponse(status="ok")

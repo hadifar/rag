@@ -1,6 +1,9 @@
 limit_req_zone $binary_remote_addr zone=chat:10m rate=10r/m;
 # Tighter budget for password guessing; login gets this zone instead of `chat`.
 limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+# Knowledge-base uploads + status polling (~1 request per 2s while a run is going);
+# its own zone, so polling can't use up the chat budget or be throttled by it.
+limit_req_zone $binary_remote_addr zone=ingestions:10m rate=60r/m;
 
 server {
     listen 80;
@@ -35,6 +38,19 @@ server {
     location = /api/auth/login {
         limit_req zone=login burst=3 nodelay;
         limit_req_status 429;
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }
+
+    # Longest prefix wins over /api/. Admin-only on the backend; the body limit must
+    # match MAX_ARCHIVE_BYTES in rag/services/ingestion_service/service.py (nginx's
+    # default is 1m).
+    location /api/ingestions {
+        limit_req zone=ingestions burst=10 nodelay;
+        limit_req_status 429;
+        client_max_body_size 20m;
         proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;

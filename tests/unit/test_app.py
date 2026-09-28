@@ -1,14 +1,15 @@
 import asyncio
+import io
 import json
 import uuid
+import zipfile
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
 from pydantic import SecretStr
 
 from rag.api.routers.chat import SseEventType
@@ -21,38 +22,25 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
-from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.generation_service.service import GenerationService
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
-from tests.unit.fakes import FakeConversationRepository, FakeTitleModel, StubChatEngine
+from tests.unit.fakes import (
+    FakeArchiveStore,
+    FakeConversationRepository,
+    FakeDocumentIndex,
+    FakeIngestionRunRepository,
+    FakeUserRepository,
+    StubGeneration,
+)
 
 _TEST_EMAIL = "test@example.com"
 _TEST_PASSWORD = "correct horse battery staple"
 _OTHER_EMAIL = "other@example.com"
-
-
-class _FakeUserRepository:
-    def __init__(self):
-        self._users: dict[uuid.UUID, User] = {}
-
-    async def get_by_email(self, email: str) -> User | None:
-        return next((u for u in self._users.values() if u.email == email), None)
-
-    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
-        return self._users.get(user_id)
-
-    async def create(self, email: str, hashed_password: str) -> User:
-        user = User(
-            id=uuid.uuid4(),
-            email=email,
-            hashed_password=hashed_password,
-            created_at=datetime.now(UTC),
-        )
-        self._users[user.id] = user
-        return user
+_ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
@@ -82,7 +70,7 @@ def _stub_settings() -> Settings:
 
 def _build_auth_service() -> AuthService:
     return AuthService(
-        user_repository=_FakeUserRepository(),
+        user_repository=FakeUserRepository(),
         jwt_secret="test-secret-that-is-long-enough-32b",
         jwt_algorithm="HS256",
         access_ttl=timedelta(minutes=15),
@@ -95,23 +83,29 @@ def client() -> Generator[TestClient]:
     auth_service = _build_auth_service()
     asyncio.run(auth_service.create_user(_TEST_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
+    asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
-    chat_engine = StubChatEngine(
+    generation = StubGeneration(
         extra_events=[
             ToolCallStart(name="search", query="hi"),
             ToolCallResult(name="search", output="stub result"),
             SourcesReady(sources=["doc-a", "doc-b"]),
-        ]
+        ],
+        title="Greeting",
     )
     container = Container(
-        ranking_service=cast(RetrievalService, _StubRetrievalService()),
-        generation_service=cast(GenerationService, chat_engine),
-        ingestion_service=cast(IngestionService, object()),
+        retrieval_service=cast(RetrievalService, _StubRetrievalService()),
+        generation_service=cast(GenerationService, generation),
+        ingestion_service=IngestionService(
+            FakeDocumentIndex(),
+            WholeDocumentChunker(),
+            FakeArchiveStore(),
+            FakeIngestionRunRepository(),
+        ),
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
-            chat_engine=chat_engine,
-            title_model=cast(Runnable, FakeTitleModel(reply="Greeting")),
+            generation=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())
@@ -139,7 +133,7 @@ def test_live_endpoint_ok(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_endpoint_exercises_ranking_service(client: TestClient) -> None:
+def test_ready_endpoint_exercises_retrieval_service(client: TestClient) -> None:
     response = client.get("/api/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -194,6 +188,7 @@ def test_me_endpoint_returns_current_user(
     response = client.get("/api/auth/me", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["email"] == _TEST_EMAIL
+    assert response.json()["is_admin"] is False
 
 
 def test_refresh_endpoint_issues_new_access_token(client: TestClient) -> None:
@@ -499,3 +494,57 @@ def test_conversation_endpoints_require_auth(
     client: TestClient, method: str, path: str
 ) -> None:
     assert client.request(method, path).status_code == 401
+
+
+def _kb_zip() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("kb/a.md", "# A")
+        archive.writestr("kb/b.md", "# B")
+    return buffer.getvalue()
+
+
+def _upload(client: TestClient, headers: dict[str, str], data: bytes):
+    return client.post(
+        "/api/ingestions",
+        headers=headers,
+        files={"file": ("kb.zip", data, "application/zip")},
+    )
+
+
+def test_admin_upload_runs_ingestion_in_the_background(client: TestClient) -> None:
+    headers = _login(client, _ADMIN_EMAIL)
+    assert client.get("/api/ingestions/latest", headers=headers).json() is None
+
+    response = _upload(client, headers, _kb_zip())
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "running"
+    # TestClient runs background tasks before returning, so the run has ended.
+    run = client.get(f"/api/ingestions/{response.json()['id']}", headers=headers)
+    assert run.json()["status"] == "succeeded"
+    assert run.json()["added"] == 2
+    latest = client.get("/api/ingestions/latest", headers=headers)
+    assert latest.json()["id"] == response.json()["id"]
+
+
+def test_upload_rejects_an_invalid_zip(client: TestClient) -> None:
+    response = _upload(client, _login(client, _ADMIN_EMAIL), b"not a zip")
+
+    assert response.status_code == 400
+    assert "not a zip file" in response.json()["detail"]
+
+
+def test_ingestions_are_admin_only(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    assert _upload(client, auth_headers, _kb_zip()).status_code == 403
+    assert client.get("/api/ingestions/latest", headers=auth_headers).status_code == 403
+    assert client.get("/api/ingestions/latest").status_code == 401
+
+
+def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
+    response = client.get(
+        f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
+    )
+    assert response.status_code == 404

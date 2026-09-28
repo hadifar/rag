@@ -242,7 +242,7 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
 
     events = await _Chat(model).send("first")
 
-    # MAX_VERIFY_ATTEMPTS is 1: one revision, and the revised answer isn't re-verified.
+    # MAX_REVISIONS is 1: one revision, and the revised answer isn't re-verified.
     assert sum(_is_revision_call(call) for call in model.agent_calls) == 1
     assert len(model.verifier_calls) == 1
     assert _text(events).endswith("still wrong")

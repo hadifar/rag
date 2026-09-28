@@ -1,12 +1,17 @@
 # Limitations — Production Readiness
 
 ## Data & ingestion
-- `rag ingest` is a manual, one-shot CLI step — nothing triggers it on a doc change
-- Re-ingesting never deletes vectors for removed source files
+- Uploads (`POST /api/ingestions`) run as an in-process background task: a backend restart
+  mid-run kills it, and the next startup marks it failed, so the admin has to upload again
+  (safe: the index is only swapped in one transaction at the end). That startup sweep assumes a
+  single backend instance: with several, one restarting would mark another's live run failed
+- `rag ingest` doesn't take part in the one-run-at-a-time rule — running it while an upload is
+  being ingested can make one of the two fail (the other still completes)
+- `rag ingest --latest` rebuilds from the newest *stored* upload, which is the newest *valid* zip
+  but not necessarily one that ingested successfully (e.g. if embedding failed)
 - `WholeDocumentChunker` puts an entire file into one record — no size-aware chunking for docs past the embedding model's input limit
-- `MarkdownHeaderChunker` exists and is arguably the better default, but nothing wires it up — `container.py` hardcodes `WholeDocumentChunker`, so the better chunker is dead code with no way to select it
 - Only local markdown is supported — no PDF, Confluence, wiki, etc. loaders
-- No embedding-model versioning: changing `LLM__EMBEDDING_MODEL`/`LLM__EMBEDDING_DEPLOYMENT` leaves old vectors from the previous model silently mixed in with new ones (same dimensions, different meaning), with no re-embed/migration path. The vector size itself is fixed at 1536 by migration `0003`, so only `text-embedding-3-*` models fit
+- No embedding-model versioning: changing `LLM__EMBEDDING_MODEL`/`LLM__EMBEDDING_DEPLOYMENT` leaves old vectors from the previous model silently mixed in with new ones (same dimensions, different meaning) — unchanged documents are skipped on re-ingest, so nothing re-embeds them unless you remember `rag ingest --force`. The vector size itself is fixed at 1536 by migration `0003`, so only `text-embedding-3-*` models fit
 - Every search makes one embedding API call, and every ingested chunk one embedding (batched) — retrieval now depends on the LLM provider being up, not just Postgres
 
 ## Retrieval
@@ -19,7 +24,7 @@
 ## Generation & guardrails
 - The topical guardrail is advisory, not a gate: an off-topic classification only adds a "please decline" instruction and removes the tools for that turn (`TopicalGuard`) — the model can still be talked out of following the instruction. There is no code path that actually blocks a request.
 - The guardrail classifies only the latest human message in isolation (`_latest_human_message`) — a multi-turn conversation that gradually drifts off-topic or builds up a jailbreak across turns isn't caught, since only the most recent turn is scored.
-- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_VERIFY_ATTEMPTS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
+- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_REVISIONS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
 - `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
@@ -35,7 +40,7 @@
   has to delete each conversation's thread first.
 - Conversations created before the `conversations` table existed (checkpoint threads keyed by
   the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
-- One database, two schema owners: Alembic owns `users`/`conversations`/`chunks`, while
+- One database, two schema owners: Alembic owns `users`/`conversations`/`documents`/`chunks`/`ingestion_runs`, while
   LangGraph's `checkpointer.setup()` creates and migrates its own checkpoint tables at every
   boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
@@ -80,13 +85,15 @@
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 
 ## Testing & CI
-- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, and the API wiring against stubs — no coverage of chunking, RRF, retry/fallback behavior, or answer quality
-- No frontend tests at all — `useChat`, the conversations context and the SSE parsing are only checked by `tsc`
+- Unit tests cover the guards' per-turn behavior (`test_generation_graph.py`, scripted fake model), `ConversationService`, `AuthService`, ingestion (archive loading, index sync, upload runs) and the API wiring against stubs — no unit coverage of the chunker, RRF, retry/fallback behavior, or answer quality
+- Frontend tests (Vitest unit/integration, Playwright e2e) run only locally — no CI job runs them, so a frontend regression isn't caught before merge
 - Integration tests only run on manual `workflow_dispatch` (`integration-tests.yml`) — never automatically on push/PR to `master`, so there is no CI gate at all on retrieval or generation correctness before merge
 - CI builds and pushes images (`build-push.yml`) only on manual `workflow_dispatch` — merging to `master` doesn't build/push automatically
 - Nothing deploys automatically either — `infra/azure/main.bicep` must be applied by hand (`az deployment group create`); no deploy gate in CI
 - No continuous-deployment hook from the registry to the Web Apps — after pushing a new image, they need a manual `az webapp restart` to actually pull it
 
 ## Infra & deployment
+- The knowledge-base Storage Account keeps a public endpoint (Entra ID/RBAC only, shared keys off): a private endpoint would also need the backend Web App VNet-integrated for outbound traffic, which only the frontend is today
+- `AzureBlobArchiveStore` has no automated test (Azurite doesn't accept `DefaultAzureCredential`); its first real exercise is an upload on a deployed backend
 - The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
-- `AUTH__JWT_SECRET` isn't wired into `main.bicep`/Key Vault yet. It's required, so a backend deployed from the current template fails `Settings` validation at boot — the Azure deploy is broken until this is wired. Plus a deploy step to actually run `alembic upgrade head` against whatever Postgres ends up provisioned, which nothing automates today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)
+- No deploy step runs `alembic upgrade head` against whatever Postgres ends up provisioned — nothing automates it today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)

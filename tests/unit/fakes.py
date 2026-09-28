@@ -1,12 +1,140 @@
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
 from langchain_core.messages import AIMessage
 
+from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import StreamEvent, TextDelta
-from rag.domain.models import Conversation, HistoryMessage
+from rag.domain.models import (
+    Conversation,
+    HistoryMessage,
+    IndexedDocument,
+    IngestionReport,
+    IngestionRun,
+    User,
+)
+
+
+class FakeUserRepository:
+    """In-memory UserRepositoryPort."""
+
+    def __init__(self):
+        self._users: dict[uuid.UUID, User] = {}
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        return self._users.get(user_id)
+
+    async def create(
+        self, email: str, hashed_password: str, *, is_admin: bool = False
+    ) -> User:
+        user = User(
+            id=uuid.uuid4(),
+            email=email,
+            hashed_password=hashed_password,
+            created_at=datetime.now(UTC),
+            is_admin=is_admin,
+        )
+        self._users[user.id] = user
+        return user
+
+    async def set_admin(self, email: str, is_admin: bool) -> User | None:
+        user = await self.get_by_email(email)
+        if user is None:
+            return None
+        self._users[user.id] = replace(user, is_admin=is_admin)
+        return self._users[user.id]
+
+
+class FakeIngestionRunRepository:
+    """In-memory IngestionRunRepositoryPort, one running run at a time like the real one."""
+
+    def __init__(self):
+        self.runs: dict[uuid.UUID, IngestionRun] = {}
+        self._clock = datetime(2026, 1, 1, tzinfo=UTC)
+
+    async def create(
+        self, archive_name: str, created_by: uuid.UUID | None
+    ) -> IngestionRun:
+        if await self.running() is not None:
+            raise IngestionInProgressError()
+        self._clock += timedelta(seconds=1)
+        run = IngestionRun(
+            id=uuid.uuid4(),
+            status="running",
+            archive_name=archive_name,
+            created_by=created_by,
+            started_at=self._clock,
+        )
+        self.runs[run.id] = run
+        return run
+
+    async def get(self, run_id: uuid.UUID) -> IngestionRun | None:
+        return self.runs.get(run_id)
+
+    async def latest(self) -> IngestionRun | None:
+        return max(self.runs.values(), key=lambda r: r.started_at, default=None)
+
+    async def running(self) -> IngestionRun | None:
+        return next((r for r in self.runs.values() if r.status == "running"), None)
+
+    async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None:
+        self.runs[run_id] = replace(
+            self.runs[run_id], status="succeeded", **asdict(report)
+        )
+
+    async def fail(self, run_id: uuid.UUID, error: str) -> None:
+        self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
+
+    async def fail_running(self, error: str) -> int:
+        running = [r for r in self.runs.values() if r.status == "running"]
+        for run in running:
+            await self.fail(run.id, error)
+        return len(running)
+
+
+class FakeArchiveStore:
+    """In-memory ArchiveStorePort; names are sequential, so they sort like real ones."""
+
+    def __init__(self):
+        self.archives: dict[str, bytes] = {}
+
+    async def asave(self, data: bytes) -> str:
+        name = f"{len(self.archives):04d}.zip"
+        self.archives[name] = data
+        return name
+
+    async def aread(self, name: str) -> bytes:
+        return self.archives[name]
+
+    async def alatest(self) -> str | None:
+        return max(self.archives, default=None)
+
+
+class FakeDocumentIndex:
+    """In-memory DocumentIndexPort; records each replace call to assert on what was
+    (re-)embedded.
+    """
+
+    def __init__(self, hashes: dict[str, str] | None = None):
+        self.hashes = dict(hashes or {})
+        self.replaced: list[tuple[list[IndexedDocument], list[str]]] = []
+
+    async def alist_content_hashes(self) -> dict[str, str]:
+        return dict(self.hashes)
+
+    async def areplace_documents(
+        self, documents: list[IndexedDocument], *, removed: list[str]
+    ) -> None:
+        self.replaced.append((documents, removed))
+        for source_id in removed:
+            del self.hashes[source_id]
+        for document in documents:
+            self.hashes[document.source_id] = document.content_hash
 
 
 class FakeConversationRepository:
@@ -69,13 +197,19 @@ class FakeConversationRepository:
         self.rows.pop(conversation_id, None)
 
 
-class StubChatEngine:
-    """ChatEnginePort that echoes the message, and records threads it was asked
-    to delete.
+class StubGeneration:
+    """GenerationPort that echoes the message, answers title requests with `title`,
+    and records threads it was asked to delete.
     """
 
-    def __init__(self, extra_events: list[StreamEvent] | None = None):
+    def __init__(
+        self,
+        extra_events: list[StreamEvent] | None = None,
+        title: str | None = "Generated title",
+    ):
         self.extra_events = extra_events or []
+        self.title = title
+        self.title_requests: list[tuple[str, str]] = []
         self.threads: dict[str, list[HistoryMessage]] = {}
         self.deleted_threads: list[str] = []
 
@@ -92,6 +226,10 @@ class StubChatEngine:
         yield TextDelta(text=reply)
         for event in self.extra_events:
             yield event
+
+    async def generate_title(self, question: str, answer: str) -> str | None:
+        self.title_requests.append((question, answer))
+        return self.title
 
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         return self.threads.get(thread_id, [])

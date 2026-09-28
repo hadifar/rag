@@ -2,7 +2,6 @@ import uuid
 from typing import cast
 
 import pytest
-from langchain_core.runnables import Runnable
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.events import (
@@ -12,23 +11,19 @@ from rag.domain.events import (
     TextDelta,
 )
 from rag.services.conversation_service.service import ConversationService
-from tests.unit.fakes import FakeConversationRepository, FakeTitleModel, StubChatEngine
+from tests.unit.fakes import FakeConversationRepository, StubGeneration
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
 
 
 def _service(
-    title_model: FakeTitleModel | None = None,
-) -> tuple[ConversationService, FakeConversationRepository, StubChatEngine]:
+    generation: StubGeneration | None = None,
+) -> tuple[ConversationService, FakeConversationRepository, StubGeneration]:
     repository = FakeConversationRepository()
-    engine = StubChatEngine()
-    service = ConversationService(
-        repository=repository,
-        chat_engine=engine,
-        title_model=cast(Runnable, title_model or FakeTitleModel()),
-    )
-    return service, repository, engine
+    generation = generation or StubGeneration()
+    service = ConversationService(repository=repository, generation=generation)
+    return service, repository, generation
 
 
 async def _send(
@@ -52,8 +47,7 @@ async def test_first_message_creates_a_conversation_owned_by_the_sender() -> Non
 
 
 async def test_new_conversation_gets_a_generated_title_as_the_last_event() -> None:
-    title_model = FakeTitleModel(reply='"Password reset."\nextra line')
-    service, repository, _ = _service(title_model)
+    service, repository, generation = _service(StubGeneration(title="Password reset"))
 
     events = await _send(service, ALICE, "How do I reset my password?")
 
@@ -62,12 +56,14 @@ async def test_new_conversation_gets_a_generated_title_as_the_last_event() -> No
         conversation_id=str(conversation_id), title="Password reset"
     )
     assert repository.rows[conversation_id].title == "Password reset"
-    # The title prompt sees both sides of the first exchange.
-    assert "echo: How do I reset my password?" in title_model.prompts[0]
+    # The title is generated from both sides of the first exchange.
+    assert generation.title_requests == [
+        ("How do I reset my password?", "echo: How do I reset my password?")
+    ]
 
 
 async def test_failed_title_generation_keeps_the_fallback_title() -> None:
-    service, repository, _ = _service(FakeTitleModel(error=RuntimeError("LLM down")))
+    service, repository, _ = _service(StubGeneration(title=None))
 
     events = await _send(service, ALICE, "  How do I\nreset my password?  ")
 
@@ -78,7 +74,7 @@ async def test_failed_title_generation_keeps_the_fallback_title() -> None:
 
 
 async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
-    service, repository, _ = _service(FakeTitleModel(error=RuntimeError()))
+    service, repository, _ = _service(StubGeneration(title=None))
 
     await _send(service, ALICE, "word " * 50)
 
@@ -88,8 +84,7 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
 
 
 async def test_follow_up_message_reuses_the_conversation_and_is_not_retitled() -> None:
-    title_model = FakeTitleModel()
-    service, repository, engine = _service(title_model)
+    service, repository, generation = _service()
     first = await _send(service, ALICE, "first")
     conversation_id = cast(ConversationReady, first[0]).conversation.id
 
@@ -97,9 +92,9 @@ async def test_follow_up_message_reuses_the_conversation_and_is_not_retitled() -
 
     assert cast(ConversationReady, second[0]).conversation.id == conversation_id
     assert not any(isinstance(e, ConversationTitled) for e in second)
-    assert len(title_model.prompts) == 1
+    assert len(generation.title_requests) == 1
     assert len(repository.rows) == 1
-    assert len(engine.threads[str(conversation_id)]) == 4
+    assert len(generation.threads[str(conversation_id)]) == 4
 
 
 async def test_first_message_with_a_client_id_creates_the_conversation_under_it() -> (
@@ -116,7 +111,7 @@ async def test_first_message_with_a_client_id_creates_the_conversation_under_it(
 
 
 async def test_cannot_use_a_conversation_someone_else_owns() -> None:
-    service, repository, engine = _service()
+    service, repository, generation = _service()
     conversation_id = (await repository.create(BOB, "Bob's chat")).id
 
     with pytest.raises(ConversationNotFoundError):
@@ -125,19 +120,19 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
-    assert engine.deleted_threads == []
+    assert generation.deleted_threads == []
     assert repository.rows[conversation_id].user_id == BOB
 
 
 async def test_cannot_read_or_delete_a_conversation_that_does_not_exist() -> None:
-    service, _, engine = _service()
+    service, _, generation = _service()
     conversation_id = uuid.uuid4()
 
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
-    assert engine.deleted_threads == []
+    assert generation.deleted_threads == []
 
 
 async def test_list_pages_through_the_users_conversations_newest_first() -> None:
@@ -175,13 +170,13 @@ async def test_list_rejects_a_malformed_cursor(cursor: str) -> None:
 
 
 async def test_delete_removes_the_messages_and_the_conversation() -> None:
-    service, repository, engine = _service()
+    service, repository, generation = _service()
     events = await _send(service, ALICE, "hi")
     conversation_id = cast(ConversationReady, events[0]).conversation.id
 
     await service.delete(ALICE, conversation_id)
 
-    assert engine.deleted_threads == [str(conversation_id)]
+    assert generation.deleted_threads == [str(conversation_id)]
     assert conversation_id not in repository.rows
 
 

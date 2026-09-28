@@ -40,7 +40,26 @@ class LangfuseObservability(BaseModel):
     HOST: str
 
 
+class LocalKbStorage(BaseModel):
+    BACKEND: Literal["local"] = "local"
+    DIR: Path = Path("data/uploads")
+
+
+class AzureBlobKbStorage(BaseModel):
+    """Authenticates with DefaultAzureCredential: the Web App's managed identity in
+    Azure, `az login` locally — no keys.
+    """
+
+    BACKEND: Literal["azure_blob"] = "azure_blob"
+    ACCOUNT_URL: str  # https://<account>.blob.core.windows.net
+    CONTAINER: str = "kb-archives"
+
+
 LLMConfig = Annotated[OpenAILLM | AzureOpenAILLM, Field(discriminator="BACKEND")]
+
+KbStorageConfig = Annotated[
+    LocalKbStorage | AzureBlobKbStorage, Field(discriminator="BACKEND")
+]
 
 ObservabilityConfig = Annotated[
     LoggingObservability | LangfuseObservability, Field(discriminator="BACKEND")
@@ -58,7 +77,10 @@ class Settings(BaseSettings):
 
     AUTH: AuthConfig
 
-    KNOWLEDGE_BASE_DIR: Path = Path("data")
+    # What `rag ingest` reads by default: a .zip of .md files, or a directory of them.
+    KNOWLEDGE_BASE_SOURCE: Path = Path("data/data.zip")
+    # Where uploaded knowledge-base zips are kept, so the index can be rebuilt from them.
+    KB_STORAGE: KbStorageConfig = LocalKbStorage()
 
     LLM: LLMConfig
     OBSERVABILITY: ObservabilityConfig = LoggingObservability()

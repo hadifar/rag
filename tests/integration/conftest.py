@@ -7,11 +7,13 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import ValidationError
 
+from rag.adapters.archive_store import LocalArchiveStore
 from rag.adapters.llm_client import build_embeddings
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
-from rag.services.ingestion_service.chunking import MarkdownHeaderChunker
-from rag.services.ingestion_service.loaders import MarkdownFileLoader
+from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.services.ingestion_service.chunking import WholeDocumentChunker
+from rag.services.ingestion_service.loaders import load_directory
 from rag.services.ingestion_service.service import IngestionService
 
 FIXTURE_KB = Path(__file__).parent / "fixtures" / "kb"
@@ -42,18 +44,35 @@ async def db_pool(
         yield pool
 
 
+def ingestion_service(
+    repository: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
+) -> IngestionService:
+    return IngestionService(
+        repository,
+        WholeDocumentChunker(),
+        LocalArchiveStore(tmp_path),
+        IngestionRunRepository(db_pool),
+    )
+
+
 @pytest.fixture
 async def seeded_kb(
-    integration_settings: Settings, db_pool: AsyncConnectionPool[AsyncConnection]
+    integration_settings: Settings,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
 ) -> AsyncGenerator[DocumentRepository]:
     """Ingests the small fixture knowledge base (source ids `it-*`, with facts that
     exist nowhere else, so a real knowledge base in the same database can't outrank
-    it), and removes it afterwards. Uses real embeddings.
+    it), and removes it afterwards. Uses real embeddings. `remove_missing=False` leaves
+    any real knowledge base in the same database alone.
     """
     repository = DocumentRepository(db_pool, build_embeddings(integration_settings))
-    await IngestionService(repository, MarkdownHeaderChunker()).ingest(
-        MarkdownFileLoader(FIXTURE_KB)
+    await ingestion_service(repository, db_pool, tmp_path).ingest(
+        load_directory(FIXTURE_KB), remove_missing=False
     )
     yield repository
     async with db_pool.connection() as conn:
-        await conn.execute("DELETE FROM chunks WHERE source_id LIKE 'it-%'")
+        # Cascades to their chunks.
+        await conn.execute("DELETE FROM documents WHERE source_id LIKE 'it-%'")

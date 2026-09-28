@@ -6,7 +6,6 @@ from fastapi import APIRouter, Query
 from rag.api.deps import ConversationServiceDep, CurrentUserDep
 from rag.api.schema.conversations import (
     ConversationPageResponse,
-    ConversationResponse,
     HistoryMessageResponse,
 )
 
@@ -21,10 +20,7 @@ async def list_conversations(
     cursor: str | None = None,
 ) -> ConversationPageResponse:
     page = await conversation_service.list_for_user(current_user.id, limit, cursor)
-    return ConversationPageResponse(
-        items=[ConversationResponse.from_domain(c) for c in page.items],
-        next_cursor=page.next_cursor,
-    )
+    return ConversationPageResponse.model_validate(page)
 
 
 @router.get("/{conversation_id}/messages")
@@ -34,10 +30,7 @@ async def get_messages(
     conversation_service: ConversationServiceDep,
 ) -> list[HistoryMessageResponse]:
     history = await conversation_service.history(current_user.id, conversation_id)
-    return [
-        HistoryMessageResponse(role=m.role, text=m.text, sources=m.sources)
-        for m in history
-    ]
+    return [HistoryMessageResponse.model_validate(m) for m in history]
 
 
 @router.delete("/{conversation_id}", status_code=204)

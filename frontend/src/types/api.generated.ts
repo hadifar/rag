@@ -191,6 +191,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ingestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Knowledge Base
+         * @description Replaces the knowledge base with the uploaded .zip of .md files. Returns right
+         *     away with a `running` run; poll `GET /api/ingestions/{id}` until it ends.
+         */
+        post: operations["upload_knowledge_base_api_ingestions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestions/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Latest Run */
+        get: operations["get_latest_run_api_ingestions_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestions/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_ingestions__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -212,6 +267,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_upload_knowledge_base_api_ingestions_post */
+        Body_upload_knowledge_base_api_ingestions_post: {
+            /** File */
+            file: string;
+        };
         /** ChatRequest */
         ChatRequest: {
             /** Conversation Id */
@@ -268,6 +328,36 @@ export interface components {
             /** Sources */
             sources: string[] | null;
         };
+        /** IngestionRunResponse */
+        IngestionRunResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "succeeded" | "failed";
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Added */
+            added: number | null;
+            /** Updated */
+            updated: number | null;
+            /** Unchanged */
+            unchanged: number | null;
+            /** Removed */
+            removed: number | null;
+            /** Error */
+            error: string | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -303,6 +393,8 @@ export interface components {
             id: string;
             /** Email */
             email: string;
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -611,6 +703,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_knowledge_base_api_ingestions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_knowledge_base_api_ingestions_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_run_api_ingestions_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRunResponse"] | null;
+                };
+            };
+        };
+    };
+    get_run_api_ingestions__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestionRunResponse"];
                 };
             };
             /** @description Validation Error */

@@ -25,6 +25,11 @@ services:
     # .env targets the host (localhost); inside the compose network it's `postgres`.
     environment:
       DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
+      # Uploaded knowledge-base zips, kept on a volume so they survive rebuilds.
+      KB_STORAGE__BACKEND: local
+      KB_STORAGE__DIR: /var/lib/rag/uploads
+    volumes:
+      - kbuploads:/var/lib/rag/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,3 +49,4 @@ services:
 
 volumes:
   pgdata:
+  kbuploads:
