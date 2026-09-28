@@ -2,25 +2,16 @@
 
 ## Setup
 
-```
-git clone https://github.com/hadifar/rag.git
-cd rag
-bash scripts/setup.sh
-```
-
-This runs `uv sync` and installs the git hooks for this clone. See
-[docs/setup.md](docs/setup.md) for `.env`/`data/` setup and running the app (Python, CLI, or
-Docker).
+See [docs/setup.md](docs/setup.md) for setup and running the app (uv, docker compose or azure).
 
 ## Conventions & architecture
 
 See [docs/conventions.md](docs/conventions.md) for coding style and the patterns to follow when
-extending `rag/` (adding a service, a route, a tool, a backend, etc.).
+extending `rag/`.
 
 ## What's enforced automatically
 
-Hooks run on every commit/push; run `pre-commit run --all-files` to check everything up front,
-or `--no-verify` to deliberately skip a hook. See [docs/enforcement.md](docs/enforcement.md) for
+Hooks run on every commit/push; See [docs/enforcement.md](docs/enforcement.md) for
 the full list — linting, type checking, `import-linter` layering, Conventional Commits, gitflow
 branch rules, and which test suite runs where.
 
