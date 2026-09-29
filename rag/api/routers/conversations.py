@@ -5,12 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from rag.api.deps import (
-    ConversationServiceDep,
-    CurrentUserDep,
-    get_current_user,
-    require_owned_conversation,
-)
+from rag.api.deps import ConversationServiceDep, CurrentUserDep, get_current_user
 from rag.api.schema.conversations import (
     ConversationPageResponse,
     ConversationResponse,
@@ -56,10 +51,21 @@ async def get_messages(
     return [HistoryMessageResponse.model_validate(m) for m in history]
 
 
+async def _require_owned_conversation(
+    conversation_id: uuid.UUID,
+    current_user: CurrentUserDep,
+    conversation_service: ConversationServiceDep,
+) -> None:
+    """Gate for the streaming route: runs before the response starts, so a missing or
+    foreign conversation is a plain 404 rather than an error in an already-200 stream.
+    """
+    await conversation_service.get_owned(current_user.id, conversation_id)
+
+
 @router.post(
     "/{conversation_id}/messages",
     response_class=EventSourceResponse,
-    dependencies=[Depends(require_owned_conversation)],
+    dependencies=[Depends(_require_owned_conversation)],
 )
 async def send_message(
     conversation_id: uuid.UUID,

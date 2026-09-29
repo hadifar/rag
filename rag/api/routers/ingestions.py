@@ -1,13 +1,9 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile
 
-from rag.api.deps import (
-    AdminUserDep,
-    ArchiveUploadDep,
-    IngestionServiceDep,
-    get_current_admin,
-)
+from rag.api.deps import AdminUserDep, IngestionServiceDep, get_current_admin
 from rag.api.schema.ingestions import IngestionRunResponse
 
 router = APIRouter(
@@ -17,9 +13,18 @@ router = APIRouter(
 )
 
 
+async def _read_archive(
+    file: UploadFile, ingestion_service: IngestionServiceDep
+) -> bytes:
+    """One byte over the limit is enough for the service to reject the upload, without
+    ever holding an oversized one in memory.
+    """
+    return await file.read(ingestion_service.max_archive_bytes + 1)
+
+
 @router.post("", status_code=202)
 async def upload_knowledge_base(
-    archive: ArchiveUploadDep,
+    archive: Annotated[bytes, Depends(_read_archive)],
     admin: AdminUserDep,
     ingestion_service: IngestionServiceDep,
     background_tasks: BackgroundTasks,

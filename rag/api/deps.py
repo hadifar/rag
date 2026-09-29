@@ -1,17 +1,13 @@
-import uuid
 from typing import Annotated
 
-from fastapi import Depends, Request, UploadFile
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.ingestion_service.service import (
-    MAX_ARCHIVE_BYTES,
-    IngestionService,
-)
+from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 
 # A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
@@ -20,11 +16,8 @@ _bearer = HTTPBearer()
 
 
 def get_container(request: Request) -> Container:
-    """FastAPI dependency: reads the Container the lifespan stashed on app.state."""
-    container = getattr(request.app.state, "container", None)
-    if container is None:
-        raise RuntimeError("Container not initialized — app lifespan hasn't started")
-    return container
+    """The Container the lifespan stashed on app.state."""
+    return request.app.state.container
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]
@@ -76,24 +69,3 @@ def get_current_admin(user: CurrentUserDep) -> User:
 
 
 AdminUserDep = Annotated[User, Depends(get_current_admin)]
-
-
-async def require_owned_conversation(
-    conversation_id: uuid.UUID,
-    current_user: CurrentUserDep,
-    conversation_service: ConversationServiceDep,
-) -> None:
-    """Gate for streaming routes: runs before the response starts, so a missing or
-    foreign conversation is a plain 404 rather than an error in an already-200 stream.
-    """
-    await conversation_service.get_owned(current_user.id, conversation_id)
-
-
-async def read_archive_upload(file: UploadFile) -> bytes:
-    """One byte over the limit is enough for the service to reject the upload, without
-    ever holding an oversized one in memory.
-    """
-    return await file.read(MAX_ARCHIVE_BYTES + 1)
-
-
-ArchiveUploadDep = Annotated[bytes, Depends(read_archive_upload)]

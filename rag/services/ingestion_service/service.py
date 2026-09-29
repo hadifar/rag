@@ -55,6 +55,11 @@ class IngestionService:
         self._archives = archives
         self._runs = runs
 
+    @property
+    def max_archive_bytes(self) -> int:
+        """Uploads larger than this are rejected (413)."""
+        return MAX_ARCHIVE_BYTES
+
     async def start_upload(
         self, archive: bytes, user_id: uuid.UUID | None
     ) -> IngestionRun:

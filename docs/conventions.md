@@ -50,7 +50,9 @@ class ChunkerPort(Protocol):
   itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
   `get_current_admin`). A dependency only one route needs goes on that route.
 - Take dependencies as `Annotated[T, Depends(...)]` aliases from `deps.py` (`ContainerDep`,
-  `CurrentUserDep`, `ConversationServiceDep`, …); never construct a service inline.
+  `CurrentUserDep`, `ConversationServiceDep`, …); never construct a service inline. `deps.py`
+  holds only what several routers share (the container, services, auth); a dependency only one
+  router uses is a private function in that router's module.
 - A route reads as "call the service, shape the result" — business logic lives in the service.
 - Return typed Pydantic models; use another response class (`EventSourceResponse`,
   `PlainTextResponse`) only when the body genuinely isn't JSON.
@@ -70,8 +72,8 @@ class ChunkerPort(Protocol):
 - Look it up by id *and* check it against the caller in the service (example:
   `ConversationService.get_owned`), never in the router.
 - Missing and someone-else's raise the same not-found error (404), so ids can't be probed.
-- A streaming endpoint also gets a read-only gate from `deps.py` on the route
-  (`dependencies=[Depends(require_owned_conversation)]`): a generator route's body only runs
+- A streaming endpoint also gets a read-only gate on the route, defined next to it in its router
+  module (`dependencies=[Depends(_require_owned_conversation)]`): a generator route's body only runs
   once the response has started, so a bad id raised there would be an error inside an
   already-200 stream instead of a clean 404.
 
