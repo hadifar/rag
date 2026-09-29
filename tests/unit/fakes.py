@@ -150,16 +150,18 @@ class FakeConversationRepository:
         self._clock += timedelta(seconds=1)
         return self._clock
 
-    async def create(
-        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
-    ) -> Conversation:
+    async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
+        empty = next(
+            (c for c in self.rows.values() if c.user_id == user_id and c.title is None),
+            None,
+        )
+        if empty is not None:
+            touched = await self.touch(empty.id)
+            assert touched is not None
+            return touched
         now = self._now()
         conversation = Conversation(
-            id=conversation_id or uuid.uuid4(),
-            user_id=user_id,
-            title=title,
-            created_at=now,
-            updated_at=now,
+            id=uuid.uuid4(), user_id=user_id, title=None, created_at=now, updated_at=now
         )
         self.rows[conversation.id] = conversation
         return conversation

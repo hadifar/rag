@@ -1,13 +1,13 @@
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from rag.api.schema.chat import ChatRequest
 from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
-from rag.services.conversation_service.service import ConversationService, Turn
+from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import (
     MAX_ARCHIVE_BYTES,
     IngestionService,
@@ -78,20 +78,15 @@ def get_current_admin(user: CurrentUserDep) -> User:
 AdminUserDep = Annotated[User, Depends(get_current_admin)]
 
 
-async def start_turn(
-    chat_request: ChatRequest,
+async def require_owned_conversation(
+    conversation_id: uuid.UUID,
     current_user: CurrentUserDep,
     conversation_service: ConversationServiceDep,
-) -> Turn:
-    """A dependency, so it runs before a streaming response starts: an unknown or
+) -> None:
+    """Gate for streaming routes: runs before the response starts, so a missing or
     foreign conversation is a plain 404 rather than an error in an already-200 stream.
     """
-    return await conversation_service.start_turn(
-        current_user.id, chat_request.conversation_id, chat_request.message
-    )
-
-
-TurnDep = Annotated[Turn, Depends(start_turn)]
+    await conversation_service.get_owned(current_user.id, conversation_id)
 
 
 async def read_archive_upload(file: UploadFile) -> bytes:

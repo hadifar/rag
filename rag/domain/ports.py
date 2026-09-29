@@ -94,10 +94,10 @@ class UserRepositoryPort(Protocol):
 
 
 class ConversationRepositoryPort(Protocol):
-    async def create(
-        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
-    ) -> Conversation:
-        """`conversation_id` is the client's id for it; None generates one."""
+    async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
+        """The user's empty (untitled) conversation, created if they have none, and
+        bumped to most recently used. A user has at most one.
+        """
         ...
 
     async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...

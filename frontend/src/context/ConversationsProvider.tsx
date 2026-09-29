@@ -5,6 +5,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { deleteConversation as apiDeleteConversation, listConversations } from '../api/conversations';
 import {
   appendPage,
+  moveToTop,
   removeConversation,
   renameConversation,
   upsertConversation,
@@ -60,6 +61,10 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     setConversations((list) => upsertConversation(list, conversation));
   }, []);
 
+  const bump = useCallback((id: string) => {
+    setConversations((list) => moveToTop(list, id));
+  }, []);
+
   const rename = useCallback((id: string, title: string) => {
     setConversations((list) => renameConversation(list, id, title));
   }, []);
@@ -81,10 +86,21 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       isLoadingMore,
       loadMore,
       upsert,
+      bump,
       rename,
       deleteConversation,
     }),
-    [conversations, status, nextCursor, isLoadingMore, loadMore, upsert, rename, deleteConversation]
+    [
+      conversations,
+      status,
+      nextCursor,
+      isLoadingMore,
+      loadMore,
+      upsert,
+      bump,
+      rename,
+      deleteConversation,
+    ]
   );
 
   return <ConversationsContext value={value}>{children}</ConversationsContext>;

@@ -2,14 +2,14 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    title: str
+    title: str | None  # Null until the conversation's first turn
     created_at: datetime
     updated_at: datetime
 
@@ -27,3 +27,7 @@ class HistoryMessageResponse(BaseModel):
     role: Literal["user", "assistant"]
     text: str
     sources: list[str] | None
+
+
+class MessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8192)

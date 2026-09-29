@@ -34,7 +34,8 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("title", sa.Text(), nullable=False),
+        # Null only while the conversation is empty: its first message names it.
+        sa.Column("title", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -54,8 +55,17 @@ def upgrade() -> None:
         "conversations",
         ["user_id", sa.text("updated_at DESC"), sa.text("id DESC")],
     )
+    # At most one empty (untitled) conversation per user: creating another returns it.
+    op.create_index(
+        "ux_conversations_one_empty_per_user",
+        "conversations",
+        ["user_id"],
+        unique=True,
+        postgresql_where=sa.text("title IS NULL"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ux_conversations_one_empty_per_user", table_name="conversations")
     op.drop_index("ix_conversations_user_recent", table_name="conversations")
     op.drop_table("conversations")

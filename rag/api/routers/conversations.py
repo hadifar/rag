@@ -1,19 +1,38 @@
 import uuid
+from collections.abc import AsyncIterable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from rag.api.deps import ConversationServiceDep, CurrentUserDep, get_current_user
+from rag.api.deps import (
+    ConversationServiceDep,
+    CurrentUserDep,
+    get_current_user,
+    require_owned_conversation,
+)
 from rag.api.schema.conversations import (
     ConversationPageResponse,
+    ConversationResponse,
     HistoryMessageResponse,
+    MessageRequest,
 )
+from rag.api.sse import to_sse
 
 router = APIRouter(
     prefix="/api/conversations",
     tags=["conversations"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+@router.post("")
+async def create_conversation(
+    current_user: CurrentUserDep, conversation_service: ConversationServiceDep
+) -> ConversationResponse:
+    """The caller's empty conversation: a new one, or the one they already have."""
+    conversation = await conversation_service.create(current_user.id)
+    return ConversationResponse.model_validate(conversation)
 
 
 @router.get("")
@@ -35,6 +54,24 @@ async def get_messages(
 ) -> list[HistoryMessageResponse]:
     history = await conversation_service.history(current_user.id, conversation_id)
     return [HistoryMessageResponse.model_validate(m) for m in history]
+
+
+@router.post(
+    "/{conversation_id}/messages",
+    response_class=EventSourceResponse,
+    dependencies=[Depends(require_owned_conversation)],
+)
+async def send_message(
+    conversation_id: uuid.UUID,
+    message_request: MessageRequest,
+    current_user: CurrentUserDep,
+    conversation_service: ConversationServiceDep,
+) -> AsyncIterable[ServerSentEvent]:
+    """Streams the answer as server-sent events; see rag/api/sse.py for the events."""
+    async for event in conversation_service.chat(
+        current_user.id, conversation_id, message_request.message
+    ):
+        yield to_sse(event)
 
 
 @router.delete("/{conversation_id}", status_code=204)

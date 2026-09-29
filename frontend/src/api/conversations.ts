@@ -1,6 +1,11 @@
 import { request, requestJson } from './client';
 import type { Schemas } from '../types';
 
+/** The user's empty conversation (new, or the one they already have); its first message names it. */
+export function createConversation(signal?: AbortSignal): Promise<Schemas['ConversationResponse']> {
+  return requestJson('conversations', { method: 'POST', signal });
+}
+
 export function listConversations(
   cursor: string | null
 ): Promise<Schemas['ConversationPageResponse']> {

@@ -67,7 +67,8 @@ class User:
 class Conversation:
     id: uuid.UUID
     user_id: uuid.UUID
-    title: str
+    # None only while the conversation is empty: its first message names it.
+    title: str | None
     created_at: datetime
     updated_at: datetime
 

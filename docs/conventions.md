@@ -68,21 +68,22 @@ class ChunkerPort(Protocol):
 ## Adding a user-owned resource: check ownership in the service, answer 404
 
 - Look it up by id *and* check it against the caller in the service (example:
-  `ConversationService._get_owned`), never in the router.
+  `ConversationService.get_owned`), never in the router.
 - Missing and someone-else's raise the same not-found error (404), so ids can't be probed.
-- If a streaming endpoint uses it, resolve it in a dependency in `deps.py` (`TurnDep`): a
-  generator route's body only runs once the response has started, so a bad id raised there
-  would be an error inside an already-200 stream instead of a clean 404.
+- A streaming endpoint also gets a read-only gate from `deps.py` on the route
+  (`dependencies=[Depends(require_owned_conversation)]`): a generator route's body only runs
+  once the response has started, so a bad id raised there would be an error inside an
+  already-200 stream instead of a clean 404.
 
 ## Adding a new SSE event
 
-The `/api/chat/stream` wire format is hand-kept in four places; change all four together:
+The `POST /api/conversations/{id}/messages` wire format is hand-kept in four places; change all four together:
 1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
-2. its encoder in `_ENCODERS` in `rag/api/routers/chat.py`, returning the event name and a
+2. its encoder in `_ENCODERS` in `rag/api/sse.py`, returning the event name and a
    dict or Pydantic model as `data` (FastAPI's `ServerSentEvent` serializes it as one-line JSON);
 3. its name in `STREAM_EVENT_TYPES` in `frontend/src/api/chat.ts` and its member of
    `ChatStreamEvent` in `frontend/src/types/chat.ts` (the event's JSON fields are spread into it);
-4. `test_chat_stream_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only
+4. `test_send_message_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only
    check that catches the two sides drifting apart.
 
 ## Adding a new schema/DTO

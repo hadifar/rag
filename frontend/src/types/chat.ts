@@ -1,5 +1,3 @@
-import type { Conversation } from './api';
-
 export type TextContent = { text: string };
 
 export type ToolContent = {
@@ -20,7 +18,6 @@ export type ChatMessageInput =
 export type ChatMessage = ChatMessageInput & { id: string };
 
 export type ChatStreamEvent =
-  | { type: 'conversation'; conversation: Conversation }
   | { type: 'title'; id: string; title: string }
   | { type: 'text'; text: string }
   | { type: 'tool_start'; name: string; query: string }

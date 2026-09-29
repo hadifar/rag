@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from rag.domain.models import Conversation
-
 
 @dataclass
 class TextDelta:
@@ -30,27 +28,15 @@ class SourcesReady:
 
 
 @dataclass
-class ConversationReady:
-    """First event of every turn: the conversation the turn belongs to (newly created
-    or existing), so the client learns a new conversation's server-assigned id.
-    """
-
-    conversation: Conversation
-
-
-@dataclass
 class ConversationTitled:
-    """Last event of a new conversation's first turn: its generated title."""
+    """A conversation's first message names it: first event of its first turn, from the
+    message, and last event too if an LLM-written title replaces it.
+    """
 
     conversation_id: str
     title: str
 
 
 StreamEvent = (
-    ConversationReady
-    | TextDelta
-    | ToolCallStart
-    | ToolCallResult
-    | SourcesReady
-    | ConversationTitled
+    TextDelta | ToolCallStart | ToolCallResult | SourcesReady | ConversationTitled
 )

@@ -28,16 +28,27 @@ function renderChat(path: string) {
   return { router, user: userEvent.setup() };
 }
 
+const newConversation: Schemas['ConversationResponse'] = {
+  id: '6b1c4f0e-2d3a-4c5b-9e8f-7a6b5c4d3e2f',
+  title: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
 async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
   await user.type(screen.getByPlaceholderText('Type a message...'), `${question}{Enter}`);
 }
 
 describe('ChatPage', () => {
   it('streams an answer with its sources into a new chat', async () => {
-    let sent: Schemas['ChatRequest'] | undefined;
+    let sent: Schemas['MessageRequest'] | undefined;
     server.use(
-      http.post('/api/chat/stream', async ({ request }) => {
-        sent = (await request.json()) as Schemas['ChatRequest'];
+      http.post('/api/conversations', () =>
+        HttpResponse.json(newConversation),
+      ),
+      http.post('/api/conversations/:id/messages', async ({ params, request }) => {
+        expect(params.id).toBe(newConversation.id);
+        sent = (await request.json()) as Schemas['MessageRequest'];
         return sse([
           ['tool_start', { name: 'search_kb', query: 'plans' }],
           ['tool_result', { name: 'search_kb', output: '2 chunks' }],
@@ -57,13 +68,18 @@ describe('ChatPage', () => {
     expect(screen.getByRole('button', { name: '02-plans-and-pricing.md' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Assistant is typing')).not.toBeInTheDocument();
 
-    // The client named the new chat, and the URL and the request agree on it.
-    expect(router.state.location.pathname).toBe(`/chat/${sent?.conversation_id}`);
+    // The new chat was created first, and the URL follows it.
+    expect(router.state.location.pathname).toBe(`/chat/${newConversation.id}`);
     expect(sent?.message).toBe('What plans are there?');
   });
 
   it('shows an error bubble when the stream fails to open', async () => {
-    server.use(http.post('/api/chat/stream', () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.post('/api/conversations', () =>
+        HttpResponse.json(newConversation),
+      ),
+      http.post('/api/conversations/:id/messages', () => new HttpResponse(null, { status: 500 })),
+    );
     const { user } = renderChat('/chat');
 
     await ask(user, 'hello');

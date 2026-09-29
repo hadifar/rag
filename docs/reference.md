@@ -56,8 +56,9 @@ rag/
 ├── api/
 │   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
 │   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
-│   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
-│   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
+│   ├── sse.py                        # StreamEvent → ServerSentEvent (the chat stream's wire format)
+│   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
+│   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
 migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
@@ -181,7 +182,7 @@ its own Postgres).
   revocation store, so a stolen refresh token stays valid until it naturally expires (see
   [limitation.md](limitation.md#security)).
 - **Gating** — `get_current_user` (`api/deps.py`) is applied as a router-level dependency to
-  `chat`/`conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
+  `conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
   `ingestions`; `auth` and `health` stay open (health is a liveness/readiness probe hit
   by infra with no session — see [conventions.md](conventions.md)).
 - **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`, `is_admin`) in the app's
@@ -196,7 +197,7 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `mo
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`conversation` / `text` / `tool_start` /
+- FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE (`text` / `tool_start` /
   `tool_result` / `sources` / `title` events). Every event's `data` is a single-line JSON object — including `text`
   (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
@@ -246,7 +247,7 @@ app to pick it up immediately.
 
 ## API surface
 
-`chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
+`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
 [Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
 `auth` and `health` don't.
 
@@ -260,8 +261,14 @@ there, so the response status comes from the exception class itself.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
 - `GET /api/auth/me` — returns `{id, email, is_admin}` for the caller's access token.
-- `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
-  events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
+- `POST /api/conversations` — the caller's empty conversation `{id, title: null, created_at,
+  updated_at}`: a new one, or the one they already have (a partial unique index allows one
+  untitled conversation per user, so empty chats can't pile up).
+- `POST /api/conversations/{id}/messages` — `{message: str}` → SSE stream of normalized events.
+  A first message names the conversation straight away (a `title` event, cut from the
+  message) and, once answered, renames it with an LLM-written title (a second `title` event)
+  if one can be generated. 404 for a missing or someone else's conversation, before the stream
+  starts.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.

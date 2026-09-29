@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from pydantic import SecretStr
 
-from rag.api.routers.chat import SseEventType
+from rag.api.sse import SseEventType
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
@@ -247,27 +247,57 @@ def _parse_sse(body: str) -> list[tuple[str, str]]:
     return events
 
 
-def test_chat_stream_endpoint_requires_auth(client: TestClient) -> None:
-    response = client.post("/api/chat/stream", json={"message": "hi"})
-    assert response.status_code == 401
+def _create_conversation(client: TestClient, headers: dict[str, str]) -> str:
+    response = client.post("/api/conversations", headers=headers)
+    assert response.status_code == 200
+    return response.json()["id"]
 
 
-def test_chat_stream_endpoint_wired(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def _send(
+    client: TestClient, headers: dict[str, str], conversation_id: str, message: str
+) -> str:
+    """Posts a message and returns the whole SSE body of its answer."""
     with client.stream(
         "POST",
-        "/api/chat/stream",
-        json={"message": "hi"},
-        headers=auth_headers,
+        f"/api/conversations/{conversation_id}/messages",
+        json={"message": message},
+        headers=headers,
     ) as response:
         assert response.status_code == 200
-        body = "".join(response.iter_text())
+        return "".join(response.iter_text())
+
+
+def _start_conversation(
+    client: TestClient, headers: dict[str, str], message: str = "hi"
+) -> str:
+    conversation_id = _create_conversation(client, headers)
+    _send(client, headers, conversation_id, message)
+    return conversation_id
+
+
+def test_create_conversation_starts_it_untitled_and_empty(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.post("/api/conversations", headers=auth_headers)
+
+    assert response.status_code == 200
+    conversation = response.json()
+    assert set(conversation) == {"id", "title", "created_at", "updated_at"}
+    assert conversation["title"] is None
+    messages_url = f"/api/conversations/{conversation['id']}/messages"
+    assert client.get(messages_url, headers=auth_headers).json() == []
+
+
+def test_send_message_streams_the_answer(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    body = _send(client, auth_headers, _create_conversation(client, auth_headers), "hi")
+
     assert "event: text" in body
     assert "echo: hi" in body
 
 
-def test_chat_stream_contract_matches_frontend_parsing(
+def test_send_message_contract_matches_frontend_parsing(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     """Locks the SSE wire format to what frontend/src/api/chat.ts actually parses.
@@ -276,27 +306,20 @@ def test_chat_stream_contract_matches_frontend_parsing(
     (so openapi-typescript can't type them) — this test is the only thing that
     catches a field rename here before it breaks the frontend at runtime.
     """
-    with client.stream(
-        "POST",
-        "/api/chat/stream",
-        json={"message": "hi"},
-        headers=auth_headers,
-    ) as response:
-        assert response.status_code == 200
-        body = "".join(response.iter_text())
+    conversation_id = _create_conversation(client, auth_headers)
 
-    events = _parse_sse(body)
+    events = _parse_sse(_send(client, auth_headers, conversation_id, "hi"))
+
     assert [event for event, _ in events] == [
-        SseEventType.CONVERSATION,
+        SseEventType.TITLE,
         SseEventType.TEXT,
         SseEventType.TOOL_START,
         SseEventType.TOOL_RESULT,
         SseEventType.SOURCES,
         SseEventType.TITLE,
     ]
-
     (
-        conversation_event,
+        first_title_event,
         text_event,
         tool_start_event,
         tool_result_event,
@@ -304,10 +327,8 @@ def test_chat_stream_contract_matches_frontend_parsing(
         title_event,
     ) = events
 
-    # frontend: const conversation = JSON.parse(ev.data) as Schemas['ConversationResponse']
-    conversation = json.loads(conversation_event[1])
-    assert set(conversation) == {"id", "title", "created_at", "updated_at"}
-    assert conversation["title"] == "hi"  # fallback until the generated title arrives
+    # frontend: const { id, title } = JSON.parse(ev.data) — named from the message first
+    assert json.loads(first_title_event[1]) == {"id": conversation_id, "title": "hi"}
 
     # frontend: const { text } = JSON.parse(ev.data)
     assert json.loads(text_event[1]) == {"text": "echo: hi"}
@@ -327,92 +348,49 @@ def test_chat_stream_contract_matches_frontend_parsing(
     # frontend: const { names } = JSON.parse(ev.data)
     assert json.loads(sources_event[1]) == {"sources": ["doc-a", "doc-b"]}
 
-    # frontend: const { id, title } = JSON.parse(ev.data)
-    assert json.loads(title_event[1]) == {"id": conversation["id"], "title": "Greeting"}
+    # ...then renamed with the LLM-written title once the answer is done
+    assert json.loads(title_event[1]) == {"id": conversation_id, "title": "Greeting"}
 
 
-def test_chat_stream_text_with_newlines_survives_sse_framing(
+def test_send_message_text_with_newlines_survives_sse_framing(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     """LLM tokens are full of "\\n" (markdown); a raw "\\n\\n" in a data field would end
     the SSE event early and drop the text after it.
     """
     message = "# Title\n\n- item\r\n- item\n"
-    with client.stream(
-        "POST",
-        "/api/chat/stream",
-        json={"message": message},
-        headers=auth_headers,
-    ) as response:
-        body = "".join(response.iter_text())
+    conversation_id = _create_conversation(client, auth_headers)
+
+    body = _send(client, auth_headers, conversation_id, message)
 
     text_events = [data for event, data in _parse_sse(body) if event == "text"]
     assert [json.loads(data) for data in text_events] == [{"text": f"echo: {message}"}]
 
 
-def _start_conversation(
-    client: TestClient, headers: dict[str, str], message: str = "hi"
-) -> str:
-    with client.stream(
-        "POST", "/api/chat/stream", json={"message": message}, headers=headers
-    ) as response:
-        body = "".join(response.iter_text())
-    events = dict(_parse_sse(body))
-    return json.loads(events[SseEventType.CONVERSATION])["id"]
-
-
-def test_chat_stream_continues_an_existing_conversation(
+def test_follow_up_message_is_not_retitled(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     conversation_id = _start_conversation(client, auth_headers)
 
-    with client.stream(
-        "POST",
-        "/api/chat/stream",
-        json={"message": "again", "conversation_id": conversation_id},
-        headers=auth_headers,
-    ) as response:
-        body = "".join(response.iter_text())
+    events = dict(_parse_sse(_send(client, auth_headers, conversation_id, "again")))
 
-    events = dict(_parse_sse(body))
-    assert json.loads(events[SseEventType.CONVERSATION])["id"] == conversation_id
-    assert SseEventType.TITLE not in events  # only a new conversation gets titled
+    assert SseEventType.TEXT in events
+    assert SseEventType.TITLE not in events  # only the first answer names it
 
 
-def test_chat_stream_404s_for_a_conversation_the_user_does_not_own(
+def test_send_message_404s_for_a_conversation_the_user_does_not_own(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    conversation_id = _start_conversation(client, _login(client, _OTHER_EMAIL))
+    conversation_id = _create_conversation(client, _login(client, _OTHER_EMAIL))
 
     response = client.post(
-        "/api/chat/stream",
-        json={"message": "hijack", "conversation_id": conversation_id},
+        f"/api/conversations/{conversation_id}/messages",
+        json={"message": "hijack"},
         headers=auth_headers,
     )
 
     assert response.status_code == 404
     assert response.headers["content-type"].startswith("application/json")
-
-
-def test_chat_stream_creates_a_new_conversation_under_the_clients_id(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    client_id = str(uuid.uuid4())
-
-    with client.stream(
-        "POST",
-        "/api/chat/stream",
-        json={"message": "hi", "conversation_id": client_id},
-        headers=auth_headers,
-    ) as response:
-        body = "".join(response.iter_text())
-
-    events = dict(_parse_sse(body))
-    assert json.loads(events[SseEventType.CONVERSATION])["id"] == client_id
-    history = client.get(
-        f"/api/conversations/{client_id}/messages", headers=auth_headers
-    )
-    assert history.status_code == 200
 
 
 def test_conversations_list_is_newest_first_and_paginated(
@@ -486,7 +464,9 @@ def test_conversations_of_another_user_are_invisible(
     ("method", "path"),
     [
         ("GET", "/api/conversations"),
+        ("POST", "/api/conversations"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
+        ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )

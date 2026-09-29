@@ -17,6 +17,9 @@ import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConver
 import { conversationPath } from '../../utils/conversations';
 import type { Conversation } from '../../types';
 
+// Shown until the conversation's first answer names it.
+const NEW_CHAT_TITLE = 'New chat';
+
 type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
 
 const topLinks: NavItem[] = [{ to: '/', label: 'Home', Icon: HomeIcon }];
@@ -62,7 +65,7 @@ function ConversationLink({
     <div className="group flex items-center gap-1">
       <NavLink
         to={conversationPath(conversation.id)}
-        title={conversation.title}
+        title={conversation.title ?? NEW_CHAT_TITLE}
         className={({ isActive }) =>
           `min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
             isActive
@@ -71,7 +74,7 @@ function ConversationLink({
           }`
         }
       >
-        {conversation.title}
+        {conversation.title ?? NEW_CHAT_TITLE}
       </NavLink>
       <button
         type="button"

@@ -10,8 +10,10 @@ export type ConversationsContextValue = {
   hasMore: boolean;
   isLoadingMore: boolean;
   loadMore: () => void;
-  /** A turn started in `conversation`: add it, or move it to the top. */
+  /** Add `conversation` at the top, or move it there. */
   upsert: (conversation: Conversation) => void;
+  /** A message was sent to the conversation with `id`: move it to the top. */
+  bump: (id: string) => void;
   rename: (id: string, title: string) => void;
   deleteConversation: (id: string) => Promise<void>;
 };

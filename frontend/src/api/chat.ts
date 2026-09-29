@@ -7,7 +7,6 @@ import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
 import type { ChatStreamEvent, Schemas } from '../types';
 
 const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>([
-  'conversation',
   'title',
   'text',
   'tool_start',
@@ -15,13 +14,21 @@ const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>
   'sources',
 ]);
 
-export type StreamChatArgs = Schemas['ChatRequest'] & {
+export type StreamChatArgs = Schemas['MessageRequest'] & {
+  conversationId: string;
   onEvent: (event: ChatStreamEvent) => void;
   signal?: AbortSignal;
 };
 
-export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
-  return fetchEventSource(apiUrl('chat/stream'), {
+/** Sends a message to a conversation and streams its answer as events. */
+export function streamChat({
+  conversationId,
+  onEvent,
+  signal,
+  ...request
+}: StreamChatArgs): Promise<void> {
+  const path = `conversations/${encodeURIComponent(conversationId)}/messages`;
+  return fetchEventSource(apiUrl(path), {
     ...jsonPostInit(request),
     // A 401 arrives before any event, so refresh-and-retry can't replay a partial stream.
     fetch: authFetch,
@@ -38,13 +45,8 @@ export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Pro
 
     onmessage({ event, data }) {
       if (!STREAM_EVENT_TYPES.has(event)) return; // e.g. an event this client predates
-      const payload = JSON.parse(data);
-      // Each event's JSON is its fields, except `conversation`, which is the object itself.
-      onEvent(
-        (event === 'conversation'
-          ? { type: event, conversation: payload }
-          : { type: event, ...payload }) as ChatStreamEvent
-      );
+      // Each event's JSON is its fields.
+      onEvent({ type: event, ...JSON.parse(data) } as ChatStreamEvent);
     },
     onerror(err) {
       throw err;

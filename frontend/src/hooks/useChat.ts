@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
-import { fetchConversationMessages } from '../api/conversations';
+import { createConversation, fetchConversationMessages } from '../api/conversations';
 import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
@@ -19,7 +19,7 @@ function historyErrorText(err: unknown): string {
 
 /** `conversationId` is the one in the URL; undefined for a new, not yet sent chat. */
 export function useChat(conversationId: string | undefined) {
-  const { upsert, rename } = useConversations();
+  const { upsert, bump, rename } = useConversations();
   const navigate = useNavigate();
   const { messages, append, update, remove, replace } = useMessageList();
 
@@ -64,14 +64,6 @@ export function useChat(conversationId: string | undefined) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // A new chat gets its id here, and the URL follows it before anything streams.
-      let id = conversationIdRef.current;
-      if (!id) {
-        id = crypto.randomUUID();
-        conversationIdRef.current = id;
-        navigate(conversationPath(id), { replace: true });
-      }
-
       append({ type: 'text', content: { text }, position: 'right' });
 
       const typingId = append({ type: 'typing' });
@@ -84,23 +76,29 @@ export function useChat(conversationId: string | undefined) {
 
       const showBubble = createBubbleHandler(append, update);
       const onEvent = (event: ChatStreamEvent) => {
-        switch (event.type) {
-          case 'conversation':
-            upsert(event.conversation);
-            return;
-          case 'title':
-            rename(event.id, event.title);
-            return;
-          default:
-            clearTyping();
-            showBubble(event);
+        if (event.type === 'title') {
+          rename(event.id, event.title);
+          return;
         }
+        clearTyping();
+        showBubble(event);
       };
 
       try {
+        let id = conversationIdRef.current;
+        if (id) {
+          bump(id);
+        } else {
+          // A new chat is created first; the URL follows it before anything streams.
+          const conversation = await createConversation(controller.signal);
+          upsert(conversation);
+          id = conversation.id;
+          conversationIdRef.current = id; // before navigating, so the chat isn't reloaded
+          navigate(conversationPath(id), { replace: true });
+        }
         await streamChat({
+          conversationId: id,
           message: text,
-          conversation_id: id,
           onEvent,
           signal: controller.signal,
         });
@@ -114,7 +112,7 @@ export function useChat(conversationId: string | undefined) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [append, update, remove, upsert, rename, navigate],
+    [append, update, remove, upsert, bump, rename, navigate],
   );
 
   return { messages, sendMessage };

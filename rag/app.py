@@ -6,7 +6,6 @@ from fastapi import FastAPI
 
 from rag.api.error_handlers import register_error_handlers
 from rag.api.routers.auth import router as auth_router
-from rag.api.routers.chat import router as chat_router
 from rag.api.routers.conversations import router as conversations_router
 from rag.api.routers.health import router as health_router
 from rag.api.routers.ingestions import router as ingestions_router
@@ -53,7 +52,6 @@ def create_app(
 
     app.include_router(auth_router)
     app.include_router(health_router)
-    app.include_router(chat_router)
     app.include_router(conversations_router)
     app.include_router(kb_router)
     app.include_router(ingestions_router)
