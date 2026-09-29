@@ -119,7 +119,7 @@ All enforced by oxlint; see [enforcement.md](enforcement.md#frontend-code-qualit
 
 ## Agent
 
-`generation_service/graph.py` builds the agent with LangChain's `create_agent`;
+`agent_service/graph.py` builds the agent with LangChain's `create_agent`;
 
 ```mermaid
 graph TD
