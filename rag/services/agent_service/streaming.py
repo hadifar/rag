@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta, ToolCall
-from rag.services.generation_service.turn import turn_sources
+from rag.services.agent_service.turn import turn_sources
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same

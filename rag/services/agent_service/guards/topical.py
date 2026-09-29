@@ -71,7 +71,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         if request.state.get("off_topic"):
-            base = request.system_message.content if request.system_message else ""
+            base = request.system_message.text if request.system_message else ""
             request = request.override(
                 system_message=SystemMessage(
                     content=f"{base}\n\n{OFF_TOPIC_INSTRUCTION}"

@@ -9,8 +9,6 @@ class TextDelta:
 
 @dataclass
 class ToolCall:
-    """A knowledge-base search: `pending` with its query, then `done` with its output."""
-
     name: str
     status: Literal["pending", "done"]
     query: str | None = None

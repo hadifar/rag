@@ -23,12 +23,12 @@ from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.services.generation_service.graph import build_graph
-from rag.services.generation_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.generation_service.streaming import stream_events
-from rag.services.generation_service.tools import build_search_tool
-from rag.services.generation_service.turn import to_history
+from rag.services.agent_service.graph import build_graph
+from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.streaming import stream_events
+from rag.services.agent_service.tools import build_search_tool
+from rag.services.agent_service.turn import to_history
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -276,10 +276,10 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     await chat.send("pricing?")
 
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
-    assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].content
+    assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
     assert off_topic_call["tools"] == []
-    assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].content
-    assert on_topic_call["tools"] == ["search_kb"]
+    assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
+    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
 
