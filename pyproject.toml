@@ -105,10 +105,10 @@ source_modules = ["rag.domain"]
 forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli"]
 
 [[tool.importlinter.contracts]]
-name = "services do not import adapters or entrypoints directly"
+name = "services do not import adapters, entrypoints, or the api layer directly"
 type = "forbidden"
 source_modules = ["rag.services"]
-forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli", "rag.api"]
 
 [[tool.importlinter.contracts]]
 name = "only the composition root constructs adapters or repositories"
@@ -135,10 +135,10 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "api routers reach the domain only through deps and schema"
+name = "api routers reach the domain and config only through deps and schema"
 type = "forbidden"
 source_modules = ["rag.api.routers"]
-forbidden_modules = ["rag.domain"]
+forbidden_modules = ["rag.domain", "rag.config"]
 allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]
