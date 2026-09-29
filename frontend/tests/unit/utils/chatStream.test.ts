@@ -43,4 +43,37 @@ describe('createBubbleHandler', () => {
 
     expect(append).toHaveBeenCalledExactlyOnceWith({ type: 'sources', content: { sources: [] } });
   });
+
+  it('starts a new assistant bubble for text that follows a tool call', () => {
+    const { append, update, handle } = setup();
+
+    handle({ type: 'text', text: 'Let me check that...' });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'pricing' });
+    handle({ type: 'tool', name: 'search', status: 'done', output: '3 chunks' });
+    handle({ type: 'text', text: 'Here is the answer.' });
+
+    // m1: first text bubble, m2: tool bubble, m3: a *new* text bubble — not a merge into m1.
+    expect(append).toHaveBeenNthCalledWith(1, assistantText('Let me check that...'));
+    expect(append).toHaveBeenNthCalledWith(3, assistantText('Here is the answer.'));
+    expect(update).not.toHaveBeenCalledWith('m1', expect.anything());
+  });
+
+  it('matches pending/done tool events in the order the calls started', () => {
+    const { append, update, handle } = setup();
+
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'a' });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'b' });
+    handle({ type: 'tool', name: 'search', status: 'done', output: 'result a' });
+    handle({ type: 'tool', name: 'search', status: 'done', output: 'result b' });
+
+    expect(append).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenNthCalledWith(1, 'm1', {
+      type: 'tool',
+      content: { name: 'search', output: 'result a', status: 'done' },
+    });
+    expect(update).toHaveBeenNthCalledWith(2, 'm2', {
+      type: 'tool',
+      content: { name: 'search', output: 'result b', status: 'done' },
+    });
+  });
 });

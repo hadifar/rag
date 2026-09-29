@@ -42,7 +42,7 @@ Follows PEP 20 and the
 
 ```python
 class ChunkerPort(Protocol):
-    def chunk(self, document: RawDocument) -> list[Document]: ...
+    def chunk(self, document: RawDocument) -> list[Chunk]: ...
 ```
 
 - Example: a new chunking strategy is a new `ChunkerPort` class, not a parameter threaded
@@ -57,7 +57,7 @@ class ChunkerPort(Protocol):
   itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
   `get_current_admin`). A dependency only one route needs goes on that route.
 - Take dependencies as `Annotated[T, Depends(...)]` aliases from `deps.py` (`ContainerDep`,
-  `CurrentUserDep`, `ConversationServiceDep`, …); never construct a service inline. `deps.py`
+  `AuthenticatedUserDep`, `ConversationServiceDep`, …); never construct a service inline. `deps.py`
   holds only what several routers share (the container, services, auth); a dependency only one
   router uses is a private function in that router's module.
 - A route reads as "call the service, shape the result" — business logic lives in the service.
@@ -67,9 +67,9 @@ class ChunkerPort(Protocol):
   `dependencies=` there.
 - App-level values reach routes through `app.state` (as `ContainerDep` does), not
   `dependency_overrides`, which is for tests.
-- On failure, raise a `rag.domain.errors.RagError` subclass with a `status_code: ClassVar[int]`,
-  never `fastapi.HTTPException` (ruff bans it). No change to `app.py` or `error_handlers.py` is
-  needed.
+- On failure, raise a `rag.domain.errors.AppError` subclass with a `status_code: ClassVar[int]`,
+  never `fastapi.HTTPException` (ruff bans it). No change to `app.py`'s `register_error_handlers`
+  is needed.
 - Its frontend calls go in the matching `frontend/src/api/x.ts` (one module per router), through
   `authFetch` from `api/client.ts` — never a bare `fetch` or a token passed in by the caller
   (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`; oxlint

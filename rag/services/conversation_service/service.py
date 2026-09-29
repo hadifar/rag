@@ -9,7 +9,7 @@ from datetime import datetime
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.events import StreamEvent
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import ConversationRepositoryPort, GenerationPort
+from rag.domain.ports import CompletionPort, ConversationRepositoryPort, GenerationPort
 
 FALLBACK_TITLE_LENGTH = 60
 
@@ -19,9 +19,11 @@ class ConversationService:
         self,
         repository: ConversationRepositoryPort,
         generation: GenerationPort,
+        completion: CompletionPort,
     ):
         self._repository = repository
         self._generation = generation
+        self._completion = completion
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -56,7 +58,7 @@ class ConversationService:
                 HistoryMessage(role="assistant", text=answer),
                 *_,
             ]:
-                title = await self._generation.generate_title(question, answer)
+                title = await self._completion.generate_title(question, answer)
             case _:
                 title = None
         if title is None:

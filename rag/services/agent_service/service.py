@@ -8,11 +8,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from rag.domain.events import StreamEvent
 from rag.domain.models import HistoryMessage
 from rag.domain.ports import SearchPort
-from rag.services.generation_service.graph import build_graph
-from rag.services.generation_service.streaming import stream_events
-from rag.services.generation_service.title import generate_title
-from rag.services.generation_service.tools import build_search_tool
-from rag.services.generation_service.turn import to_history
+from rag.services.agent_service.graph import build_graph
+from rag.services.agent_service.streaming import stream_events
+from rag.services.agent_service.tools import build_search_tool
+from rag.services.agent_service.turn import to_history
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
@@ -36,6 +35,7 @@ class GenerationService:
     async def stream_chat(
         self, message: str, thread_id: str
     ) -> AsyncIterator[StreamEvent]:
+
         config: RunnableConfig = {
             "configurable": {"thread_id": thread_id},
             **self._trace_config("chat"),
@@ -44,9 +44,6 @@ class GenerationService:
             self._graph, [HumanMessage(content=message)], config
         ):
             yield event
-
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        return await generate_title(self._llm, question, answer)
 
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         state = await self._graph.aget_state({"configurable": {"thread_id": thread_id}})

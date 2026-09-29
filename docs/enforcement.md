@@ -15,7 +15,7 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
 ## Python code quality
 - `ruff --fix` + `ruff-format` on every commit. Beyond the defaults, it turns convention rules
   into errors (`pyproject.toml`'s `[tool.ruff.lint]`):
-  - banned APIs (`TID251`): `fastapi.HTTPException` (raise a `RagError` subclass instead) and
+  - banned APIs (`TID251`): `fastapi.HTTPException` (raise an `AppError` subclass instead) and
     `os.environ` / `os.getenv` (configuration comes through `rag.config.Settings`); tests may
     read the environment
   - `FAST`: FastAPI dependencies declared with `Annotated`, no redundant `response_model`
@@ -25,14 +25,22 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   `rag/domain`, `rag/api`, `rag/repository`, `rag/adapters` and the top-level modules, basic for
   `rag/services`, where LangChain's partly untyped API leaks in
 - `import-linter` (`lint-imports`) enforces the architecture in `rag/`
-  (`pyproject.toml`'s `[tool.importlinter]`):
-  - `rag.domain` may not import `rag.services`, `rag.adapters`, `rag.repository`, or `rag.api`
-    ("domain is pure")
-  - `rag.services` may not import `rag.adapters`, `rag.repository` or the entrypoints
+  (`pyproject.toml`'s `[tool.importlinter]`, with `include_external_packages = true` so
+  contracts can also forbid third-party packages, not just `rag.*`):
+  - `rag.domain` may not import `rag.services`, `rag.adapters`, `rag.repository`, `rag.api`, or
+    LangChain/LangGraph (`langchain_core`, `langchain`, `langgraph`) — "domain is pure" in both
+    senses: no other layer, and no framework
+  - `rag.services` may not import `rag.adapters`, `rag.repository`, the entrypoints, or `rag.api`
+  - `rag.repository` may not import `rag.services`, `rag.adapters`, `rag.api`, or the entrypoints
+    — it reaches only the domain (plus whatever DB/SDK client its own file needs)
   - only the composition root (`container.py`) constructs adapters or repositories
   - `rag.api` may not import the entrypoints (`app.py`, `cli.py`)
   - within `rag.api`, only `deps.py` reaches `rag.services` and the container; routers get
     services through its `Annotated` aliases
+  - routers may not import `rag.domain` or `rag.config` directly; only `deps.py` and
+    `rag.api.schema` translate domain types into the API layer (`AuthenticatedUserDep`'s
+    `AuthenticatedIdentity`, owned by `auth_service` rather than `rag.domain.models` since
+    nothing else uses it; `to_stream_event`)
   - routers are independent of each other
   - services are independent of each other, with no exceptions: one that needs another depends
     on a port in `rag.domain.ports` (`GenerationPort`, `SearchPort`), and `container.py` wires in
@@ -43,17 +51,48 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
 ## Frontend code quality
 - `frontend-lint` runs oxlint (`frontend/.oxlintrc.json`) on every commit with
   `--deny-warnings`, so CI's `pre-commit` job gates on it. Besides the React hooks rules, it
-  enforces the frontend's layering:
+  enforces the frontend's layering end to end (`no-restricted-imports`, scoped per directory via
+  `overrides`):
   - components and pages never import `api/`: they only present, and reach the server through
-    a hook or context (`no-restricted-imports`)
+    a hook or context
+  - hooks and context never import `components/` or `pages/` — the logic layer doesn't depend on
+    presentation (guards against the backward-dependency direction: nothing stops a hook from
+    importing a component otherwise)
+  - `api/` never imports `hooks/`, `context/`, `components/`, or `pages/` — it only talks to the
+    backend (`client.ts` + `types/`), so it stays usable from anywhere
+  - `utils/` never imports `api/`, `hooks/`, `context/`, `components/`, or `pages/` — pure
+    helpers, no network, no framework state, no presentation
   - types come from the `types` index, never a single file inside `types/`; only
     `types/api.ts` imports the generated `api.generated.ts`
   - no bare `fetch` outside `api/client.ts` and `api/auth.ts`, so every call goes through the
     client that adds the token and refreshes it (`no-restricted-globals`)
+  - hooks and context providers routinely call `api/` directly (e.g. `useChat`, `useSettings`,
+    `AuthProvider`) — that's the intended shape, not a gap: a hook/provider *is* the data-access
+    layer, the same role a `useQuery` hook plays in TanStack Query. Only two contexts exist
+    (`AuthProvider`, `ConversationsProvider`) because only session and the sidebar's conversation
+    list are genuinely app-wide state; everything else is correctly local to the hook that owns
+    it. `AuthProvider` importing `AuthContext` *from* `hooks/useAuth.ts` (not the other way
+    round) is deliberate too: it keeps the Context object (non-component export) out of the
+    Provider's file, which is what `react/only-export-components` is already guarding against
+    (mixing component and non-component exports breaks React Fast Refresh)
 - `tsc` runs strict (the TypeScript 6 default) plus `noUncheckedIndexedAccess`, so `list[i]` is
   `T | undefined` and has to be checked (`frontend-typecheck`, below)
 
 ## Backend/frontend schema sync
+
+A build-time connection, not a runtime one:
+
+```mermaid
+graph LR
+    schema["rag/api/schema/"]
+    genscript["openapi-typescript<br/>(generate:types)"]
+    generated[types/api.generated.ts]
+    idx["types/api.ts<br/>one named type per backend model"]
+    apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
+
+    schema --> genscript --> generated --> idx --> apiclient
+```
+
 - The `frontend-api-types` pre-commit hook regenerates
   `frontend/src/types/api.generated.ts` from the backend's OpenAPI schema whenever
   `rag/api/schema/*.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —

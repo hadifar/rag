@@ -1,6 +1,8 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { ApiError } from '../api/client';
+import type { LoginRedirectState } from '../types';
 import { useAuth } from './useAuth';
 
 /** Signs in, then returns to the page that sent the user to /login (or home). */
@@ -18,12 +20,16 @@ export function useLogin() {
         // Caught here: an error escaping a transition goes to the route's error page.
         try {
           await login(email, password);
-        } catch {
-          setError('Invalid email or password');
+        } catch (err) {
+          setError(
+            err instanceof ApiError && err.status === 401
+              ? 'Invalid email or password'
+              : "Couldn't sign in. Please try again."
+          );
           return;
         }
-        const from = (location.state as { from?: { pathname: string } } | null)?.from;
-        navigate(from?.pathname ?? '/', { replace: true });
+        const from = (location.state as LoginRedirectState | null)?.from;
+        navigate(from ?? '/', { replace: true });
       });
     },
     [login, navigate, location.state]

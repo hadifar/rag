@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
-from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -23,12 +22,13 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
-from rag.services.generation_service.graph import build_graph
-from rag.services.generation_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.generation_service.streaming import stream_events
-from rag.services.generation_service.tools import build_search_tool
-from rag.services.generation_service.turn import to_history
+from rag.domain.models import Chunk
+from rag.services.agent_service.graph import build_graph
+from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.streaming import stream_events
+from rag.services.agent_service.tools import build_search_tool
+from rag.services.agent_service.turn import to_history
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -112,14 +112,12 @@ class _StubRetrievalService:
     _NO_RESULTS_QUERY.
     """
 
-    async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
+    async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
         if query == _NO_RESULTS_QUERY:
             return []
         return [
             (
-                Document(
-                    page_content=f"facts about {query}", metadata={"source_id": query}
-                ),
+                Chunk(text=f"facts about {query}", metadata={"source_id": query}),
                 1.0,
             )
         ]
@@ -278,10 +276,10 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     await chat.send("pricing?")
 
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
-    assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].content
+    assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
     assert off_topic_call["tools"] == []
-    assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].content
-    assert on_topic_call["tools"] == ["search_kb"]
+    assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
+    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
 

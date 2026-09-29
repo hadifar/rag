@@ -1,6 +1,4 @@
-from langchain_core.documents import Document
-
-from rag.domain.models import RawDocument
+from rag.domain.models import Chunk, RawDocument
 
 
 class WholeDocumentChunker:
@@ -10,14 +8,14 @@ class WholeDocumentChunker:
     a doc edit upserts over the existing vector instead of duplicating it.
     """
 
-    def chunk(self, document: RawDocument) -> list[Document]:
+    def chunk(self, document: RawDocument) -> list[Chunk]:
         text = document.text.strip()
         if not text:
             return []
         return [
-            Document(
+            Chunk(
                 id=f"{document.source_id}::0",
-                page_content=text,
+                text=text,
                 metadata={
                     **document.metadata,
                     "source_id": document.source_id,

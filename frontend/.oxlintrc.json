@@ -59,6 +59,54 @@
     {
       "files": ["src/types/api.ts"],
       "rules": { "no-restricted-imports": "off" }
+    },
+    {
+      "files": ["src/hooks/**", "src/context/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/components/**", "**/pages/**"],
+                "message": "Hooks and context are the logic layer: they don't render or depend on presentation."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/api/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/hooks/**", "**/context/**", "**/components/**", "**/pages/**"],
+                "message": "api/ only talks to the backend: no framework state, no presentation."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/utils/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/api/**", "**/hooks/**", "**/context/**", "**/components/**", "**/pages/**"],
+                "message": "utils/ is pure helpers: no network, no framework state, no presentation."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

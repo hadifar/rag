@@ -77,7 +77,7 @@
 - Guardrail + verifier each add a full extra LLM call per turn, with no way to disable either
 
 ## Observability
-- Almost no application logging: only the `logging` observability backend and a warning when title generation fails. `error_handlers.py` has no catch-all handler, so any exception that isn't a `RagError` becomes a bare 500 with nothing logged beyond uvicorn's default traceback, plus LangChain/LangGraph traces in Langfuse *if* `OBSERVABILITY__BACKEND=langfuse`
+- Almost no application logging: only the `logging` observability backend and a warning when title generation fails. `app.py`'s `register_error_handlers` only registers a handler for `AppError`, so any exception that isn't one becomes a bare 500 with nothing logged beyond uvicorn's default traceback, plus LangChain/LangGraph traces in Langfuse *if* `OBSERVABILITY__BACKEND=langfuse`
 - No error tracking or alerting (no Sentry or equivalent) — a production incident would be discovered by a user complaint, not by the system
 
 ## Scalability

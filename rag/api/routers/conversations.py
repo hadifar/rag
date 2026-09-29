@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.sse import EventSourceResponse
 
-from rag.api.deps import ConversationServiceDep, CurrentUserDep, get_current_user
+from rag.api.deps import AuthenticatedUserDep, ConversationServiceDep, get_current_user
 from rag.api.schema.conversations import (
     ConversationPageResponse,
     ConversationResponse,
@@ -24,7 +24,7 @@ router = APIRouter(
 
 @router.post("")
 async def create_conversation(
-    current_user: CurrentUserDep, conversation_service: ConversationServiceDep
+    current_user: AuthenticatedUserDep, conversation_service: ConversationServiceDep
 ) -> ConversationResponse:
     """The caller's empty conversation: a new one, or the one they already have."""
     conversation = await conversation_service.create(current_user.id)
@@ -33,7 +33,7 @@ async def create_conversation(
 
 @router.get("")
 async def list_conversations(
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     cursor: str | None = None,
@@ -45,7 +45,7 @@ async def list_conversations(
 @router.get("/{conversation_id}/messages")
 async def get_messages(
     conversation_id: uuid.UUID,
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> list[HistoryMessageResponse]:
     history = await conversation_service.history(current_user.id, conversation_id)
@@ -54,7 +54,7 @@ async def get_messages(
 
 async def _require_owned_conversation(
     conversation_id: uuid.UUID,
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> None:
     """Gate for the streaming route: runs before the response starts, so a missing or
@@ -71,7 +71,7 @@ async def _require_owned_conversation(
 async def send_message(
     conversation_id: uuid.UUID,
     message_request: MessageRequest,
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
@@ -84,7 +84,7 @@ async def send_message(
 @router.post("/{conversation_id}/title")
 async def generate_title(
     conversation_id: uuid.UUID,
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> ConversationResponse:
     """Renames the conversation with an LLM-written title for its first exchange; the
@@ -99,7 +99,7 @@ async def generate_title(
 @router.delete("/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: uuid.UUID,
-    current_user: CurrentUserDep,
+    current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> None:
     await conversation_service.delete(current_user.id, conversation_id)

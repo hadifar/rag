@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -7,24 +8,16 @@ class TextDelta:
 
 
 @dataclass
-class ToolCallStart:
+class ToolCall:
     name: str
-    query: str
-
-
-@dataclass
-class ToolCallResult:
-    name: str
-    output: str
+    status: Literal["pending", "done"]
+    query: str | None = None
+    output: str | None = None
 
 
 @dataclass
 class SourcesReady:
-    """The deduplicated sources used across the whole turn, once the graph run finishes.
-    Only sent if the turn searched; empty means the search found nothing.
-    """
-
     sources: list[str]
 
 
-StreamEvent = TextDelta | ToolCallStart | ToolCallResult | SourcesReady
+StreamEvent = TextDelta | ToolCall | SourcesReady

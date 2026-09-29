@@ -5,14 +5,8 @@ from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.domain.events import (
-    SourcesReady,
-    StreamEvent,
-    TextDelta,
-    ToolCallResult,
-    ToolCallStart,
-)
-from rag.services.generation_service.turn import turn_sources
+from rag.domain.events import SourcesReady, StreamEvent, TextDelta, ToolCall
+from rag.services.agent_service.turn import turn_sources
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same
@@ -47,14 +41,16 @@ def _parse_event(raw_event: Mapping[str, Any]) -> StreamEvent | None:
         return TextDelta(text=chunk.content) if chunk.content else None
 
     if kind == "on_tool_start":
-        return ToolCallStart(
+        return ToolCall(
             name=raw_event["name"],
+            status="pending",
             query=raw_event["data"].get("input", {}).get("query", ""),
         )
 
     if kind == "on_tool_end":
-        return ToolCallResult(
+        return ToolCall(
             name=raw_event["name"],
+            status="done",
             output=_tool_output_text(raw_event["data"].get("output", "")),
         )
 

@@ -58,7 +58,7 @@ def ingest(
     ),
 ) -> None:
     """Make the index match the knowledge base: embed new/changed docs, drop removed ones."""
-    from rag.domain.errors import RagError
+    from rag.domain.errors import AppError
     from rag.services.ingestion_service.loaders import load_path
 
     path = _ingest_path(source, latest, get_settings().KNOWLEDGE_BASE_SOURCE)
@@ -77,7 +77,7 @@ def ingest(
                     documents, force=force
                 )
             )
-    except RagError as exc:
+    except AppError as exc:
         hint = "--latest" if latest else "--source"
         raise typer.BadParameter(str(exc), param_hint=hint) from exc
 

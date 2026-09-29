@@ -11,7 +11,6 @@ import pytest
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
-from langchain_core.documents import Document
 from pydantic import SecretStr
 
 from rag.api.deps import get_current_user
@@ -23,10 +22,13 @@ from rag.config import (
     Settings,
 )
 from rag.container import Container
-from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
+from rag.domain.errors import DocumentNotFoundError
+from rag.domain.events import SourcesReady, ToolCall
+from rag.domain.models import Chunk
+from rag.services.agent_service.service import GenerationService
 from rag.services.auth_service.service import AuthService
+from rag.services.completion_service.service import CompletionService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
@@ -36,6 +38,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakeUserRepository,
+    StubCompletion,
     StubGeneration,
 )
 
@@ -46,13 +49,13 @@ _ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
-    async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
-        return [(Document(page_content="stub chunk", metadata={}), 1.0)]
+    async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
+        return [(Chunk(text="stub chunk", metadata={}), 1.0)]
 
-    async def get_document(self, source_id: str) -> Document | None:
+    async def get_document(self, source_id: str) -> Chunk:
         if source_id == "missing":
-            return None
-        return Document(page_content=f"content for {source_id}", metadata={})
+            raise DocumentNotFoundError(source_id)
+        return Chunk(text=f"content for {source_id}", metadata={})
 
     async def ping(self) -> None:
         return None
@@ -89,15 +92,16 @@ def client() -> Generator[TestClient]:
 
     generation = StubGeneration(
         extra_events=[
-            ToolCallStart(name="search", query="hi"),
-            ToolCallResult(name="search", output="stub result"),
+            ToolCall(name="search", status="pending", query="hi"),
+            ToolCall(name="search", status="done", output="stub result"),
             SourcesReady(sources=["doc-a", "doc-b"]),
         ],
-        title="Greeting",
     )
+    completion = StubCompletion(title="Greeting")
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
         generation_service=cast(GenerationService, generation),
+        completion_service=cast(CompletionService, completion),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -108,6 +112,7 @@ def client() -> Generator[TestClient]:
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
             generation=generation,
+            completion=completion,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

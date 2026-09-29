@@ -1,4 +1,3 @@
-from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import (
     AzureChatOpenAI,
@@ -8,6 +7,7 @@ from langchain_openai import (
 )
 
 from rag.config import AzureOpenAILLM, OpenAILLM, Settings
+from rag.domain.ports import EmbeddingsPort
 
 EMBEDDING_DIMENSIONS = 1536
 
@@ -30,7 +30,7 @@ def build_llm(settings: Settings) -> BaseChatModel:
             )
 
 
-def build_embeddings(settings: Settings) -> Embeddings:
+def build_embeddings(settings: Settings) -> EmbeddingsPort:
     """Same provider and credentials as the chat model."""
     match settings.LLM:
         case OpenAILLM() as config:
