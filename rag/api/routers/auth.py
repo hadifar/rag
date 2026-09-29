@@ -5,7 +5,6 @@ from fastapi import APIRouter, Cookie, Response
 
 from rag.api.deps import AuthServiceDep, CurrentUserDep
 from rag.api.schema.auth import LoginRequest, TokenResponse, UserResponse
-from rag.domain.errors import InvalidTokenError
 
 _REFRESH_COOKIE = "refresh_token"
 _REFRESH_COOKIE_PATH = "/api/auth"
@@ -45,8 +44,6 @@ async def refresh(
     auth_service: AuthServiceDep,
     refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ) -> TokenResponse:
-    if refresh_token is None:
-        raise InvalidTokenError("missing refresh cookie")
     user_id = auth_service.verify_refresh_token(refresh_token)
     user = await auth_service.get_user(user_id)
     return TokenResponse(access_token=auth_service.create_access_token(user))

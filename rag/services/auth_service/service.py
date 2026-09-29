@@ -92,7 +92,9 @@ class AuthService:
     def verify_access_token(self, token: str) -> uuid.UUID:
         return self._decode(token, _TokenType.ACCESS)
 
-    def verify_refresh_token(self, token: str) -> uuid.UUID:
+    def verify_refresh_token(self, token: str | None) -> uuid.UUID:
+        if token is None:
+            raise InvalidTokenError("missing refresh cookie")
         return self._decode(token, _TokenType.REFRESH)
 
     def _encode(

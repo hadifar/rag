@@ -54,6 +54,20 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   `T | undefined` and has to be checked (`frontend-typecheck`, below)
 
 ## Backend/frontend schema sync
+
+A build-time connection, not a runtime one:
+
+```mermaid
+graph LR
+    schema["rag/api/schema/"]
+    genscript["openapi-typescript<br/>(generate:types)"]
+    generated[types/api.generated.ts]
+    idx["types/api.ts<br/>one named type per backend model"]
+    apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
+
+    schema --> genscript --> generated --> idx --> apiclient
+```
+
 - The `frontend-api-types` pre-commit hook regenerates
   `frontend/src/types/api.generated.ts` from the backend's OpenAPI schema whenever
   `rag/api/schema/*.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —
