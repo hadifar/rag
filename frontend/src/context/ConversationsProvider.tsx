@@ -1,42 +1,37 @@
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import type { ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 
 import { deleteConversation as apiDeleteConversation, listConversations } from '../api/conversations';
 import {
   appendPage,
+  moveToTop,
   removeConversation,
   renameConversation,
   upsertConversation,
 } from '../utils/conversations';
-import type { Conversation } from '../types';
-import { ConversationsContext, type ListStatus } from '../hooks/useConversations';
+import type { ConversationResponse, LoadStatus } from '../types';
+import { ConversationsContext } from '../hooks/useConversations';
+import { useLoadOnMount } from '../hooks/useLoadOnMount';
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const openConversation = useMatch('/chat/:conversationId')?.params.conversationId;
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [status, setStatus] = useState<ListStatus>('loading');
+  const [conversations, setConversations] = useState<ConversationResponse[]>([]);
+  const [status, setStatus] = useState<LoadStatus>('loading');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, startLoadingMore] = useTransition();
 
-  useEffect(() => {
-    let cancelled = false;
-    listConversations(null)
-      .then((page) => {
-        if (cancelled) return;
-        setConversations(page.items);
-        setNextCursor(page.next_cursor);
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useLoadOnMount(
+    (signal) => listConversations(null, signal),
+    (page) => {
+      setConversations(page.items);
+      setNextCursor(page.next_cursor);
+      setStatus('ready');
+    },
+    () => setStatus('error')
+  );
 
   const loadMore = useCallback(() => {
     if (!nextCursor || isLoadingMore) return;
@@ -56,8 +51,12 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     });
   }, [nextCursor, isLoadingMore]);
 
-  const upsert = useCallback((conversation: Conversation) => {
+  const upsert = useCallback((conversation: ConversationResponse) => {
     setConversations((list) => upsertConversation(list, conversation));
+  }, []);
+
+  const bump = useCallback((id: string) => {
+    setConversations((list) => moveToTop(list, id));
   }, []);
 
   const rename = useCallback((id: string, title: string) => {
@@ -81,10 +80,21 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       isLoadingMore,
       loadMore,
       upsert,
+      bump,
       rename,
       deleteConversation,
     }),
-    [conversations, status, nextCursor, isLoadingMore, loadMore, upsert, rename, deleteConversation]
+    [
+      conversations,
+      status,
+      nextCursor,
+      isLoadingMore,
+      loadMore,
+      upsert,
+      bump,
+      rename,
+      deleteConversation,
+    ]
   );
 
   return <ConversationsContext value={value}>{children}</ConversationsContext>;

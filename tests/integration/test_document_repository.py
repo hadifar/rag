@@ -2,7 +2,16 @@
 over the fixture knowledge base seeded by conftest's `seeded_kb`.
 """
 
+from pathlib import Path
+
+from langchain_core.documents import Document
+from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
+
+from rag.domain.models import IndexedDocument
 from rag.repository.document_repository import DocumentRepository
+from rag.services.ingestion_service.loaders import load_directory
+from tests.integration.conftest import FIXTURE_KB, ingestion_service
 
 
 async def _top_sources(repository: DocumentRepository, query: str) -> list[str]:
@@ -31,13 +40,12 @@ async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> N
     assert scores == sorted(scores, reverse=True)
 
 
-async def test_get_document_reassembles_chunks_in_order(
+async def test_get_document_returns_the_whole_document(
     seeded_kb: DocumentRepository,
 ) -> None:
     document = await seeded_kb.aget_document("it-plans-and-pricing.md")
 
     assert document is not None
-    # MarkdownHeaderChunker split it into three sections; they come back in order.
     assert (
         document.page_content.index("# AtlasFlow Plans")
         < document.page_content.index("## Starter")
@@ -46,23 +54,44 @@ async def test_get_document_reassembles_chunks_in_order(
     assert await seeded_kb.aget_document("it-does-not-exist.md") is None
 
 
-async def test_reingesting_upserts_instead_of_duplicating(
+async def test_reingesting_unchanged_documents_embeds_nothing(
+    seeded_kb: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+    tmp_path: Path,
+) -> None:
+    service = ingestion_service(seeded_kb, db_pool, tmp_path)
+    report = await service.ingest(load_directory(FIXTURE_KB), remove_missing=False)
+
+    assert (report.added, report.updated, report.chunks) == (0, 0, 0)
+    assert report.unchanged == 3
+
+
+async def test_replacing_a_document_drops_its_old_chunks(
     seeded_kb: DocumentRepository,
 ) -> None:
-    document = await seeded_kb.aget_document("it-office-plants.md")
-    assert document is not None
-
-    await seeded_kb.aadd_documents(
-        [
-            document.model_copy(
-                update={"metadata": {**document.metadata, "chunk_index": 0}}
-            )
-        ],
-        ids=["it-office-plants.md::0"],
+    source_id = "it-plans-and-pricing.md"
+    chunk = Document(
+        id=f"{source_id}::0",
+        page_content="# Replaced",
+        metadata={"source_id": source_id, "chunk_index": 0},
     )
 
-    again = await seeded_kb.aget_document("it-office-plants.md")
-    assert again is not None and again.page_content == document.page_content
+    await seeded_kb.areplace_documents(
+        [IndexedDocument(source_id, "new-hash", [chunk])], removed=[]
+    )
+
+    document = await seeded_kb.aget_document(source_id)
+    assert document is not None and document.page_content == "# Replaced"
+    assert (await seeded_kb.alist_content_hashes())[source_id] == "new-hash"
+
+
+async def test_removing_a_document_deletes_it_and_its_chunks(
+    seeded_kb: DocumentRepository,
+) -> None:
+    await seeded_kb.areplace_documents([], removed=["it-office-plants.md"])
+
+    assert await seeded_kb.aget_document("it-office-plants.md") is None
+    assert "it-office-plants.md" not in await seeded_kb.alist_content_hashes()
 
 
 async def test_ping_succeeds_when_the_table_exists(

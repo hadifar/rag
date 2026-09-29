@@ -3,7 +3,7 @@
 import json
 import uuid
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -29,7 +29,6 @@ from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
 from rag.services.generation_service.turn import to_history
-from rag.services.retrieval_service.service import RetrievalService
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -105,10 +104,17 @@ class _ScriptedChatModel(BaseChatModel):
         )
 
 
+_NO_RESULTS_QUERY = "nothing"
+
+
 class _StubRetrievalService:
-    """Returns one document whose source_id is the query itself."""
+    """Returns one document whose source_id is the query itself, or none for
+    _NO_RESULTS_QUERY.
+    """
 
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
+        if query == _NO_RESULTS_QUERY:
+            return []
         return [
             (
                 Document(
@@ -134,7 +140,7 @@ def _answer(text: str) -> AIMessage:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        search_tool = build_search_tool(cast(RetrievalService, _StubRetrievalService()))
+        search_tool = build_search_tool(_StubRetrievalService())
         self.graph: CompiledStateGraph = build_graph(
             model, [search_tool], InMemorySaver()
         )
@@ -184,6 +190,26 @@ async def test_sources_cover_only_the_current_turn() -> None:
     assert _sources(await chat.send("second")) == ["security"]
 
 
+async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search(_NO_RESULTS_QUERY), _answer("I don't know.")]
+    )
+
+    events = await _Chat(model).send("first")
+
+    assert [e for e in events if isinstance(e, SourcesReady)] == [
+        SourcesReady(sources=[])
+    ]
+
+
+async def test_a_turn_without_a_search_sends_no_sources() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    events = await _Chat(model).send("hello")
+
+    assert not any(isinstance(e, SourcesReady) for e in events)
+
+
 async def test_ungrounded_answer_is_revised_again_in_a_later_turn() -> None:
     """The revision counter resets each turn; it used to stay at the cap forever,
     which silently switched the groundedness check off after the first revision.
@@ -215,7 +241,7 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
 
     events = await _Chat(model).send("first")
 
-    # MAX_VERIFY_ATTEMPTS is 1: one revision, and the revised answer isn't re-verified.
+    # MAX_REVISIONS is 1: one revision, and the revised answer isn't re-verified.
     assert sum(_is_revision_call(call) for call in model.agent_calls) == 1
     assert len(model.verifier_calls) == 1
     assert _text(events).endswith("still wrong")
@@ -289,20 +315,25 @@ async def test_history_shows_each_question_with_its_final_answer_and_sources() -
             _answer("wrong"),
             _answer("revised"),
             _answer("You're welcome!"),
+            _search(_NO_RESULTS_QUERY),
+            _answer("I don't know."),
         ],
         groundedness_verdicts=["UNGROUNDED"],
     )
     chat = _Chat(model)
     await chat.send("How much?")
     await chat.send("thanks")
+    await chat.send("Who won the cup?")
 
     history = to_history(await chat.saved_messages())
 
     assert [(m.role, m.text, m.sources) for m in history] == [
-        ("user", "How much?", []),
+        ("user", "How much?", None),
         ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
-        ("user", "thanks", []),
-        ("assistant", "You're welcome!", []),
+        ("user", "thanks", None),
+        ("assistant", "You're welcome!", None),  # didn't search
+        ("user", "Who won the cup?", None),
+        ("assistant", "I don't know.", []),  # searched, found nothing
     ]
 
 

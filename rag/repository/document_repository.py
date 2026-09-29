@@ -7,6 +7,8 @@ from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
+from rag.domain.models import IndexedDocument
+
 RRF_K = 5
 
 # One round trip: the k nearest chunks by cosine distance (HNSW index) and the k best
@@ -36,20 +38,17 @@ ORDER BY score DESC
 LIMIT %(k)s
 """
 
-_UPSERT = """
+_INSERT_DOCUMENT = "INSERT INTO documents (source_id, content_hash) VALUES (%s, %s)"
+
+_INSERT_CHUNK = """
 INSERT INTO chunks (id, source_id, chunk_index, content, metadata, embedding)
 VALUES (%s, %s, %s, %s, %s, %s::vector)
-ON CONFLICT (id) DO UPDATE SET
-    source_id = EXCLUDED.source_id,
-    chunk_index = EXCLUDED.chunk_index,
-    content = EXCLUDED.content,
-    metadata = EXCLUDED.metadata,
-    embedding = EXCLUDED.embedding
 """
 
 
 class DocumentRepository:
-    """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort).
+    """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort for
+    reads, DocumentIndexPort for ingestion).
 
     Search is hybrid — pgvector cosine similarity plus Postgres full-text — fused by
     reciprocal rank. Embeddings are computed client-side by `embeddings`.
@@ -61,31 +60,61 @@ class DocumentRepository:
         self._pool = pool
         self._embeddings = embeddings
 
-    async def aadd_documents(
-        self, documents: list[Document], *, ids: list[str]
-    ) -> list[str]:
-        vectors = await self._embeddings.aembed_documents(
-            [doc.page_content for doc in documents]
+    async def alist_content_hashes(self) -> dict[str, str]:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("SELECT source_id, content_hash FROM documents")
+            return dict(await cur.fetchall())
+
+    async def areplace_documents(
+        self, documents: list[IndexedDocument], *, removed: list[str]
+    ) -> None:
+        """Embeds before opening the transaction, so no connection is held while
+        waiting on the embedding API. Deleting a `documents` row cascades to its
+        chunks, so a document that shrank leaves no stale chunks behind.
+        """
+        if not documents and not removed:
+            return
+
+        chunks = [chunk for document in documents for chunk in document.chunks]
+        vectors = (
+            await self._embeddings.aembed_documents(
+                [chunk.page_content for chunk in chunks]
+            )
+            if chunks
+            else []
         )
-        rows = [
+        chunk_rows = [
             (
-                id_,
-                doc.metadata["source_id"],
-                doc.metadata.get("chunk_index", 0),
-                doc.page_content,
-                Jsonb(doc.metadata),
+                chunk.id,
+                chunk.metadata["source_id"],
+                chunk.metadata["chunk_index"],
+                chunk.page_content,
+                Jsonb(chunk.metadata),
                 _to_vector_literal(vector),
             )
-            for id_, doc, vector in zip(ids, documents, vectors, strict=True)
+            for chunk, vector in zip(chunks, vectors, strict=True)
         ]
-        # One transaction: a failed ingest leaves the previous chunks intact.
+        stale = [*removed, *(document.source_id for document in documents)]
+
+        # One transaction: a failed ingest leaves the previous index intact.
         async with (
             self._pool.connection() as conn,
             conn.transaction(),
             conn.cursor() as cur,
         ):
-            await cur.executemany(_UPSERT, rows)
-        return ids
+            await cur.execute(
+                "DELETE FROM documents WHERE source_id = ANY(%s)", (stale,)
+            )
+            if documents:
+                await cur.executemany(
+                    _INSERT_DOCUMENT,
+                    [
+                        (document.source_id, document.content_hash)
+                        for document in documents
+                    ],
+                )
+            if chunk_rows:
+                await cur.executemany(_INSERT_CHUNK, chunk_rows)
 
     async def asimilarity_search_with_score(
         self, query: str, k: int
@@ -103,13 +132,13 @@ class DocumentRepository:
             )
             rows = await cur.fetchall()
         return [
-            (Document(page_content=content, metadata=_metadata(metadata)), float(score))
+            (Document(page_content=content, metadata=metadata), float(score))
             for content, metadata, score in rows
         ]
 
     async def aget_document(self, source_id: str) -> Document | None:
-        """Reassembles a document from its chunks, in order — works whether the chunker
-        produced one chunk (WholeDocumentChunker) or many (MarkdownHeaderChunker).
+        """Reassembles a document from its chunks, in order, so it doesn't depend on
+        how many chunks the chunker cut it into.
         """
         async with self._pool.connection() as conn:
             cur = await conn.execute(
@@ -122,7 +151,7 @@ class DocumentRepository:
             return None
         return Document(
             page_content="\n\n".join(content for content, _ in rows),
-            metadata=_metadata(rows[0][1]),
+            metadata=rows[0][1],
         )
 
     async def aping(self) -> None:
@@ -139,7 +168,3 @@ def _to_vector_literal(vector: Sequence[float]) -> str:
     and take auth down with it, since the pool is shared.
     """
     return json.dumps(list(vector), separators=(",", ":"))
-
-
-def _metadata(value: object) -> dict:
-    return value if isinstance(value, dict) else {}

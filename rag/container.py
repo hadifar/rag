@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
+from rag.adapters.archive_store import open_archive_store
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
 from rag.adapters.llm_client import build_embeddings, build_llm
@@ -10,6 +11,7 @@ from rag.adapters.observability import open_trace_config
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
+from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -21,7 +23,7 @@ from rag.services.retrieval_service.service import RetrievalService
 
 @dataclass
 class Container:
-    ranking_service: RetrievalService
+    retrieval_service: RetrievalService
     generation_service: GenerationService
     ingestion_service: IngestionService
     auth_service: AuthService
@@ -36,21 +38,25 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         open_checkpointer(settings) as checkpointer,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
+        open_archive_store(settings) as archive_store,
     ):
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
-        ranking_service = RetrievalService(vector_store=vector_store)
+        retrieval_service = RetrievalService(vector_store=vector_store)
 
         llm = build_llm(settings)
 
         generation_service = GenerationService(
             llm=llm,
-            ranking_service=ranking_service,
+            knowledge_base=retrieval_service,
             checkpointer=checkpointer,
             trace_config=trace_config,
         )
 
         ingestion_service = IngestionService(
-            vector_store=vector_store, chunker=WholeDocumentChunker()
+            index=vector_store,
+            chunker=WholeDocumentChunker(),
+            archives=archive_store,
+            runs=IngestionRunRepository(db_pool),
         )
 
         auth_service = AuthService(
@@ -63,12 +69,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
-            chat_engine=generation_service,
-            title_model=llm,
+            generation=generation_service,
         )
 
         yield Container(
-            ranking_service,
+            retrieval_service,
             generation_service,
             ingestion_service,
             auth_service,

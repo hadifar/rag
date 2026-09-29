@@ -22,7 +22,8 @@ graph LR
         langgraph["create_agent: model ⇄ tools + guard middleware"]
     end
 
-    postgres[(Postgres + pgvector<br/>checkpointer · users · conversations · chunks)]
+    postgres[(Postgres + pgvector<br/>checkpointer · users · conversations · documents/chunks · ingestion runs)]
+    archives[(Archive storage<br/>local disk / Azure Blob)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
 
@@ -30,6 +31,8 @@ graph LR
     ui -->|"fetch / SSE, same origin"| proxy
     proxy -->|"proxy_pass, SSE unbuffered"| api
     api -->|"login/refresh, bearer-gated routes"| postgres
+    api -->|"admin upload: store zip, then ingest in the background"| archives
+    api -->|"embed changed docs, swap them in"| postgres
     api --> langgraph
     langgraph -->|checkpoints, one thread per conversation| postgres
     langgraph -->|search_kb: hybrid vector + full-text query| postgres
@@ -52,8 +55,8 @@ graph TD
     api[rag/api<br/>routers · deps.py · error_handlers.py]
     services[rag/services<br/>retrieval · generation · ingestion · auth · conversation]
     domain[rag/domain<br/>models, ports, errors, events]
-    adapters[rag/adapters<br/>llm_client · checkpointer · observability · db]
-    repository[rag/repository<br/>user · conversation · document repositories]
+    adapters[rag/adapters<br/>llm_client · checkpointer · observability · db · archive_store]
+    repository[rag/repository<br/>user · conversation · document · ingestion run repositories]
     container[rag/container.py<br/>]
 
     api --> services
@@ -101,7 +104,7 @@ graph TD
   and streamed by `model`.
 - **`GroundednessGuard`** checks each final answer against **this turn's** `search_kb` results
   (`after_model`), and on an ungrounded one jumps back to `model` with a revision instruction,
-  capped at `MAX_VERIFY_ATTEMPTS`. It keeps no state: a rejected answer stays in the thread, so
+  capped at `MAX_REVISIONS`. It keeps no state: a rejected answer stays in the thread, so
   the revisions so far are this turn's final answers minus one.
 - **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
 
@@ -149,16 +152,16 @@ reached by a bare browser navigation.
 
 ## Backend schema → frontend types
 
-A build-time connection, not a runtime one — `types/api.ts` exposes the whole generated
-schema map as `Schemas`, so `api/chat.ts` and `api/settings.ts` reference `Schemas['ChatRequest']`
-/ `Schemas['SettingsResponse']` instead of hand-duplicating request/response shapes:
+A build-time connection, not a runtime one — `types/api.ts` names one type per backend model,
+exactly as in `rag/api/schema/` (`MessageRequest`, `SettingsResponse`, `ToolEvent`, …), so the
+rest of the frontend imports those instead of hand-duplicating request/response shapes:
 
 ```mermaid
 graph LR
-    schema["rag/api/schema/<br/>chat.py, conversations.py, auth.py, settings.py, health.py"]
+    schema["rag/api/schema/<br/>conversations.py, auth.py, settings.py, health.py"]
     genscript["openapi-typescript<br/>(generate:types)"]
     generated[types/api.generated.ts]
-    idx["types/api.ts<br/>Schemas = components['schemas']"]
+    idx["types/api.ts<br/>one named type per backend model"]
     apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
 
     schema --> genscript --> generated --> idx --> apiclient

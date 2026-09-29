@@ -1,15 +1,6 @@
 import { createContext, use } from 'react';
 
-import type { Schemas } from '../types';
-
-export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
-
-export type AuthContextValue = {
-  status: AuthStatus;
-  user: Schemas['UserResponse'] | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-};
+import type { AuthContextValue } from '../types';
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 

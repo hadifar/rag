@@ -17,8 +17,56 @@ class DocumentNotFoundError(RagError):
         self.source_id = source_id
 
 
-class VectorStoreConfigurationError(RagError):
-    """Raised when the configured vector store backend can't be used as configured."""
+class InvalidArchiveError(RagError):
+    """Raised when a knowledge-base zip can't be read, or its contents are rejected."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self, reason: str):
+        super().__init__(f"Invalid knowledge-base archive: {reason}")
+
+
+class EmptyKnowledgeBaseError(RagError):
+    """Raised when a source has no documents; ingesting it would empty the index."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self):
+        super().__init__("The knowledge-base source contains no documents")
+
+
+class ArchiveTooLargeError(RagError):
+    """Raised when an uploaded knowledge-base zip is over the size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The archive is larger than {max_bytes // (1024 * 1024)} MB")
+
+
+class IngestionInProgressError(RagError):
+    """Raised when an ingestion is started while another one is still running."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self):
+        super().__init__("Another ingestion is still running; try again when it ends")
+
+
+class IngestionRunNotFoundError(RagError):
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, run_id: object):
+        super().__init__(f"No ingestion run found for id={run_id!r}")
+
+
+class NoArchiveError(RagError):
+    """Raised when asked to ingest the latest uploaded archive, but none exists."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self):
+        super().__init__("No knowledge-base archive has been uploaded yet")
 
 
 class InvalidCredentialsError(RagError):
@@ -40,6 +88,24 @@ class UserNotFoundError(RagError):
         self.user_id = user_id
 
 
+class UserEmailNotFoundError(RagError):
+    """Raised when a user lookup by email finds nothing (e.g. granting admin rights)."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, email: str):
+        super().__init__(f"No user found for email={email!r}")
+
+
+class UserAlreadyExistsError(RagError):
+    """Raised when creating a user with an email another user already has."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, email: str):
+        super().__init__(f"A user with email={email!r} already exists")
+
+
 class InvalidTokenError(RagError):
     """Raised when a JWT is missing, malformed, expired, or the wrong type."""
 
@@ -47,6 +113,15 @@ class InvalidTokenError(RagError):
 
     def __init__(self, reason: str):
         super().__init__(f"Invalid token: {reason}")
+
+
+class AdminRequiredError(RagError):
+    """Raised when a signed-in user who isn't an admin calls an admin-only endpoint."""
+
+    status_code: ClassVar[int] = 403
+
+    def __init__(self):
+        super().__init__("Admin access required")
 
 
 class ConversationNotFoundError(RagError):

@@ -17,10 +17,12 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src", "tests"],
+  "exclude": ["tests/e2e"]
 }

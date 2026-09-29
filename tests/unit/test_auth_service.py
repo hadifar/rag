@@ -1,42 +1,23 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from rag.domain.errors import (
+    AdminRequiredError,
     InvalidCredentialsError,
     InvalidTokenError,
+    UserEmailNotFoundError,
     UserNotFoundError,
 )
-from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
-
-
-class _FakeUserRepository:
-    def __init__(self):
-        self._users: dict[uuid.UUID, User] = {}
-
-    async def get_by_email(self, email: str) -> User | None:
-        return next((u for u in self._users.values() if u.email == email), None)
-
-    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
-        return self._users.get(user_id)
-
-    async def create(self, email: str, hashed_password: str) -> User:
-        user = User(
-            id=uuid.uuid4(),
-            email=email,
-            hashed_password=hashed_password,
-            created_at=datetime.now(UTC),
-        )
-        self._users[user.id] = user
-        return user
+from tests.unit.fakes import FakeUserRepository
 
 
 @pytest.fixture
 def auth_service() -> AuthService:
     return AuthService(
-        user_repository=_FakeUserRepository(),
+        user_repository=FakeUserRepository(),
         jwt_secret="test-secret-that-is-long-enough-32b",
         jwt_algorithm="HS256",
         access_ttl=timedelta(minutes=15),
@@ -96,3 +77,32 @@ async def test_get_user_missing_raises_user_not_found(
 ) -> None:
     with pytest.raises(UserNotFoundError):
         await auth_service.get_user(uuid.uuid4())
+
+
+async def test_users_are_not_admins_unless_created_as_one(
+    auth_service: AuthService,
+) -> None:
+    user = await auth_service.create_user("a@example.com", "correct horse")
+    admin = await auth_service.create_user("b@example.com", "pw", is_admin=True)
+
+    assert not user.is_admin
+    assert admin.is_admin
+
+
+async def test_set_admin_grants_and_revokes(auth_service: AuthService) -> None:
+    await auth_service.create_user("a@example.com", "correct horse")
+
+    assert (await auth_service.set_admin("a@example.com", True)).is_admin
+    assert not (await auth_service.set_admin("a@example.com", False)).is_admin
+
+
+async def test_set_admin_unknown_email_raises(auth_service: AuthService) -> None:
+    with pytest.raises(UserEmailNotFoundError):
+        await auth_service.set_admin("nobody@example.com", True)
+
+
+async def test_require_admin_rejects_non_admins(auth_service: AuthService) -> None:
+    user = await auth_service.create_user("a@example.com", "correct horse")
+
+    with pytest.raises(AdminRequiredError):
+        AuthService.require_admin(user)

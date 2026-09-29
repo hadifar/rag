@@ -1,7 +1,6 @@
 name: build-push
 
-# Manual: nothing deploys these images yet (see docs/limitation.md), so builds aren't
-# tied to every push to master. Re-run manually once you want a new prod image.
+# Manual: nothing deploys these images yet, so builds aren't tied to every push to master. Re-run manually once you want a new prod image.
 on:
   workflow_dispatch:
 

@@ -1,20 +1,6 @@
 import { createContext, use } from 'react';
 
-import type { Conversation } from '../types';
-
-export type ListStatus = 'loading' | 'ready' | 'error';
-
-export type ConversationsContextValue = {
-  conversations: Conversation[];
-  status: ListStatus;
-  hasMore: boolean;
-  isLoadingMore: boolean;
-  loadMore: () => void;
-  /** A turn started in `conversation`: add it, or move it to the top. */
-  upsert: (conversation: Conversation) => void;
-  rename: (id: string, title: string) => void;
-  deleteConversation: (id: string) => Promise<void>;
-};
+import type { ConversationsContextValue } from '../types';
 
 export const ConversationsContext = createContext<ConversationsContextValue | null>(null);
 

@@ -15,44 +15,37 @@ npm run dev      # dev server with HMR
 npm run build    # type-check and production build
 npm run preview  # serve the production build
 npm run lint     # oxlint
+npm run test     # see test section bellow
 ```
 
-The dev server proxies `/api` (covering `/api/auth`, `/api/chat`, `/api/conversations`, `/api/health`,
-`/api/kb`, `/api/settings`) to
+The dev server proxies `/api` to
 the backend at `http://localhost:8000` (see [vite.config.ts](vite.config.ts)), so start the
-backend first.
+backend first. To sign in or chat, run the
+backend first (Postgres, migrations, a user, ingest): see [docs/setup.md](../docs/setup.md).
 
-## Structure
+## Test
 
-```
-src/
-├── api/          # network calls (chat.ts streams SSE from /api/chat/stream; conversations.ts)
-├── components/
-│   ├── layout/   # AppLayout, RequireAuth, Sidebar (new chat, your conversations, settings)
-│   └── chat/     # MessageList, Composer, and the text/tool/sources/typing bubbles it renders
-├── context/      # AuthProvider (session), ConversationsProvider (sidebar list, paging, delete)
-├── hooks/        # useChat (streaming, loading a conversation's history), useAuth/useConversations, …
-├── pages/        # HomePage, ChatPage, LoginPage, SettingsPage, NotFoundPage
-├── types/        # import from `types/`: api.ts (backend Schemas), chat.ts (messages/events), api.generated.ts
-├── utils/        # pure helpers: conversation list updates, history → message bubbles
-├── App.tsx       # router
-└── main.tsx      # entry point
+## Unit & Integration
+Unit (Pure helpers and single components) and integration (whole page with its real hooks, context and API client) tests both run in Vitest (jsdom) and need no backend:
+
+```bash
+npm test          # both, watch mode
+npx vitest run    # both, once
+npx vitest run tests/unit   # only unit
+npx vitest run tests/integration # only integeration
 ```
 
-Routes: `/login`, `/` (home), `/chat` (new chat), `/chat/:conversationId`, `/settings`. Any other
-path shows the 404 page.
+### E2E
+E2E test with the real stack in Chromium
 
-## Notes
+```bash
+# must be in repo root
+docker compose up -d postgres
+uv run alembic upgrade head
 
-- **Chat UI:** built in-house on plain Tailwind components (`MessageList`, `Composer`,
-  `ToolBubble`, `SourcesBubble`, `TypingIndicator`) — no chat UI library. The frontend is a pure
-  presenter: `useChat` assembles messages from the backend's SSE events, and the tool bubble
-  renders whatever `query`/`output` the backend already computed rather than inspecting raw args.
-- **Typing indicator:** a real `typing` message appended in `useChat` and removed once the first
-  real event for that turn arrives.
-- **Conversations:** a new chat has no id until its first message — the server creates it and
-  sends the id as the stream's first event, and `useChat` switches the URL to `/chat/:id` without
-  remounting (so the answer keeps streaming). Any real navigation (sidebar, New chat, back)
-  aborts the current stream and loads the target conversation's history.
-- **Placeholders:** the Settings page is a static template with no write API yet — its Save
-  button doesn't persist anything.
+# frontend/ (installs Chromium first if missing)
+E2E_EMAIL=admin@admin.com E2E_PASSWORD=admin npm run test:e2e
+```
+
+The backend also needs a filled `../.env`, with `localhost` as the `DATABASE_URL` host (see
+[docs/setup.md](../docs/setup.md#python-uv)). `npm run test:e2e` then does the rest, in order:

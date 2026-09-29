@@ -6,6 +6,7 @@
     "keyVaultName": { "value": "rag-kv" },
     "acrName": { "value": "ragacr" },
     "acrSku": { "value": "Basic" },
+    "kbStorageAccountName": { "value": "ragkbarchives" },
     "backendContainerImageName": { "value": "rag-backend:<tag>" },
     "frontendContainerImageName": { "value": "rag-frontend:<tag>" },
     "ciServicePrincipalObjectId": { "value": "<ci-service-principal-object-id>" },

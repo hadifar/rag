@@ -18,8 +18,10 @@ bash scripts/setup.sh
 docker compose up --build
 # once it's up, create a login (no public signup — see docs/setup.md):
 docker compose exec backend alembic upgrade head
-docker compose exec backend rag create-user you@example.com
+docker compose exec backend rag create-user you@example.com --admin
 ```
+Then sign in at http://localhost:3000 and load the knowledge base: upload `data/data.zip` under
+**Settings → Knowledge base**.
 Full setup and other ways to run it, are in [docs/setup.md](docs/setup.md).
 
 ## Docs

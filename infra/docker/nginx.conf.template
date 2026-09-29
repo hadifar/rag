@@ -1,6 +1,8 @@
-limit_req_zone $binary_remote_addr zone=chat:10m rate=10r/m;
-# Tighter budget for password guessing; login gets this zone instead of `chat`.
+# Tighter budget for password guessing;
 limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+
+# Knowledge-base uploads + status polling (~1 request per 2s while a run is going);
+limit_req_zone $binary_remote_addr zone=ingestions:10m rate=60r/m;
 
 server {
     listen 80;
@@ -10,8 +12,6 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    # style-src/font-src allow Google Fonts (src/index.css's @import) and
-    # 'unsafe-inline' for style covers React's style={{...}} usage (Sidebar's icons)
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 
     # Same paths the Vite dev server proxies (see frontend/vite.config.ts).
@@ -19,22 +19,31 @@ server {
     # /etc/nginx/templates/*.template handling) — docker-compose.yml's backend
     # service on one side, the backend Web App's hostname (main.bicep) on the other.
     location /api/ {
-        limit_req zone=chat burst=5 nodelay;
-        limit_req_status 429;
         proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header Connection "";
-        # /chat/stream is SSE: don't buffer or time out mid-response.
+        # POST /api/conversations/{id}/messages is SSE: don't buffer or time out mid-response.
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 300s;
     }
 
-    # Exact match wins over the /api/ prefix above, so login is limited by `login` only.
+    # Login — rate limited
     location = /api/auth/login {
         limit_req zone=login burst=3 nodelay;
         limit_req_status 429;
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }
+
+    # Ingestion — rate limited
+    location /api/ingestions {
+        limit_req zone=ingestions burst=10 nodelay;
+        limit_req_status 429;
+        client_max_body_size 20m;
         proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;

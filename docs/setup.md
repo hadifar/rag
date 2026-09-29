@@ -6,38 +6,31 @@ git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 ```
-Then fill in `.env` (see .example.env) `LLM__API_KEY`, the database URLs, etc. The Postgres
-server needs the `pgvector` extension — the Docker Compose `postgres` service
-(`pgvector/pgvector:pg17`) has it; `alembic upgrade head` enables it.
+Then fill in `.env` (see .example.env).
 
-**The knowledge base ships zipped** — the repo holds only `data/data.zip`, not the `.md` files
-themselves. `scripts/setup.sh` extracts it into `data/` (skipped if `data/*.md` already exists); to
-do it by hand, from the repo root:
-```bash
-unzip data/data.zip   # extracts the .md files into data/
-```
-`KNOWLEDGE_BASE_DIR` (default `data`) points `rag ingest` at that folder, and `Dockerfile.backend`
-does `COPY data/ data/`, so unzip before `rag ingest` or `docker compose up --build`, or nothing
-gets ingested. To use your own knowledge base instead, put your `.md` files in `data/`.
+The knowledge base is `data/data.zip`, a zip of `.md` files (folders inside it don't matter; each
+file's name is its id). `KNOWLEDGE_BASE_SOURCE` (default `data/data.zip`) points `rag ingest` at
+it; it can also be a directory of `.md` files, and `rag ingest --source <path>` overrides it for
+one run. The backend image doesn't contain `data/`: ingestion only writes chunks into Postgres,
+so it runs from the host (or with `data/` mounted, see [Docker](#docker)) and the serving
+container reads them from the database.
 
-If running via Docker (below), also create the Postgres init password Docker Compose expects,
-gitignored and never read by the app itself:
-```bash
-mkdir -p .secrets
-openssl rand -base64 24 | tr -d '=+/' | tr -d '\n' > .secrets/postgres_password.txt
-```
-Then make sure `.env`'s `DATABASE_URL` uses that same password (the app connects with it
-directly; `.secrets/postgres_password.txt` is only used to initialize the `postgres` container).
-That one database holds everything: users, conversations, their messages and the
-knowledge-base chunks.
+Ingestion makes the index match the source: re-running it embeds only new or changed files and
+removes files that are gone, so it's cheap to run after every change.
+
+The default `DATABASE_URL` in `.example.env` already matches the local `postgres` compose service
+(user/password `rag`, bound to `127.0.0.1:5432` only) — no change needed for local dev. That one
+database holds everything: users, conversations, their messages and the knowledge-base chunks.
 
 For login, set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand -hex 32`). Before serving for the first time — and after pulling changes that add a migration — apply the
-migrations (`users`, `conversations`, `chunks`) and create a user (there's no public signup — accounts are
+migrations (`users`, `conversations`, `chunks`, `documents`) and create a user (there's no public signup — accounts are
 created out-of-band):
 ```bash
 uv run alembic upgrade head
-uv run rag create-user you@example.com
+uv run rag create-user you@example.com --admin
 ```
+Only admins can replace the knowledge base from the Settings page. Leave out `--admin` for regular
+users; `uv run rag set-admin <email> [--revoke]` changes it for an existing user.
 
 ## Running
 
@@ -46,13 +39,15 @@ uv run rag create-user you@example.com
 uv run python -m rag serve
 ```
 A Postgres instance (with pgvector) must be reachable at `DATABASE_URL` — e.g.
-`docker compose up -d postgres` (published on `localhost:5432`; change the URL's host to
-`localhost` when running the app outside Docker).
-There's no in-memory mode.
+`docker compose up -d postgres` (published on `localhost:5432`). There's no in-memory mode.
+
+`.env`'s `DATABASE_URL` points at `localhost`, which is right for anything run on your machine
+(`uv run …`, `alembic`). The `backend` container overrides it with the `postgres` host in
+`docker-compose.yml` (`environment:` beats `env_file:`), so the same `.env` works for both.
 
 ### CLI
 ```bash
-uv run rag ingest   # embeds data/*.md and upserts the chunks into Postgres — run once before serving
+uv run rag ingest   # indexes data/data.zip into Postgres — run before serving, and after changing it
 uv run rag serve
 ```
 
@@ -65,15 +60,23 @@ and the frontend (nginx) on `http://localhost:3000`; the `backend` container isn
 the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
 frontend URL for both the UI and the API.
 
-Requires `.secrets/postgres_password.txt` to exist first — see [Setup](#setup) above.
-
-Once the stack is up, apply the `users` table migration and create a login (one-time, or after a
-fresh `pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
+Once the stack is up, apply the migrations and create a login (one-time, or after a fresh
+`pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
 done:
 ```bash
 docker compose exec backend alembic upgrade head
-docker compose exec backend rag create-user you@example.com
+docker compose exec backend rag create-user you@example.com --admin
 ```
+
+Then load the knowledge base (one-time, or after a fresh `pgdata` volume); without it, chat
+answers have no sources. Either upload a zip from the UI (**Settings → Knowledge base**, admins
+only), or ingest `data/data.zip` from the command line. The image has no `data/`, so mount it
+into a one-off `backend` container:
+```bash
+docker compose run --rm -v "$PWD/data:/app/data:ro" backend ingest
+```
+Uploaded zips are kept in the `kbuploads` volume, so after losing `pgdata` the last upload can
+be re-indexed without uploading it again: `docker compose exec backend rag ingest --latest`.
 
 ```bash
 docker compose down   # stop and remove the containers

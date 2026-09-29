@@ -17,3 +17,5 @@
 
 # Secrets are passed at runtime via env_file, never baked into an image
 *.env
+
+data/*

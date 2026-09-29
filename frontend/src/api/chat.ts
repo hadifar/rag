@@ -4,24 +4,23 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
-import type { ChatStreamEvent, Schemas } from '../types';
+import type { MessageRequest, StreamEventResponse } from '../types';
 
-const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>([
-  'conversation',
-  'title',
-  'text',
-  'tool_start',
-  'tool_result',
-  'sources',
-]);
-
-export type StreamChatArgs = Schemas['ChatRequest'] & {
-  onEvent: (event: ChatStreamEvent) => void;
+export type StreamChatArgs = MessageRequest & {
+  conversationId: string;
+  onEvent: (event: StreamEventResponse) => void;
   signal?: AbortSignal;
 };
 
-export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Promise<void> {
-  return fetchEventSource(apiUrl('chat/stream'), {
+/** Sends a message to a conversation and streams its answer as events. */
+export function streamChat({
+  conversationId,
+  onEvent,
+  signal,
+  ...request
+}: StreamChatArgs): Promise<void> {
+  const path = `conversations/${encodeURIComponent(conversationId)}/messages`;
+  return fetchEventSource(apiUrl(path), {
     ...jsonPostInit(request),
     // A 401 arrives before any event, so refresh-and-retry can't replay a partial stream.
     fetch: authFetch,
@@ -36,15 +35,9 @@ export function streamChat({ onEvent, signal, ...request }: StreamChatArgs): Pro
       throw new ApiError(response.status, `chat stream failed to open: ${response.status}`);
     },
 
-    onmessage({ event, data }) {
-      if (!STREAM_EVENT_TYPES.has(event)) return; // e.g. an event this client predates
-      const payload = JSON.parse(data);
-      // Each event's JSON is its fields, except `conversation`, which is the object itself.
-      onEvent(
-        (event === 'conversation'
-          ? { type: event, conversation: payload }
-          : { type: event, ...payload }) as ChatStreamEvent
-      );
+    onmessage({ data }) {
+      // Each event is one JSON object, told apart by its `type` (see StreamEventResponse).
+      onEvent(JSON.parse(data) as StreamEventResponse);
     },
     onerror(err) {
       throw err;

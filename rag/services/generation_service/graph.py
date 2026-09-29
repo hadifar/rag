@@ -12,7 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 from rag.services.generation_service.guards.groundness import GroundednessGuard
 from rag.services.generation_service.guards.topical import TopicalGuard
 
-MAX_VERIFY_ATTEMPTS = 1
+MAX_REVISIONS = 1
 LLM_RETRY_ATTEMPTS = 3
 
 SYSTEM_PROMPT = (
@@ -33,7 +33,6 @@ def _fallback_response(_input: object) -> AIMessage:
 
 
 def _with_resilience(llm: Runnable) -> Runnable:
-
     return llm.with_retry(stop_after_attempt=LLM_RETRY_ATTEMPTS).with_fallbacks(
         [RunnableLambda(_fallback_response)]
     )
@@ -46,7 +45,7 @@ def build_graph(
 
     middleware: list[AgentMiddleware[Any, Any]] = [
         TopicalGuard(classifier),
-        GroundednessGuard(classifier, max_revisions=MAX_VERIFY_ATTEMPTS),
+        GroundednessGuard(classifier, max_revisions=MAX_REVISIONS),
         ModelRetryMiddleware(
             max_retries=LLM_RETRY_ATTEMPTS - 1, on_failure=_fallback_message
         ),

@@ -1,17 +1,32 @@
 import { request, requestJson } from './client';
-import type { Schemas } from '../types';
+import type {
+  ConversationPageResponse,
+  ConversationResponse,
+  HistoryMessageResponse,
+} from '../types';
+
+/** The user's empty conversation (new, or the one they already have); its first message names it. */
+export function createConversation(signal?: AbortSignal): Promise<ConversationResponse> {
+  return requestJson('conversations', { method: 'POST', signal });
+}
+
+/** Renames the conversation with an LLM-written title; call once its first answer is in. */
+export function generateTitle(id: string): Promise<ConversationResponse> {
+  return requestJson(`conversations/${encodeURIComponent(id)}/title`, { method: 'POST' });
+}
 
 export function listConversations(
-  cursor: string | null
-): Promise<Schemas['ConversationPageResponse']> {
+  cursor: string | null,
+  signal?: AbortSignal
+): Promise<ConversationPageResponse> {
   const query = cursor ? `?${new URLSearchParams({ cursor })}` : '';
-  return requestJson(`conversations${query}`);
+  return requestJson(`conversations${query}`, { signal });
 }
 
 export function fetchConversationMessages(
   id: string,
   signal?: AbortSignal
-): Promise<Schemas['HistoryMessageResponse'][]> {
+): Promise<HistoryMessageResponse[]> {
   return requestJson(`conversations/${encodeURIComponent(id)}/messages`, { signal });
 }
 

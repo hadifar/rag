@@ -7,7 +7,7 @@ import {
   requestJson,
   setAccessToken,
 } from './client';
-import type { Schemas } from '../types';
+import type { LoginRequest, TokenResponse, UserResponse } from '../types';
 
 /**
  * Logs in and stores the access token for every later request. Plain `fetch`, not
@@ -15,11 +15,11 @@ import type { Schemas } from '../types';
  */
 export async function login(email: string, password: string): Promise<void> {
   const init: RequestInit = {
-    ...jsonPostInit({ email, password } satisfies Schemas['LoginRequest']),
+    ...jsonPostInit({ email, password } satisfies LoginRequest),
     credentials: 'include',
   };
   const res = ensureOk(await fetch(apiUrl('auth/login'), init), 'auth/login', init);
-  const body: Schemas['TokenResponse'] = await res.json();
+  const body: TokenResponse = await res.json();
   setAccessToken(body.access_token);
 }
 
@@ -35,6 +35,6 @@ export async function logout(): Promise<void> {
   await fetch(apiUrl('auth/logout'), { method: 'POST', credentials: 'include' });
 }
 
-export function me(): Promise<Schemas['UserResponse']> {
+export function me(): Promise<UserResponse> {
   return requestJson('auth/me');
 }

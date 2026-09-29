@@ -14,8 +14,8 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 | Retrieval | Hybrid search in Postgres: `pgvector` (HNSW, cosine) + full-text (`tsvector`, GIN), fused by reciprocal rank; embeddings from the LLM provider (`text-embedding-3-*`) |
 | Auth | JWT (access + refresh) via `pyjwt`, `argon2-cffi` password hashing, users in Postgres — see [Authentication](#authentication) |
 | Observability | `logging` (default) or `langfuse` |
-| Local dev | Docker Compose — `backend` (FastAPI/uvicorn), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users + conversations) |
-| Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)) |
+| Local dev | Docker Compose — `backend` (FastAPI/uvicorn; uploaded knowledge-base zips on the `kbuploads` volume), `frontend` (nginx serving the Vite build, proxying `/api/*`), `postgres` (checkpointer + users + conversations + knowledge base) |
+| Prod deployment | Azure App Service for Containers; secrets via Azure Key Vault references (see [Secrets management](#secrets-management)); uploaded knowledge-base zips in Azure Blob Storage |
 | Quality gates | `ruff` (incl. `PTH`), `pre-commit`, `import-linter`, `commitizen` — see [enforcement.md](enforcement.md) |
 
 ## Layout
@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
@@ -37,33 +37,35 @@ rag/
 │   ├── retrieval_service/
 │   ├── ingestion_service/
 │   ├── generation_service/
-│   ├── conversation_service/         # ownership, create-on-first-message, titles, paging, delete
+│   ├── conversation_service/         # ownership, one empty draft per user, titles, paging, delete
 │   └── auth_service/                 # hashing + JWT issuance/verification, via UserRepositoryPort
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
 │   ├── llm_client.py
 │   ├── checkpointer.py
 │   ├── observability.py
+│   ├── archive_store.py              # uploaded knowledge-base zips: local disk or Azure Blob (KB_STORAGE)
 │   └── db.py                         # the app's Postgres pool (users, conversations, documents)
 │
 ├── repository/                       # concrete persistence implementing a domain port — same
 │   ├── user_repository.py            # composition-root-only rule as adapters/, just a distinct kind of infra
 │   ├── conversation_repository.py
-│   └── document_repository.py        # knowledge-base chunks: pgvector + full-text hybrid search
+│   ├── document_repository.py        # knowledge-base documents + chunks: pgvector + full-text hybrid search
+│   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
-│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. SettingsDep/CurrentUserDep
+│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
 │   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
-│   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
-│   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
+│   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
+│   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
-migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), no ORM models elsewhere
+migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
-│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts
-│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles)
+│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts, ingestions.ts
+│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles), settings/ (knowledge-base upload)
 │   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
-│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers)
+│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers), useKbUpload (upload + run polling)
 │   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
 │   └── pages/                        # ui pages, incl. LoginPage
 └── (Vite build served by nginx in Docker)
@@ -83,19 +85,33 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 | Service | Responsibility | Depends on |
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
-| `ingestion_service` | load → chunk → upsert, source-agnostic (the upsert embeds each chunk) | `DocumentLoaderPort`, `ChunkerPort`, `VectorStorePort` |
-| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `retrieval_service`, checkpointer |
-| `conversation_service` | conversation ownership, create-on-first-message, LLM titles, paging, delete; runs each turn through the chat engine | `ConversationRepositoryPort`, `ChatEnginePort` (= `generation_service`), title model |
+| `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
+| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing, conversation titles; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the generation service | `ConversationRepositoryPort`, `GenerationPort` (= `generation_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
 `container.py`'s `build_container` is the composition root: an async context manager that opens
 the Postgres pools and tracing, constructs every adapter, repository and service, and tears the
-connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
-`ContainerDep`/`SettingsDep` in `api/deps.py` read it.
+connections down on exit. `app.py` stores the result on `app.state`, where `ContainerDep` in
+`api/deps.py` reads it.
 
-Ingestion today has one `DocumentLoaderPort` (`MarkdownFileLoader`) and two `ChunkerPort`s:
-`WholeDocumentChunker` (wired in by default) and `MarkdownHeaderChunker`. Chunk ids are
-`f"{source_id}::{chunk_index}"`, so re-running `rag ingest` upserts over existing chunks.
+Documents are read by `loaders.py`: `load_directory` (a directory of `.md` files) and
+`load_archive` (a `.zip`, read in memory, with member-count and uncompressed-size caps);
+`load_path` picks one. Both use the file's basename as `source_id`. The one `ChunkerPort` is
+`WholeDocumentChunker`.
+
+Ingestion makes the index match the source. The `documents` table holds each indexed document's
+content hash. A re-run chunks and embeds only documents whose hash changed, and deletes documents
+the source no longer has; `chunks` rows cascade from their `documents` row, so a document that
+shrank leaves no stale chunks. `rag ingest --force` re-embeds everything (after changing the
+embedding model or chunker). A source with no documents is refused rather than emptying the index.
+
+Uploaded zips are kept by an `ArchiveStorePort` (`adapters/archive_store.py`), picked by
+`KB_STORAGE__BACKEND`: `local` (`KB_STORAGE__DIR`, default `data/uploads`) or `azure_blob`
+(`KB_STORAGE__ACCOUNT_URL` + `KB_STORAGE__CONTAINER`, authenticated with
+`DefaultAzureCredential`). Each upload gets a new timestamp-prefixed name and nothing is
+overwritten, so `rag ingest --latest` can always rebuild the index from the newest one.
+`IngestionService.save_archive` validates a zip before storing it, so invalid ones are never kept.
 
 ## LLM provider
 
@@ -117,15 +133,13 @@ interface, so neither know or care which backend is selected.
 A conversation is a row in the `conversations` table (`id`, `user_id`, `title`, `created_at`,
 `updated_at`; `migrations/versions/0002_…`), owned by `ConversationService`. Its messages live in
 the LangGraph checkpointer, whose thread id is the conversation's id:
-- The client picks a new chat's id (a random UUID) and sends it with the first message; a
-  `conversation_id` the server hasn't seen starts a new conversation under that id, owned by the
-  caller. Omitting it also starts one, with a server-generated id. The stream's first SSE event
-  (`conversation`) carries the conversation either way.
-- A `conversation_id` that belongs to another user is a 404, checked before the stream starts.
-  Reading or deleting one that doesn't exist is the same 404, so ids can't be probed there;
-  chatting to an unknown id creates it, which reveals nothing a random UUID could find.
-- A new conversation is titled after its first message, then after the first answer an LLM
-  call writes a short title, sent as the stream's last event (`title`).
+- A new chat starts with `POST /api/conversations`, which returns the caller's one empty
+  (untitled) conversation, creating it if needed; the client then sends messages to its id.
+- A missing conversation and another user's are the same 404, so ids can't be probed; for the
+  message stream it's checked before the stream starts.
+- A conversation is untitled only while empty: its first message names it straight away (the
+  trimmed message). Once that first answer has streamed, the client calls
+  `POST /api/conversations/{id}/title`, and an LLM call renames it after the first exchange.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
   answer and sources; tool calls aren't replayed).
@@ -136,7 +150,9 @@ connection pool of its own on the app's `DATABASE_URL` (required). It's a separa
 repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
 so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Durable across restarts and safe for multiple backend replicas.
+(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
+across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
 in-memory messages would leave every conversation empty after a restart.
 
@@ -148,6 +164,9 @@ its own Postgres).
 
 - **No public signup.** Accounts are created out-of-band via `rag create-user <email>` (prompts
   for a password, `argon2-cffi` hashed) — there's no `POST /register`.
+- **Admins** — `users.is_admin` (`rag create-user --admin`, or `rag set-admin <email>
+  [--revoke]` for an existing user) gates the knowledge-base upload (`/api/ingestions`); the
+  frontend shows it only when `GET /api/auth/me` says `is_admin`.
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
   and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
@@ -162,9 +181,10 @@ its own Postgres).
   revocation store, so a stolen refresh token stays valid until it naturally expires (see
   [limitation.md](limitation.md#security)).
 - **Gating** — `get_current_user` (`api/deps.py`) is applied as a router-level dependency to
-  `chat`/`kb`/`settings`; `auth` and `health` stay open (health is a liveness/readiness probe hit
+  `conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
+  `ingestions`; `auth` and `health` stay open (health is a liveness/readiness probe hit
   by infra with no session — see [conventions.md](conventions.md)).
-- **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`) in the app's
+- **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`, `is_admin`) in the app's
   one Postgres database (`DATABASE_URL`); schema is a plain Alembic
   migration (`migrations/versions/0001_create_users_table.py`), not auto-created like the
   checkpointer's own `.setup()`.
@@ -176,9 +196,11 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `mo
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`conversation` / `text` / `tool_start` /
-  `tool_result` / `sources` / `title` events). Every event's `data` is a single-line JSON object — including `text`
-  (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
+- FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
+  `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
+  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
+  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
+  generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
   (which links to `/api/kb/{filename}`).
@@ -202,11 +224,10 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 ## Secrets management
 
 **Local dev** — all secrets live in `.env` (gitignored, never committed), loaded by
-`pydantic-settings`. The one exception is the `postgres` container's own init password: it's
-passed via a Docker Compose secret file (`.secrets/postgres_password.txt`, also gitignored,
-referenced in `docker-compose.yml`'s `secrets:` block) rather than an env var, so it never has to
-round-trip through `Settings` at all — the app connects to Postgres using
-`DATABASE_URL` (which already contains the password), not `POSTGRES_PASSWORD`.
+`pydantic-settings`. The exception is the local `postgres` compose service, which uses fixed
+throwaway credentials (`rag`/`rag`) hardcoded in `docker-compose.yml` and bound to `127.0.0.1`
+only — it holds nothing worth protecting, and a real password would just have to be kept in sync
+with `DATABASE_URL` by hand.
 
 **Prod (Azure App Service)** — secrets are stored in Azure Key Vault and exposed to the app as
 *Key Vault references* in App Service's Application Settings. App Service resolves these (via the
@@ -227,8 +248,9 @@ app to pick it up immediately.
 
 ## API surface
 
-`chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
-[Authentication](#authentication)); `auth` and `health` don't.
+`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
+[Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
+`auth` and `health` don't.
 
 Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
 class attribute (500 on the base). `api/error_handlers.py` registers one
@@ -239,9 +261,15 @@ there, so the response status comes from the exception class itself.
   cookie.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
-- `GET /api/auth/me` — returns `{id, email}` for the caller's access token.
-- `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
-  events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
+- `GET /api/auth/me` — returns `{id, email, is_admin}` for the caller's access token.
+- `POST /api/conversations` — the caller's empty conversation `{id, title: null, created_at,
+  updated_at}`: a new one, or the one they already have (a partial unique index allows one
+  untitled conversation per user, so empty chats can't pile up).
+- `POST /api/conversations/{id}/messages` — `{message: str}` → SSE stream of normalized events.
+  A first message also names the conversation (the trimmed message). 404 for a missing or
+  someone else's conversation, before the stream starts.
+- `POST /api/conversations/{id}/title` — renames the conversation with an LLM-written title for
+  its first exchange and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
@@ -249,6 +277,14 @@ there, so the response status comes from the exception class itself.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — queries the `chunks` table (fails if Postgres is unreachable or
   the migrations haven't run); no embedding or LLM call, so probes cost nothing.
+- `POST /api/ingestions` — multipart `file` (a `.zip` of `.md` files, ≤ 20 MB) → 202 with a
+  `running` run `{id, status, started_at, finished_at, added, updated, unchanged, removed,
+  error}`. The zip is validated (400) and stored before the response; the ingestion itself runs
+  as a background task afterwards. 409 if another run is still going (a partial unique index
+  allows one `running` row), 413 if too large.
+- `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
+  404 if unknown.
+- `GET /api/ingestions/latest` — the most recent run, or `null`.
 - `GET /api/kb/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).

@@ -12,7 +12,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
-from rag.services.generation_service.turn import current_turn, turn_tool_messages
+from rag.services.generation_service.turn import (
+    current_turn,
+    is_final_answer,
+    turn_tool_messages,
+)
 
 VERIFIER_PROMPT = (
     "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
@@ -51,11 +55,7 @@ def _turn_answers(messages: Sequence[BaseMessage]) -> list[AIMessage]:
     """This turn's final answers, oldest first. A rejected answer stays in the thread
     when the model is sent back to revise, so every answer but the last was rejected.
     """
-    return [
-        m
-        for m in current_turn(messages)
-        if isinstance(m, AIMessage) and not m.tool_calls
-    ]
+    return [m for m in current_turn(messages) if is_final_answer(m)]
 
 
 class GroundednessGuard(AgentMiddleware):
@@ -75,8 +75,7 @@ class GroundednessGuard(AgentMiddleware):
     async def aafter_model(
         self, state: AgentState, runtime: Runtime
     ) -> dict[str, Any] | None:
-        answer = state["messages"][-1]
-        if not isinstance(answer, AIMessage) or answer.tool_calls:
+        if not is_final_answer(state["messages"][-1]):
             return None  # Not a final answer yet: the model is still searching.
 
         revisions = len(_turn_answers(state["messages"])) - 1
@@ -95,7 +94,7 @@ class GroundednessGuard(AgentMiddleware):
     ) -> ModelResponse:
         # The model only runs right after a final answer when after_model rejected it.
         last = request.messages[-1] if request.messages else None
-        if isinstance(last, AIMessage) and not last.tool_calls:
+        if is_final_answer(last):
             request = request.override(
                 messages=[*request.messages, HumanMessage(content=REVISION_INSTRUCTION)]
             )
