@@ -1,3 +1,18 @@
+## v0.10.1 (2026-09-29)
+
+### Refactor
+
+- generation service into agent service and completion service
+- merge ToolCallStart/ToolCallResult into one ToolCall event
+- improve frontend architecture and error handling in components
+- unify AuthenticatedIdentity usage across services and router
+- repo reach only the domain
+- drop langchain from domain.models
+- add extra contract to ensure api follow our layering structure
+- replace RagError with AppError across the codebase and update error handling
+- add new contract to avoid importing domain via api/routers (only via dep & schema)
+- update authentication handling to use AuthenticatedIdentity model
+
 ## v0.10.0 (2026-09-29)
 
 ### Feat
