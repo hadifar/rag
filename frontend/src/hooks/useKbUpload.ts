@@ -6,11 +6,8 @@ import {
   fetchLatestIngestionRun,
   uploadKnowledgeBase,
 } from '../api/ingestions';
-import type { IngestionRunResponse } from '../types';
+import type { IngestionRunResponse, UploadPhase } from '../types';
 import { describeRun, runTime } from '../utils/ingestions';
-
-/** `failed` covers both a rejected upload and a run that failed; `error` says which. */
-export type UploadPhase = 'idle' | 'uploading' | 'running' | 'succeeded' | 'failed';
 
 export const POLL_INTERVAL_MS = 2000;
 // Consecutive failed status checks (network blips) tolerated before giving up.

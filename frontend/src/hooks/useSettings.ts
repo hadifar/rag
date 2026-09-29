@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { fetchSettings } from '../api/settings';
-import type { SettingsResponse } from '../types';
-
-type LoadStatus = 'loading' | 'ready' | 'error';
+import type { LoadStatus, SettingsResponse } from '../types';
 
 const EMPTY: SettingsResponse = { model: '', temperature: 0, top_k: 4 };
 const SAVED_NOTICE_MS = 3000;

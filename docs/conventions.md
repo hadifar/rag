@@ -99,6 +99,14 @@ if the frontend no longer matches them.
 - Keep request/response DTOs under `rag/api/`, never in `rag.domain` or a top-level
   `rag/schema/`.
 
+## Adding a frontend type: shared ones in `types/`, private ones where they're used
+
+- A type another file uses lives in `frontend/src/types/<feature>.ts` (`auth.ts`,
+  `conversations.ts`, …), re-exported from `types/index.ts`, and is imported from `'../types'` —
+  never from a hook or component file. Backend shapes go only in `types/api.ts` (see above).
+- A type only one file uses (a component's props, a local helper signature) stays in that file.
+- Before adding one, check `types/` for an equal type to reuse (e.g. `LoadStatus`).
+
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 
 - Write a `build_*(dependency) -> callable` closure, assembled wherever its owning service is

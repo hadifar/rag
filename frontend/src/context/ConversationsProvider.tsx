@@ -10,15 +10,15 @@ import {
   renameConversation,
   upsertConversation,
 } from '../utils/conversations';
-import type { ConversationResponse } from '../types';
-import { ConversationsContext, type ListStatus } from '../hooks/useConversations';
+import type { ConversationResponse, LoadStatus } from '../types';
+import { ConversationsContext } from '../hooks/useConversations';
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const openConversation = useMatch('/chat/:conversationId')?.params.conversationId;
 
   const [conversations, setConversations] = useState<ConversationResponse[]>([]);
-  const [status, setStatus] = useState<ListStatus>('loading');
+  const [status, setStatus] = useState<LoadStatus>('loading');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, startLoadingMore] = useTransition();
 
