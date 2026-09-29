@@ -54,7 +54,6 @@ graph TD
 
     api --> services
     services --> domain
-    api -.-> domain
     services -.->|only via ports| adapters
     services -.->|only via ports| repository
 ```

@@ -55,5 +55,8 @@ async def logout(response: Response) -> None:
 
 
 @router.get("/me")
-async def me(current_user: CurrentUserDep) -> UserResponse:
-    return UserResponse.model_validate(current_user)
+async def me(
+    current_user: CurrentUserDep, auth_service: AuthServiceDep
+) -> UserResponse:
+    user = await auth_service.get_user(current_user.id)
+    return UserResponse.model_validate(user)

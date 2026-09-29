@@ -10,7 +10,7 @@ from rag.domain.errors import (
     UserEmailNotFoundError,
     UserNotFoundError,
 )
-from rag.services.auth_service.service import AuthService
+from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from tests.unit.fakes import FakeUserRepository
 
 
@@ -103,6 +103,7 @@ async def test_set_admin_unknown_email_raises(auth_service: AuthService) -> None
 
 async def test_require_admin_rejects_non_admins(auth_service: AuthService) -> None:
     user = await auth_service.create_user("a@example.com", "correct horse")
+    identity = AuthenticatedIdentity(id=user.id, is_admin=user.is_admin)
 
     with pytest.raises(AdminRequiredError):
-        AuthService.require_admin(user)
+        AuthService.require_admin(identity)

@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.container import Container
-from rag.domain.models import User
+from rag.domain.models import AuthenticatedIdentity
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
@@ -56,16 +56,15 @@ ConversationServiceDep = Annotated[
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
     auth_service: AuthServiceDep,
-) -> User:
-    user_id = auth_service.verify_access_token(credentials.credentials)
-    return await auth_service.get_user(user_id)
+) -> AuthenticatedIdentity:
+    return await auth_service.authenticate_access_token(credentials.credentials)
 
 
-CurrentUserDep = Annotated[User, Depends(get_current_user)]
+CurrentUserDep = Annotated[AuthenticatedIdentity, Depends(get_current_user)]
 
 
-def get_current_admin(user: CurrentUserDep) -> User:
-    return AuthService.require_admin(user)
+def get_current_admin(identity: CurrentUserDep) -> AuthenticatedIdentity:
+    return AuthService.require_admin(identity)
 
 
-AdminUserDep = Annotated[User, Depends(get_current_admin)]
+AdminUserDep = Annotated[AuthenticatedIdentity, Depends(get_current_admin)]
