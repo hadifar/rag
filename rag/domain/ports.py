@@ -1,5 +1,3 @@
-"""Contracts every service depends on instead of a concrete SDK."""
-
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime

@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Response
 
-from rag.api.deps import AuthServiceDep, CurrentUserDep
+from rag.api.deps import AuthenticatedUserDep, AuthServiceDep
 from rag.api.schema.auth import LoginRequest, TokenResponse, UserResponse
 
 _REFRESH_COOKIE = "refresh_token"
@@ -56,7 +56,7 @@ async def logout(response: Response) -> None:
 
 @router.get("/me")
 async def me(
-    current_user: CurrentUserDep, auth_service: AuthServiceDep
+    current_user: AuthenticatedUserDep, auth_service: AuthServiceDep
 ) -> UserResponse:
     user = await auth_service.get_user(current_user.id)
     return UserResponse.model_validate(user)

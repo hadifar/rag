@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
@@ -14,13 +15,23 @@ from rag.domain.errors import (
     UserEmailNotFoundError,
     UserNotFoundError,
 )
-from rag.domain.models import AuthenticatedIdentity, User
+from rag.domain.models import User
 from rag.domain.ports import UserRepositoryPort
 
 
 class _TokenType(StrEnum):
     ACCESS = "access"
     REFRESH = "refresh"
+
+
+@dataclass(frozen=True)
+class AuthenticatedIdentity:
+    """Who a request is from: just enough to authorize it, without exposing the
+    full User (email, password hash, ...) past the service boundary.
+    """
+
+    id: uuid.UUID
+    is_admin: bool
 
 
 class AuthService:

@@ -4,8 +4,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.container import Container
-from rag.domain.models import AuthenticatedIdentity
-from rag.services.auth_service.service import AuthService
+from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
@@ -60,10 +59,10 @@ async def get_current_user(
     return await auth_service.authenticate_access_token(credentials.credentials)
 
 
-CurrentUserDep = Annotated[AuthenticatedIdentity, Depends(get_current_user)]
+AuthenticatedUserDep = Annotated[AuthenticatedIdentity, Depends(get_current_user)]
 
 
-def get_current_admin(identity: CurrentUserDep) -> AuthenticatedIdentity:
+def get_current_admin(identity: AuthenticatedUserDep) -> AuthenticatedIdentity:
     return AuthService.require_admin(identity)
 
 
