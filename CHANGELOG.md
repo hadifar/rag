@@ -1,3 +1,24 @@
+## v0.9.0 (2026-09-27)
+
+### Feat
+
+- use icon as favicon
+
+### Refactor
+
+- move chat comps into components/chat/ folder
+- simplify frontend structure and let the client create conversation ids
+- **frontend**: use useTransition for login and load-more pending state
+- memoize bubbles, hoist markdown components, lazy-load chat page
+- **frontend**: use named exports everywhere
+- **frontend**: split useChat into useMessageList and a pure bubble handler
+- **frontend**: move data and action logic out of components into hooks
+- clean up frontend
+- **guards**: derive groundedness revisions from turn messages, drop before_agent
+- update setup instructions and enhance knowledge base extraction in setup script
+- frontend polished
+- drop data in favor data.zip & update docs
+
 ## v0.8.1 (2026-09-27)
 
 ### Fix

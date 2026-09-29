@@ -11,7 +11,6 @@ import pytest
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
-from langchain_core.documents import Document
 from pydantic import SecretStr
 
 from rag.api.deps import get_current_user
@@ -23,7 +22,9 @@ from rag.config import (
     Settings,
 )
 from rag.container import Container
+from rag.domain.errors import DocumentNotFoundError
 from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
+from rag.domain.models import Chunk
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.generation_service.service import GenerationService
@@ -46,13 +47,13 @@ _ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
-    async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
-        return [(Document(page_content="stub chunk", metadata={}), 1.0)]
+    async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
+        return [(Chunk(text="stub chunk", metadata={}), 1.0)]
 
-    async def get_document(self, source_id: str) -> Document | None:
+    async def get_document(self, source_id: str) -> Chunk:
         if source_id == "missing":
-            return None
-        return Document(page_content=f"content for {source_id}", metadata={})
+            raise DocumentNotFoundError(source_id)
+        return Chunk(text=f"content for {source_id}", metadata={})
 
     async def ping(self) -> None:
         return None

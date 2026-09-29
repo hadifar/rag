@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
-from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -23,6 +22,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
+from rag.domain.models import Chunk
 from rag.services.generation_service.graph import build_graph
 from rag.services.generation_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
@@ -112,14 +112,12 @@ class _StubRetrievalService:
     _NO_RESULTS_QUERY.
     """
 
-    async def search(self, query: str, top_k: int = 3) -> list[tuple[Document, float]]:
+    async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
         if query == _NO_RESULTS_QUERY:
             return []
         return [
             (
-                Document(
-                    page_content=f"facts about {query}", metadata={"source_id": query}
-                ),
+                Chunk(text=f"facts about {query}", metadata={"source_id": query}),
                 1.0,
             )
         ]

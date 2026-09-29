@@ -4,11 +4,10 @@ over the fixture knowledge base seeded by conftest's `seeded_kb`.
 
 from pathlib import Path
 
-from langchain_core.documents import Document
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from rag.domain.models import IndexedDocument
+from rag.domain.models import Chunk, IndexedDocument
 from rag.repository.document_repository import DocumentRepository
 from rag.services.ingestion_service.loaders import load_directory
 from tests.integration.conftest import FIXTURE_KB, ingestion_service
@@ -16,7 +15,7 @@ from tests.integration.conftest import FIXTURE_KB, ingestion_service
 
 async def _top_sources(repository: DocumentRepository, query: str) -> list[str]:
     results = await repository.asimilarity_search_with_score(query, k=3)
-    return [doc.metadata["source_id"] for doc, _score in results]
+    return [str(doc.metadata["source_id"]) for doc, _score in results]
 
 
 async def test_semantic_query_finds_the_document_without_shared_keywords(
@@ -47,9 +46,9 @@ async def test_get_document_returns_the_whole_document(
 
     assert document is not None
     assert (
-        document.page_content.index("# AtlasFlow Plans")
-        < document.page_content.index("## Starter")
-        < document.page_content.index("## Zephyr")
+        document.text.index("# AtlasFlow Plans")
+        < document.text.index("## Starter")
+        < document.text.index("## Zephyr")
     )
     assert await seeded_kb.aget_document("it-does-not-exist.md") is None
 
@@ -70,9 +69,9 @@ async def test_replacing_a_document_drops_its_old_chunks(
     seeded_kb: DocumentRepository,
 ) -> None:
     source_id = "it-plans-and-pricing.md"
-    chunk = Document(
+    chunk = Chunk(
         id=f"{source_id}::0",
-        page_content="# Replaced",
+        text="# Replaced",
         metadata={"source_id": source_id, "chunk_index": 0},
     )
 
@@ -81,7 +80,7 @@ async def test_replacing_a_document_drops_its_old_chunks(
     )
 
     document = await seeded_kb.aget_document(source_id)
-    assert document is not None and document.page_content == "# Replaced"
+    assert document is not None and document.text == "# Replaced"
     assert (await seeded_kb.alist_content_hashes())[source_id] == "new-hash"
 
 

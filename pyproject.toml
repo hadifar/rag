@@ -1,6 +1,6 @@
 [project]
 name = "RAG"
-version = "0.8.1"
+version = "0.9.0"
 description = "A prod ready RAG service"
 readme = "README.md"
 license = "MIT"
@@ -97,18 +97,25 @@ dev = [
 
 [tool.importlinter]
 root_package = "rag"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli", "langchain_core", "langchain", "langgraph"]
 
 [[tool.importlinter.contracts]]
-name = "services do not import adapters or entrypoints directly"
+name = "services do not import adapters, entrypoints, or the api layer directly"
 type = "forbidden"
 source_modules = ["rag.services"]
-forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli", "rag.api"]
+
+[[tool.importlinter.contracts]]
+name = "repository reaches only the domain"
+type = "forbidden"
+source_modules = ["rag.repository"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.api", "rag.container", "rag.app", "rag.cli", "langchain_core", "langchain", "langgraph"]
 
 [[tool.importlinter.contracts]]
 name = "only the composition root constructs adapters or repositories"
@@ -133,6 +140,13 @@ ignore_imports = [
     "rag.api.deps -> rag.container",
     "rag.api.deps -> rag.services.**",
 ]
+
+[[tool.importlinter.contracts]]
+name = "api routers reach the domain and config only through deps and schema"
+type = "forbidden"
+source_modules = ["rag.api.routers"]
+forbidden_modules = ["rag.domain", "rag.config"]
+allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]
 name = "routers are independent of each other"
