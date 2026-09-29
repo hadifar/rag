@@ -4,13 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from rag.domain.events import (
-    SourcesReady,
-    StreamEvent,
-    TextDelta,
-    ToolCallResult,
-    ToolCallStart,
-)
+from rag.domain.events import SourcesReady, StreamEvent, TextDelta, ToolCall
 
 
 class ConversationResponse(BaseModel):
@@ -87,9 +81,7 @@ def _payload(event: StreamEvent) -> TextEvent | ToolEvent | SourcesEvent:
     match event:
         case TextDelta(text=text):
             return TextEvent(text=text)
-        case ToolCallStart(name=name, query=query):
-            return ToolEvent(name=name, status="pending", query=query)
-        case ToolCallResult(name=name, output=output):
-            return ToolEvent(name=name, status="done", output=output)
+        case ToolCall(name=name, status=status, query=query, output=output):
+            return ToolEvent(name=name, status=status, query=query, output=output)
         case SourcesReady(sources=sources):
             return SourcesEvent(sources=sources)

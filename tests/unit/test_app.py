@@ -23,7 +23,7 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
+from rag.domain.events import SourcesReady, ToolCall
 from rag.domain.models import Chunk
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -90,8 +90,8 @@ def client() -> Generator[TestClient]:
 
     generation = StubGeneration(
         extra_events=[
-            ToolCallStart(name="search", query="hi"),
-            ToolCallResult(name="search", output="stub result"),
+            ToolCall(name="search", status="pending", query="hi"),
+            ToolCall(name="search", status="done", output="stub result"),
             SourcesReady(sources=["doc-a", "doc-b"]),
         ],
         title="Greeting",

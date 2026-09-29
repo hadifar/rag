@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -7,15 +8,13 @@ class TextDelta:
 
 
 @dataclass
-class ToolCallStart:
-    name: str
-    query: str
+class ToolCall:
+    """A knowledge-base search: `pending` with its query, then `done` with its output."""
 
-
-@dataclass
-class ToolCallResult:
     name: str
-    output: str
+    status: Literal["pending", "done"]
+    query: str | None = None
+    output: str | None = None
 
 
 @dataclass
@@ -23,4 +22,4 @@ class SourcesReady:
     sources: list[str]
 
 
-StreamEvent = TextDelta | ToolCallStart | ToolCallResult | SourcesReady
+StreamEvent = TextDelta | ToolCall | SourcesReady

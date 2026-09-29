@@ -1,7 +1,7 @@
 import uuid
 
 from rag.container import build_container
-from rag.domain.events import TextDelta, ToolCallStart
+from rag.domain.events import TextDelta, ToolCall
 
 
 async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
@@ -14,7 +14,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         ):
             if isinstance(event, TextDelta):
                 answer += event.text
-            elif isinstance(event, ToolCallStart):
+            elif isinstance(event, ToolCall) and event.status == "pending":
                 tool_calls.append(event.name)
 
         return answer, tool_calls
