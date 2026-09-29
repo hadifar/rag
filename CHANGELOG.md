@@ -1,3 +1,46 @@
+## v0.10.0 (2026-09-29)
+
+### Feat
+
+- **ci**: enforce frontend layering with oxlint and stricter tsc
+- **ci**: enforce backend conventions with lint, types and an auth test
+- **infra**: persist knowledge-base uploads in compose and Azure
+- **frontend**: knowledge-base upload dialog on the Settings page
+- **api**: admin knowledge-base upload with background ingestion runs
+- **auth**: admin role for knowledge-base management
+- **ingestion**: keep uploaded knowledge-base zips in archive storage
+- **ingestion**: zip loader and hash-based index sync
+- **chat**: shoSources none found when a knowledge-base search is empty
+
+### Fix
+
+- drop limit on chat
+- **infra**: pass AUTH__JWT_SECRET to backend via Key Vault
+
+### Refactor
+
+- **ci**: enhance migration checks and enforce append-only policy
+- **services**: generation depends on a SearchPort, not RetrievalService
+- **frontend**: share load-on-mount and tidy useChat into steps
+- **frontend**: move shared types out of hooks into types/
+- **frontend**: mirror the backend's schemas one-to-one in types/api.ts
+- **frontend**: derive text and sources bubble content from the API schema
+- **api**: type the message stream's events through OpenAPI
+- **api**: generate conversation titles on request, not in the stream
+- **api**: keep deps.py to shared wiring and auth
+- **api**: split chat into create-conversation and send-message endpoints
+- **api**: native SSE, non-blocking hashing and router-level auth & take the refresh cookie lifetime from AuthService
+- simplify ingestion loading, turns and defensive leftovers
+- tidy CLI, user errors and small leftovers
+- replace domain model conversions with Pydantic model validation across API responses
+- **repository**: share row fetching through a BaseRepository
+- name generation and retrieval dependencies after their services
+- **generation**: move conversation titling into the generation service
+- **dev**: fixed local Postgres creds and compose-side DATABASE_URL override
+- **dev**: fixed local Postgres creds and compose-side DATABASE_URL override
+- **config**: split DATABASE_URL into typed DATABASE__* settings with verified TLS by default
+- update setup and configuration for improved testing and deployment
+
 ## v0.9.0 (2026-09-27)
 
 ### Feat
