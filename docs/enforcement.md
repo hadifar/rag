@@ -34,8 +34,9 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   - within `rag.api`, only `deps.py` reaches `rag.services` and the container; routers get
     services through its `Annotated` aliases
   - routers are independent of each other
-  - services are independent of each other, except `generation_service` using
-    `retrieval_service` for its search tool (the one allowed exception)
+  - services are independent of each other, with no exceptions: one that needs another depends
+    on a port in `rag.domain.ports` (`GenerationPort`, `SearchPort`), and `container.py` wires in
+    the implementation (Clean Architecture's "use cases don't call use cases")
   - an explicit layering contract: `rag.api` → `rag.services` → `rag.domain`
 - `uv-lock` keeps `uv.lock` in sync with `pyproject.toml`, auto-fixing locally
 

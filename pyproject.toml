@@ -140,10 +140,9 @@ type = "independence"
 modules = ["rag.api.routers.*"]
 
 [[tool.importlinter.contracts]]
-name = "services are independent of each other, except generation's search tool"
+name = "services are independent of each other: they meet only through rag.domain ports"
 type = "independence"
 modules = ["rag.services.*"]
-ignore_imports = ["rag.services.generation_service.** -> rag.services.retrieval_service.**"]
 
 [[tool.importlinter.contracts]]
 name = "layering"

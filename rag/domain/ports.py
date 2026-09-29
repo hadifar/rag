@@ -29,6 +29,12 @@ class VectorStorePort(Protocol):
         ...
 
 
+class SearchPort(Protocol):
+    """Finds knowledge-base passages for a query: the best first, with their scores."""
+
+    async def search(self, query: str) -> list[tuple[Document, float]]: ...
+
+
 class DocumentIndexPort(Protocol):
     """The write side of the knowledge base: what's indexed, and replacing it."""
 

@@ -47,7 +47,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         generation_service = GenerationService(
             llm=llm,
-            retrieval_service=retrieval_service,
+            knowledge_base=retrieval_service,
             checkpointer=checkpointer,
             trace_config=trace_config,
         )

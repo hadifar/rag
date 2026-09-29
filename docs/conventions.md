@@ -14,9 +14,11 @@ Follows PEP 20 and the
 - Construct and inject it in `container.py`'s `build_container`, add it as a field on
   `Container`, and let the container close anything it opens.
 - Never construct an adapter or service ad hoc inside a router or another service.
-- Routers and services never import `rag.adapters` or `rag.repository` — they take a
-  `rag.domain.ports` `Protocol` in their constructor, and `container.py` supplies the concrete
-  instance. `import-linter` enforces this ([enforcement.md](enforcement.md#python-code-quality)).
+- Routers and services never import `rag.adapters` or `rag.repository`, and services never
+  import each other — they take a `rag.domain.ports` `Protocol` in their constructor (e.g.
+  `SearchPort` for the knowledge-base search generation needs), and `container.py` supplies the
+  concrete instance. `import-linter` enforces this
+  ([enforcement.md](enforcement.md#python-code-quality)).
 
 ## Adding a new repository: SQL behind a domain port
 
@@ -110,7 +112,7 @@ if the frontend no longer matches them.
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 
 - Write a `build_*(dependency) -> callable` closure, assembled wherever its owning service is
-  built (example: `build_search_tool(retrieval_service)` in `tools.py`).
+  built (example: `build_search_tool(knowledge_base)` in `tools.py`).
 - Never a module-level global (e.g. a module-level `@tool` function), and never a client
   re-instantiated per call.
 

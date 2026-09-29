@@ -3,7 +3,7 @@
 import json
 import uuid
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -29,7 +29,6 @@ from rag.services.generation_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.generation_service.streaming import stream_events
 from rag.services.generation_service.tools import build_search_tool
 from rag.services.generation_service.turn import to_history
-from rag.services.retrieval_service.service import RetrievalService
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -141,7 +140,7 @@ def _answer(text: str) -> AIMessage:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        search_tool = build_search_tool(cast(RetrievalService, _StubRetrievalService()))
+        search_tool = build_search_tool(_StubRetrievalService())
         self.graph: CompiledStateGraph = build_graph(
             model, [search_tool], InMemorySaver()
         )
