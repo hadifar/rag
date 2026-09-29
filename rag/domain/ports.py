@@ -18,6 +18,11 @@ from rag.domain.models import (
 )
 
 
+class EmbeddingsPort(Protocol):
+    async def aembed_query(self, text: str) -> list[float]: ...
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
+
 class VectorStorePort(Protocol):
     async def asimilarity_search_with_score(
         self, query: str, k: int

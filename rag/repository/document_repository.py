@@ -1,12 +1,12 @@
 import json
 from collections.abc import Sequence
 
-from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from rag.domain.models import Chunk, IndexedDocument
+from rag.domain.ports import EmbeddingsPort
 
 RRF_K = 5
 
@@ -54,7 +54,7 @@ class DocumentRepository:
     """
 
     def __init__(
-        self, pool: AsyncConnectionPool[AsyncConnection], embeddings: Embeddings
+        self, pool: AsyncConnectionPool[AsyncConnection], embeddings: EmbeddingsPort
     ):
         self._pool = pool
         self._embeddings = embeddings
