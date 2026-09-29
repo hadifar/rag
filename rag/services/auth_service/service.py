@@ -14,7 +14,7 @@ from rag.domain.errors import (
     UserEmailNotFoundError,
     UserNotFoundError,
 )
-from rag.domain.models import User
+from rag.domain.models import AuthenticatedIdentity, User
 from rag.domain.ports import UserRepositoryPort
 
 
@@ -58,10 +58,10 @@ class AuthService:
         return user
 
     @staticmethod
-    def require_admin(user: User) -> User:
-        if not user.is_admin:
+    def require_admin(identity: AuthenticatedIdentity) -> AuthenticatedIdentity:
+        if not identity.is_admin:
             raise AdminRequiredError()
-        return user
+        return identity
 
     async def authenticate(self, email: str, password: str) -> User:
         user = await self._user_repository.get_by_email(_normalize_email(email))
@@ -79,6 +79,10 @@ class AuthService:
             raise UserNotFoundError(user_id)
         return user
 
+    async def authenticate_access_token(self, token: str) -> AuthenticatedIdentity:
+        user = await self.get_user(self.verify_access_token(token))
+        return AuthenticatedIdentity(id=user.id, is_admin=user.is_admin)
+
     @property
     def refresh_ttl(self) -> timedelta:
         return self._refresh_ttl
@@ -92,7 +96,9 @@ class AuthService:
     def verify_access_token(self, token: str) -> uuid.UUID:
         return self._decode(token, _TokenType.ACCESS)
 
-    def verify_refresh_token(self, token: str) -> uuid.UUID:
+    def verify_refresh_token(self, token: str | None) -> uuid.UUID:
+        if token is None:
+            raise InvalidTokenError("missing refresh cookie")
         return self._decode(token, _TokenType.REFRESH)
 
     def _encode(

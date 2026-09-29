@@ -64,6 +64,16 @@ class User:
 
 
 @dataclass(frozen=True)
+class AuthenticatedIdentity:
+    """Who a request is from: just enough to authorize it, without exposing the
+    full User (email, password hash, ...) past the service boundary.
+    """
+
+    id: uuid.UUID
+    is_admin: bool
+
+
+@dataclass(frozen=True)
 class Conversation:
     id: uuid.UUID
     user_id: uuid.UUID

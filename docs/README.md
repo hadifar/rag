@@ -1,7 +1,10 @@
 # Docs
 
 - [architecture.md](architecture.md) — diagrams: system overview, backend layering, the
-  LangGraph generation graph, frontend structure, backend↔frontend type sync
+  LangGraph generation graph, frontend structure
+- [auth.md](auth.md) — why the frontend and backend share one origin, and what that buys auth
+- [services.md](services.md) — per-service detail that doesn't fit a diagram (guard middleware,
+  …)
 - [reference.md](reference.md) — what exists today: tech stack, layout, services, conversation
   state, authentication, streaming, observability, secrets, API surface
 - [conventions.md](conventions.md) — patterns to follow when adding to the codebase: a
