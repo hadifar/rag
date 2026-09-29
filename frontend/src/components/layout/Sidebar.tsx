@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   HomeIcon,
@@ -54,7 +54,7 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
   );
 }
 
-function ConversationLink({
+const ConversationLink = memo(function ConversationLink({
   conversation,
   onDelete,
 }: {
@@ -86,7 +86,7 @@ function ConversationLink({
       </button>
     </div>
   );
-}
+});
 
 function ConversationList() {
   const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversations();
@@ -126,6 +126,20 @@ export function Sidebar() {
 
   const startNewChat = () => navigate('/chat');
 
+  const collapseToggle = (
+    <button
+      onClick={() => setIsCollapsed((collapsed) => !collapsed)}
+      className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+      title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    >
+      {isCollapsed ? (
+        <ChevronRightIcon className="h-4 w-4" />
+      ) : (
+        <ChevronLeftIcon className="h-4 w-4" />
+      )}
+    </button>
+  );
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -151,27 +165,13 @@ export function Sidebar() {
             </span>
           )}
         </div>
-        {!isCollapsed && (
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="shrink-0 p-1 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-            title="Collapse sidebar"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
-        )}
+        {!isCollapsed && collapseToggle}
       </div>
 
       {/* Expand button (collapsed state) */}
       {isCollapsed && (
         <div className="flex justify-center py-2 border-b border-slate-100 shrink-0">
-          <button
-            onClick={() => setIsCollapsed(false)}
-            className="p-1 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-            title="Expand sidebar"
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
+          {collapseToggle}
         </div>
       )}
 

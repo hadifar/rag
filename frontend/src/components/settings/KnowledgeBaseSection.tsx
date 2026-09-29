@@ -40,6 +40,7 @@ export function KnowledgeBaseSection() {
       {open && (
         <KbUploadModal
           phase={phase}
+          busy={busy}
           error={error}
           summary={summary}
           onUpload={upload}

@@ -82,6 +82,7 @@ def to_stream_event(event: StreamEvent) -> StreamEventResponse:
     return StreamEventResponse(_payload(event))
 
 
+# TODO: chatstream.ts
 def _payload(event: StreamEvent) -> TextEvent | ToolEvent | SourcesEvent:
     match event:
         case TextDelta(text=text):

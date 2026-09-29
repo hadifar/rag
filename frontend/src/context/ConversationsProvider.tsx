@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 
 import { deleteConversation as apiDeleteConversation, listConversations } from '../api/conversations';
+import { ApiError } from '../api/client';
 import {
   appendPage,
   moveToTop,
@@ -65,7 +66,13 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
 
   const deleteConversation = useCallback(
     async (id: string) => {
-      await apiDeleteConversation(id);
+      try {
+        await apiDeleteConversation(id);
+      } catch (err) {
+        // A 404 means it's already gone — delete is idempotent, so that's success too,
+        // not a failure to surface (and without this, a retry would 404 forever).
+        if (!(err instanceof ApiError && err.status === 404)) throw err;
+      }
       setConversations((list) => removeConversation(list, id));
       if (openConversation === id) navigate('/chat', { replace: true });
     },

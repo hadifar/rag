@@ -1,14 +1,12 @@
 import Markdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import type { TextContent } from '../../types';
+import { isFencedCodeBlock } from '../../utils/markdown';
 
 type TextBubbleProps = TextContent & { position?: 'left' | 'right' };
 
-// react-markdown no longer tells us whether a `code` node is inline or a
-// fenced block, so we tell them apart the same way the content itself does:
-// a fenced block's text always contains a newline, an inline span never does.
 const Code: Components['code'] = ({ className, children }) => {
-  if (typeof children === 'string' && children.includes('\n')) {
+  if (isFencedCodeBlock(children)) {
     return (
       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100">
         <code className={className}>{children}</code>

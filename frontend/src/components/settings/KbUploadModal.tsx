@@ -5,15 +5,15 @@ import type { UploadPhase } from '../../types';
 
 type Props = {
   phase: UploadPhase;
+  busy: boolean;
   error: string | null;
   summary: string | null;
   onUpload: (file: File) => void;
   onClose: () => void;
 };
 
-export function KbUploadModal({ phase, error, summary, onUpload, onClose }: Props) {
+export function KbUploadModal({ phase, busy, error, summary, onUpload, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null);
-  const busy = phase === 'uploading' || phase === 'running';
 
   // On the document, not the dialog: focus is often outside it (e.g. once the upload
   // button it was on unmounts).

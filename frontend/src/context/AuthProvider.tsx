@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { login as apiLogin, logout as apiLogout, me, restoreSession } from '../api/auth';
-import { onSessionExpired } from '../api/client';
+import { onSessionExpired, setAccessToken } from '../api/client';
 import type { AuthStatus, UserResponse } from '../types';
 import { AuthContext } from '../hooks/useAuth';
 
@@ -16,6 +16,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearSession = useCallback(() => {
+    // A successful refresh followed by a failing `me()` (transient 500, flaky network)
+    // must not leave an in-memory token behind once we report the user as logged out.
+    setAccessToken(null);
     setUser(null);
     setStatus('unauthenticated');
   }, []);

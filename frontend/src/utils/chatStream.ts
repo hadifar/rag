@@ -15,7 +15,10 @@ export function assistantText(text: string): ChatMessageInput {
 export function createBubbleHandler(append: AppendMessage, update: UpdateMessage) {
   let assistantMsgId: string | null = null;
   let assistantMsgText = '';
-  let toolMsgId: string | null = null;
+  // FIFO: the backend doesn't send a call id, so this assumes tool calls resolve in the
+  // order they started. True for the common case (one call, or calls that don't race);
+  // genuinely concurrent calls need a call id from the backend to track precisely.
+  const pendingToolMsgIds: string[] = [];
 
   return (event: StreamEventResponse) => {
     switch (event.type) {
@@ -30,9 +33,16 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
       case 'tool': {
         const { type, ...content } = event;
         if (content.status === 'pending') {
-          toolMsgId = append({ type, content });
-        } else if (toolMsgId !== null) {
-          update(toolMsgId, { type, content });
+          pendingToolMsgIds.push(append({ type, content }));
+          // Further text after a tool call starts a new bubble, so reading order stays
+          // text → tool → text instead of the later text merging into the earlier bubble.
+          assistantMsgId = null;
+          assistantMsgText = '';
+        } else {
+          const toolMsgId = pendingToolMsgIds.shift();
+          if (toolMsgId !== undefined) {
+            update(toolMsgId, { type, content });
+          }
         }
         break;
       }
