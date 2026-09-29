@@ -13,4 +13,4 @@ async def get_document(
     filename: str, retrieval_service: RetrievalServiceDep
 ) -> PlainTextResponse:
     document = await retrieval_service.get_document(filename)
-    return PlainTextResponse(document.page_content)
+    return PlainTextResponse(document.text)

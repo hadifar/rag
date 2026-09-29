@@ -97,12 +97,13 @@ dev = [
 
 [tool.importlinter]
 root_package = "rag"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "domain is pure"
 type = "forbidden"
 source_modules = ["rag.domain"]
-forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli"]
+forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli", "langchain_core", "langchain", "langgraph"]
 
 [[tool.importlinter.contracts]]
 name = "services do not import adapters, entrypoints, or the api layer directly"

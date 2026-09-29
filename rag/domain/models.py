@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from langchain_core.documents import Document
-
 
 @dataclass(frozen=True)
 class RawDocument:
@@ -14,12 +12,20 @@ class RawDocument:
 
 
 @dataclass(frozen=True)
+class Chunk:
+    text: str
+    # source_id: str, chunk_index: int, plus whatever RawDocument.metadata carries in.
+    metadata: dict[str, str | int]
+    id: str | None = None
+
+
+@dataclass(frozen=True)
 class IndexedDocument:
     """A document's chunks, plus the hash of the text they were cut from."""
 
     source_id: str
     content_hash: str
-    chunks: list[Document]
+    chunks: list[Chunk]
 
 
 @dataclass(frozen=True)

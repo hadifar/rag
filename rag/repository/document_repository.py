@@ -1,13 +1,12 @@
 import json
 from collections.abc import Sequence
 
-from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
-from rag.domain.models import IndexedDocument
+from rag.domain.models import Chunk, IndexedDocument
 
 RRF_K = 5
 
@@ -77,9 +76,7 @@ class DocumentRepository:
 
         chunks = [chunk for document in documents for chunk in document.chunks]
         vectors = (
-            await self._embeddings.aembed_documents(
-                [chunk.page_content for chunk in chunks]
-            )
+            await self._embeddings.aembed_documents([chunk.text for chunk in chunks])
             if chunks
             else []
         )
@@ -88,7 +85,7 @@ class DocumentRepository:
                 chunk.id,
                 chunk.metadata["source_id"],
                 chunk.metadata["chunk_index"],
-                chunk.page_content,
+                chunk.text,
                 Jsonb(chunk.metadata),
                 _to_vector_literal(vector),
             )
@@ -118,7 +115,7 @@ class DocumentRepository:
 
     async def asimilarity_search_with_score(
         self, query: str, k: int
-    ) -> list[tuple[Document, float]]:
+    ) -> list[tuple[Chunk, float]]:
         embedding = await self._embeddings.aembed_query(query)
         async with self._pool.connection() as conn:
             cur = await conn.execute(
@@ -132,11 +129,11 @@ class DocumentRepository:
             )
             rows = await cur.fetchall()
         return [
-            (Document(page_content=content, metadata=metadata), float(score))
+            (Chunk(text=content, metadata=metadata), float(score))
             for content, metadata, score in rows
         ]
 
-    async def aget_document(self, source_id: str) -> Document | None:
+    async def aget_document(self, source_id: str) -> Chunk | None:
         """Reassembles a document from its chunks, in order, so it doesn't depend on
         how many chunks the chunker cut it into.
         """
@@ -149,8 +146,8 @@ class DocumentRepository:
             rows = await cur.fetchall()
         if not rows:
             return None
-        return Document(
-            page_content="\n\n".join(content for content, _ in rows),
+        return Chunk(
+            text="\n\n".join(content for content, _ in rows),
             metadata=rows[0][1],
         )
 

@@ -5,10 +5,9 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Protocol
 
-from langchain_core.documents import Document
-
 from rag.domain.events import StreamEvent
 from rag.domain.models import (
+    Chunk,
     Conversation,
     HistoryMessage,
     IndexedDocument,
@@ -22,8 +21,8 @@ from rag.domain.models import (
 class VectorStorePort(Protocol):
     async def asimilarity_search_with_score(
         self, query: str, k: int
-    ) -> list[tuple[Document, float]]: ...
-    async def aget_document(self, source_id: str) -> Document | None: ...
+    ) -> list[tuple[Chunk, float]]: ...
+    async def aget_document(self, source_id: str) -> Chunk | None: ...
     async def aping(self) -> None:
         """Raises if the store can't serve queries; must be cheap (readiness probe)."""
         ...
@@ -32,7 +31,7 @@ class VectorStorePort(Protocol):
 class SearchPort(Protocol):
     """Finds knowledge-base passages for a query: the best first, with their scores."""
 
-    async def search(self, query: str) -> list[tuple[Document, float]]: ...
+    async def search(self, query: str) -> list[tuple[Chunk, float]]: ...
 
 
 class DocumentIndexPort(Protocol):
@@ -82,7 +81,7 @@ class IngestionRunRepositoryPort(Protocol):
 
 
 class ChunkerPort(Protocol):
-    def chunk(self, document: RawDocument) -> list[Document]: ...
+    def chunk(self, document: RawDocument) -> list[Chunk]: ...
 
 
 class UserRepositoryPort(Protocol):
