@@ -14,15 +14,12 @@ class RawDocument:
 @dataclass(frozen=True)
 class Chunk:
     text: str
-    # source_id: str, chunk_index: int, plus whatever RawDocument.metadata carries in.
     metadata: dict[str, str | int]
     id: str | None = None
 
 
 @dataclass(frozen=True)
 class IndexedDocument:
-    """A document's chunks, plus the hash of the text they were cut from."""
-
     source_id: str
     content_hash: str
     chunks: list[Chunk]
@@ -34,7 +31,6 @@ class IngestionReport:
     updated: int
     unchanged: int
     removed: int
-    # Embedded this run: only the chunks of added and updated documents.
     chunks: int
 
 

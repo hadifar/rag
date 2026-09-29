@@ -23,11 +23,12 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import SourcesReady, ToolCallResult, ToolCallStart
+from rag.domain.events import SourcesReady, ToolCall
 from rag.domain.models import Chunk
+from rag.services.agent_service.service import GenerationService
 from rag.services.auth_service.service import AuthService
+from rag.services.completion_service.service import CompletionService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
@@ -37,6 +38,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakeUserRepository,
+    StubCompletion,
     StubGeneration,
 )
 
@@ -90,15 +92,16 @@ def client() -> Generator[TestClient]:
 
     generation = StubGeneration(
         extra_events=[
-            ToolCallStart(name="search", query="hi"),
-            ToolCallResult(name="search", output="stub result"),
+            ToolCall(name="search", status="pending", query="hi"),
+            ToolCall(name="search", status="done", output="stub result"),
             SourcesReady(sources=["doc-a", "doc-b"]),
         ],
-        title="Greeting",
     )
+    completion = StubCompletion(title="Greeting")
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
         generation_service=cast(GenerationService, generation),
+        completion_service=cast(CompletionService, completion),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -109,6 +112,7 @@ def client() -> Generator[TestClient]:
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
             generation=generation,
+            completion=completion,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

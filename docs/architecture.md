@@ -46,26 +46,80 @@ The browser only ever sees one origin (e.g., `http://local:3000`) — it never k
 
 ```mermaid
 graph TD
-    api[rag/api]
-    services[rag/services]
-    domain[rag/domain]
-    adapters[rag/adapters]
-    repository[rag/repository]
+    api[api]
+    services[services]
+    domain[domain]
+    adapters[adapters]
+    repository[repository]
 
     api --> services
     services --> domain
     services -.->|only via ports| adapters
     services -.->|only via ports| repository
+    adapters --> domain
+    repository --> domain
 ```
 
-`domain` is pure. `services` and `api` never import `adapters`/`repository` directly — only via
-`domain.ports`, wired in by `container.py`. `repository` sits alongside `adapters` under the
-same rule. Enforced by `import-linter`, not just convention — see
-[enforcement.md](enforcement.md#python-code-quality).
+* `domain` is pure.
+* `services` and `api` never import `adapters`/`repository` directly — only via
+`domain.ports`, wired in by `container.py`.
+* `repository` sits alongside `adapters` under the
+same rule.
+* `adapters` and `repository` never import each other — they're independent implementations of
+`domain.ports`, each wired in separately by `container.py`. Both depend on `domain` directly
+(a `Protocol` to satisfy, models to construct), which is the one edge *into* `domain` this
+diagram allows, since `domain` itself stays pure in the other direction.
+
+## Frontend layering
+
+```mermaid
+graph TD
+    pages[pages]
+    components[components]
+    hooks[hooks]
+    context[context]
+    api[api]
+    types[types]
+    utils[utils]
+    backend[["backend<br/>/api/*"]]
+    schema[["backend<br/>/api/schema/*.py"]]
+
+    pages --> components
+    pages --> hooks
+    components --> hooks
+    components -.->|the Provider, composed into the tree| context
+    hooks --> api
+    context --> api
+    hooks --> utils
+    api --> types
+    utils --> types
+    api --> backend
+    schema -.-> types
+```
+
+* `components` and `pages` never import `api` — they present, and reach the server through a
+  hook or context.
+* `hooks` and `context` never import `components`/`pages` — the logic layer doesn't depend on
+  presentation.
+* `api` and `utils` are leaves on the frontend side: `api` only imports `types` (plus its own
+  `client.ts`) and calls the backend's `rag/api` routers directly (see
+  [System overview](#system-overview) for the network path — nginx proxying `/api/*` — between
+  them); `utils` is pure — no network, no framework state.
+* Hooks and context providers call `api` directly, and that's the intended shape: a hook is the
+  data-access layer, the same role a `useQuery` hook plays elsewhere. Only two contexts exist
+  (`AuthProvider`, `ConversationsProvider`) because only the session and the sidebar's
+  conversation list are genuinely app-wide; everything else is local to the hook that owns it.
+* `types` has two sources, not one: `rag/api/schema/*.py` (Pydantic models) generate it at build
+  time — a different relationship than `api`'s runtime calls to `backend`, and one-directional
+  (the schema is the source of truth; `types/api.ts` is generated, never hand-edited). See
+  [enforcement.md](enforcement.md#backendfrontend-schema-sync) for the full pipeline
+  (`openapi-typescript` → `api.generated.ts` → `api.ts`) and what keeps it from drifting.
+
+All enforced by oxlint; see [enforcement.md](enforcement.md#frontend-code-quality).
 
 ## Agent
 
-`generation_service/graph.py` builds the agent with LangChain's `create_agent`;
+`agent_service/graph.py` builds the agent with LangChain's `create_agent`;
 
 ```mermaid
 graph TD
@@ -85,27 +139,3 @@ graph TD
 ```
 
 See [services.md](services.md#generation-service) for what each middleware does and why.
-
-## Frontend structure
-
-```mermaid
-graph TD
-    pages["pages"]
-    context["context"]
-    hooks["hooks"]
-    utils["utils"]
-    api["api"]
-    components["components"]
-    backend[["backend<br/>/api/*"]]
-
-    pages --> components
-    pages --> hooks
-    components --> context
-    components -.-> hooks
-    hooks --> api
-    hooks --> context
-    hooks --> utils
-    context --> api
-    context --> utils
-    api --> backend
-```

@@ -30,9 +30,18 @@ export async function restoreSession(): Promise<void> {
   }
 }
 
+/**
+ * Clears the local session unconditionally, then best-effort tells the server so the
+ * refresh cookie is deleted too. Never throws: an offline/flaky network shouldn't leave
+ * the UI stuck showing the user as still logged in.
+ */
 export async function logout(): Promise<void> {
   setAccessToken(null);
-  await fetch(apiUrl('auth/logout'), { method: 'POST', credentials: 'include' });
+  try {
+    await fetch(apiUrl('auth/logout'), { method: 'POST', credentials: 'include' });
+  } catch {
+    // Best effort — the local session is already cleared regardless.
+  }
 }
 
 export function me(): Promise<UserResponse> {

@@ -132,14 +132,18 @@ class GenerationPort(Protocol):
     def stream_chat(
         self, message: str, thread_id: str
     ) -> AsyncIterator[StreamEvent]: ...
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        """A title for a conversation opening with this exchange, or None if one
-        couldn't be generated. Never raises.
-        """
-        ...
-
     async def get_history(self, thread_id: str) -> list[HistoryMessage]: ...
     async def delete_history(self, thread_id: str) -> None: ...
     async def list_thread_ids(self) -> set[str]:
         """Every thread that has stored messages."""
+        ...
+
+
+class CompletionPort(Protocol):
+    """Small, single-shot LLM completions that stand outside any chat turn."""
+
+    async def generate_title(self, question: str, answer: str) -> str | None:
+        """A title for a conversation opening with this exchange, or None if one
+        couldn't be generated. Never raises.
+        """
         ...

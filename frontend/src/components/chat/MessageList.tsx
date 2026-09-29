@@ -31,6 +31,10 @@ const MessageBubble = memo(function MessageBubble({
 
     case 'sources':
       return <SourcesBubble {...message.content} onOpen={onOpenSource} />;
+
+    default:
+      // A new bubble type fails to compile here until it's handled (see chatStream.ts).
+      return message satisfies never;
   }
 });
 

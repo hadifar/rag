@@ -26,17 +26,18 @@ rag/
 ├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
-├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
+├── app.py                            # FastAPI-specific only: lifespan, app.state, routers, error handling
 │
 ├── domain/                           # zero imports — pure contracts + models
 │   ├── models.py
 │   ├── ports.py
-│   └── errors.py                     # RagError subclasses, each carrying its own `status_code`
+│   └── errors.py                     # AppError subclasses, each carrying its own `status_code`
 │
 ├── services/                         # business logic — depends only on domain/ports
 │   ├── retrieval_service/
 │   ├── ingestion_service/
-│   ├── generation_service/
+│   ├── agent_service/                # the chat agent: graph, guards, tools, streaming
+│   ├── completion_service/           # single-shot LLM completions outside a chat turn (titles)
 │   ├── conversation_service/         # ownership, one empty draft per user, titles, paging, delete
 │   └── auth_service/                 # hashing + JWT issuance/verification, via UserRepositoryPort
 │
@@ -54,8 +55,7 @@ rag/
 │   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
-│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
-│   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
+│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/AuthenticatedUserDep
 │   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
 │   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
@@ -86,8 +86,9 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing, conversation titles; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
-| `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the generation service | `ConversationRepositoryPort`, `GenerationPort` (= `generation_service`) |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
+| `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
 `container.py`'s `build_container` is the composition root: an async context manager that opens
@@ -125,7 +126,7 @@ on `Settings.LLM`, a discriminated union selected by `LLM__BACKEND`:
 [infra/azure/main.bicep](../infra/azure/main.bicep)'s `llmProvider` param selects between the two
 at deploy time — see [docs/infra.md](infra.md) for the parameters each one needs.
 
-`GenerationService` and everything downstream only ever see the generic `BaseChatModel`
+`GenerationService` (in `agent_service`), `CompletionService` and everything downstream only ever see the generic `BaseChatModel`
 interface, so neither know or care which backend is selected.
 
 ## Conversation state
@@ -191,8 +192,8 @@ its own Postgres).
 
 ## Streaming
 
-`generation_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
-vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `model` node's chat
+`agent_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
+vocabulary (`TextDelta`, `ToolCall` — `status` `pending` with its `query`, then `done` with its `output` — and `SourcesReady`), filtered to the `model` node's chat
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
@@ -252,9 +253,9 @@ app to pick it up immediately.
 [Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
 `auth` and `health` don't.
 
-Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
-class attribute (500 on the base). `api/error_handlers.py` registers one
-`@app.exception_handler(RagError)`, and Starlette's MRO-based dispatch sends every subclass
+Errors: services raise `rag.domain.errors.AppError` subclasses, each with a `status_code`
+class attribute (500 on the base). `app.py`'s `register_error_handlers` registers one
+`@app.exception_handler(AppError)`, and Starlette's MRO-based dispatch sends every subclass
 there, so the response status comes from the exception class itself.
 
 - `POST /api/auth/login` — `{email, password}` → `{access_token, token_type}`, sets the refresh
