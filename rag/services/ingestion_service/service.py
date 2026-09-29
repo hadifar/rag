@@ -4,12 +4,12 @@ import logging
 import uuid
 
 from rag.domain.errors import (
+    AppError,
     ArchiveTooLargeError,
     EmptyKnowledgeBaseError,
     IngestionInProgressError,
     IngestionRunNotFoundError,
     NoArchiveError,
-    RagError,
 )
 from rag.domain.models import (
     IndexedDocument,
@@ -76,7 +76,7 @@ class IngestionService:
         """Never raises: however the ingestion ends is recorded on the run."""
         try:
             report = await self.ingest_archive(run.archive_name)
-        except RagError as exc:
+        except AppError as exc:
             await self._runs.fail(run.id, str(exc))
         except Exception:
             logger.exception("Ingestion run %s failed", run.id)

@@ -2,9 +2,9 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-from rag.api.error_handlers import register_error_handlers
 from rag.api.routers.auth import router as auth_router
 from rag.api.routers.conversations import router as conversations_router
 from rag.api.routers.health import router as health_router
@@ -13,6 +13,7 @@ from rag.api.routers.kb import router as kb_router
 from rag.api.routers.settings import router as settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
+from rag.domain.errors import AppError
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,13 @@ def _build_lifespan(container: Container | None, settings: Settings):
             yield
 
     return lifespan
+
+
+def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(AppError)
+    async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 
 async def _fail_interrupted_runs(container: Container) -> None:

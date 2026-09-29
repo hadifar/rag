@@ -135,7 +135,7 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "routers reach the domain only through deps and schema"
+name = "api routers reach the domain only through deps and schema"
 type = "forbidden"
 source_modules = ["rag.api.routers"]
 forbidden_modules = ["rag.domain"]
