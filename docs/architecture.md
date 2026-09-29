@@ -152,16 +152,16 @@ reached by a bare browser navigation.
 
 ## Backend schema → frontend types
 
-A build-time connection, not a runtime one — `types/api.ts` exposes the whole generated
-schema map as `Schemas`, so `api/chat.ts` and `api/settings.ts` reference `Schemas['MessageRequest']`
-/ `Schemas['SettingsResponse']` instead of hand-duplicating request/response shapes:
+A build-time connection, not a runtime one — `types/api.ts` names one type per backend model,
+exactly as in `rag/api/schema/` (`MessageRequest`, `SettingsResponse`, `ToolEvent`, …), so the
+rest of the frontend imports those instead of hand-duplicating request/response shapes:
 
 ```mermaid
 graph LR
     schema["rag/api/schema/<br/>conversations.py, auth.py, settings.py, health.py"]
     genscript["openapi-typescript<br/>(generate:types)"]
     generated[types/api.generated.ts]
-    idx["types/api.ts<br/>Schemas = components['schemas']"]
+    idx["types/api.ts<br/>one named type per backend model"]
     apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
 
     schema --> genscript --> generated --> idx --> apiclient

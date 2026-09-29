@@ -1,9 +1,7 @@
-import type { Schemas } from '../types';
-
-type IngestionRun = Schemas['IngestionRunResponse'];
+import type { IngestionRunResponse } from '../types';
 
 /** One line on how a run went, e.g. "2 added, 1 removed (27 documents)". */
-export function describeRun(run: IngestionRun): string {
+export function describeRun(run: IngestionRunResponse): string {
   if (run.status === 'running') return 'Indexing…';
   if (run.status === 'failed') return run.error ?? 'Failed.';
 
@@ -22,6 +20,6 @@ export function describeRun(run: IngestionRun): string {
 }
 
 /** When the run ended, or started if it's still going, in the viewer's locale. */
-export function runTime(run: IngestionRun): string {
+export function runTime(run: IngestionRunResponse): string {
   return new Date(run.finished_at ?? run.started_at).toLocaleString();
 }

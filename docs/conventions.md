@@ -65,7 +65,8 @@ class ChunkerPort(Protocol):
 - Its frontend calls go in the matching `frontend/src/api/x.ts` (one module per router), through
   `authFetch` from `api/client.ts` — never a bare `fetch` or a token passed in by the caller
   (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`).
-  Request/response types come from the generated `Schemas`, not hand-written interfaces.
+  Request/response types are the named types in `frontend/src/types/api.ts` (one per backend
+  model, same name) — add the new model's line there, never a hand-written interface.
 
 ## Adding a user-owned resource: check ownership in the service, answer 404
 
@@ -83,9 +84,10 @@ Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSO
 its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
 1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
 2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/conversations.py`, added to
-   `StreamEventResponse`, and its case in `to_stream_event`;
-3. its `Schemas[...]` member in `ChatStreamEvent` (`frontend/src/types/chat.ts`) and its case in
-   `createBubbleHandler` (`frontend/src/utils/chatStream.ts`).
+   the `StreamEventResponse` root model's union, and its case in `_payload`;
+3. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`
+   (`frontend/src/utils/chatStream.ts`) — whose `satisfies never` default fails to compile until
+   the new event is handled.
 
 The `frontend-api-types` pre-commit hook regenerates the types, and `frontend-typecheck` fails
 if the frontend no longer matches them.

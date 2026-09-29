@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Schemas } from '../../../src/types';
+import type { IngestionRunResponse } from '../../../src/types';
 import { describeRun } from '../../../src/utils/ingestions';
 
-function run(overrides: Partial<Schemas['IngestionRunResponse']>): Schemas['IngestionRunResponse'] {
+function run(overrides: Partial<IngestionRunResponse>): IngestionRunResponse {
   return {
     id: 'r1',
     status: 'succeeded',

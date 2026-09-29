@@ -4,11 +4,11 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
-import type { ChatStreamEvent, Schemas } from '../types';
+import type { MessageRequest, StreamEventResponse } from '../types';
 
-export type StreamChatArgs = Schemas['MessageRequest'] & {
+export type StreamChatArgs = MessageRequest & {
   conversationId: string;
-  onEvent: (event: ChatStreamEvent) => void;
+  onEvent: (event: StreamEventResponse) => void;
   signal?: AbortSignal;
 };
 
@@ -36,8 +36,8 @@ export function streamChat({
     },
 
     onmessage({ data }) {
-      // Each event is one JSON object, told apart by its `type` (see Schemas).
-      onEvent(JSON.parse(data) as ChatStreamEvent);
+      // Each event is one JSON object, told apart by its `type` (see StreamEventResponse).
+      onEvent(JSON.parse(data) as StreamEventResponse);
     },
     onerror(err) {
       throw err;

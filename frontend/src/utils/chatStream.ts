@@ -1,4 +1,4 @@
-import type { ChatMessageInput, ChatStreamEvent } from '../types';
+import type { ChatMessageInput, StreamEventResponse } from '../types';
 
 type AppendMessage = (msg: ChatMessageInput) => string;
 type UpdateMessage = (id: string, msg: ChatMessageInput) => void;
@@ -17,7 +17,7 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
   let assistantMsgText = '';
   let toolMsgId: string | null = null;
 
-  return (event: ChatStreamEvent) => {
+  return (event: StreamEventResponse) => {
     switch (event.type) {
       case 'text':
         assistantMsgText += event.text;
@@ -40,6 +40,9 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
         // Sent only when the answer searched; an empty list still gets its bubble.
         append({ type: 'sources', content: { sources: event.sources } });
         break;
+      default:
+        // A new backend event type fails to compile here until it's handled.
+        event satisfies never;
     }
   };
 }

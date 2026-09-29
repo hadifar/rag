@@ -12,7 +12,7 @@ import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
 import { historyToMessages } from '../utils/history';
-import type { ChatStreamEvent } from '../types';
+import type { StreamEventResponse } from '../types';
 import { useMessageList } from './useMessageList';
 
 function historyErrorText(err: unknown): string {
@@ -79,7 +79,7 @@ export function useChat(conversationId: string | undefined) {
       };
 
       const showBubble = createBubbleHandler(append, update);
-      const onEvent = (event: ChatStreamEvent) => {
+      const onEvent = (event: StreamEventResponse) => {
         clearTyping();
         showBubble(event);
       };

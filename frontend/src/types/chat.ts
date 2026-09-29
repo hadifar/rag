@@ -1,9 +1,9 @@
-import type { Schemas } from './api';
+import type { SourcesEvent, TextEvent, ToolEvent } from './api';
 
 // A bubble's content is the stream event it shows, minus its `type`.
-export type TextContent = Omit<Schemas['TextEvent'], 'type'>;
-export type ToolContent = Omit<Schemas['ToolEvent'], 'type'>;
-export type SourcesContent = Omit<Schemas['SourcesEvent'], 'type'>;
+export type TextContent = Omit<TextEvent, 'type'>;
+export type ToolContent = Omit<ToolEvent, 'type'>;
+export type SourcesContent = Omit<SourcesEvent, 'type'>;
 
 export type ChatMessageInput =
   | { type: 'typing' }
@@ -12,9 +12,3 @@ export type ChatMessageInput =
   | { type: 'sources'; content: SourcesContent };
 
 export type ChatMessage = ChatMessageInput & { id: string };
-
-/** One event of a message's answer stream; the shapes come from the backend's schema. */
-export type ChatStreamEvent =
-  | Schemas['TextEvent']
-  | Schemas['ToolEvent']
-  | Schemas['SourcesEvent'];

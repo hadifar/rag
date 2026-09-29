@@ -15,7 +15,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useConversations } from '../../hooks/useConversations';
 import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../../utils/conversations';
-import type { Conversation } from '../../types';
+import type { ConversationResponse } from '../../types';
 
 // Shown until the conversation's first answer names it.
 const NEW_CHAT_TITLE = 'New chat';
@@ -58,7 +58,7 @@ function ConversationLink({
   conversation,
   onDelete,
 }: {
-  conversation: Conversation;
+  conversation: ConversationResponse;
   onDelete: (id: string) => void;
 }) {
   return (

@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 
 import { login as apiLogin, logout as apiLogout, me, restoreSession } from '../api/auth';
 import { onSessionExpired } from '../api/client';
-import type { Schemas } from '../types';
+import type { UserResponse } from '../types';
 import { AuthContext, type AuthStatus } from '../hooks/useAuth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
-  const [user, setUser] = useState<Schemas['UserResponse'] | null>(null);
+  const [user, setUser] = useState<UserResponse | null>(null);
 
   const applySession = useCallback(async () => {
     setUser(await me());

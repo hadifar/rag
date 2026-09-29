@@ -29,9 +29,16 @@ just rely on review discipline.
   `rag/api/schema/*.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —
   auto-fixes locally like `uv-lock`, and re-runs in CI so a stale generated file fails the
   `pre-commit` job
-- `frontend/src/types/index.ts` re-exports the whole schema map as
-  `Schemas = components['schemas']` rather than hand-picked aliases, so there's no per-type
-  step that could fall out of sync — a new backend schema is just `Schemas['NewType']`
+- `frontend/src/types/api.ts` is the one place backend shapes enter the frontend: one named
+  type per model in `rag/api/schema/`, same name, grouped by module (`ConversationResponse`,
+  `ToolEvent`, …); the generated `components` map isn't exported, so nothing else can reach
+  around it. A backend model renamed or removed breaks its line there (`tsc`, via the
+  `frontend-typecheck` pre-commit hook); a new one needs its line added before the frontend can
+  use it — the one manual step, and it can't drift silently
+- `frontend-typecheck` (pre-commit, and CI's `pre-commit` job) runs `tsc -b` over the frontend,
+  so code that no longer matches the regenerated types fails instead of breaking at runtime;
+  `createBubbleHandler`'s `satisfies never` default makes a new stream event type one of those
+  failures (the stream union is a named root model, `StreamEventResponse`, so it's generated too)
 
 ## Tests
 - `pytest tests/unit` runs on every commit (pre-commit hook) and again in CI

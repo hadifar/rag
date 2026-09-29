@@ -1,4 +1,4 @@
-import type { Schemas } from '../types';
+import type { TokenResponse } from '../types';
 
 // Absolute: a relative 'api' would resolve under nested routes like /chat/:id.
 const API_BASE = '/api';
@@ -57,7 +57,7 @@ export function refreshSession(): Promise<boolean> {
   pendingRefresh ??= fetch(apiUrl('auth/refresh'), { method: 'POST', credentials: 'include' })
     .then(async (res) => {
       if (!res.ok) throw new Error(`refresh failed: ${res.status}`);
-      const body: Schemas['TokenResponse'] = await res.json();
+      const body: TokenResponse = await res.json();
       setAccessToken(body.access_token);
       return true;
     })

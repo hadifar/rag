@@ -1,17 +1,17 @@
 import { createContext, use } from 'react';
 
-import type { Conversation } from '../types';
+import type { ConversationResponse } from '../types';
 
 export type ListStatus = 'loading' | 'ready' | 'error';
 
 export type ConversationsContextValue = {
-  conversations: Conversation[];
+  conversations: ConversationResponse[];
   status: ListStatus;
   hasMore: boolean;
   isLoadingMore: boolean;
   loadMore: () => void;
   /** Add `conversation` at the top, or move it there. */
-  upsert: (conversation: Conversation) => void;
+  upsert: (conversation: ConversationResponse) => void;
   /** A message was sent to the conversation with `id`: move it to the top. */
   bump: (id: string) => void;
   rename: (id: string, title: string) => void;

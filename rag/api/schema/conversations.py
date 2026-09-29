@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from rag.domain.events import (
     SourcesReady,
@@ -68,12 +68,21 @@ class SourcesEvent(BaseModel):
     sources: list[str]
 
 
-StreamEventResponse = Annotated[
-    TextEvent | ToolEvent | SourcesEvent, Field(discriminator="type")
-]
+class StreamEventResponse(
+    RootModel[
+        Annotated[TextEvent | ToolEvent | SourcesEvent, Field(discriminator="type")]
+    ]
+):
+    """One event of the message stream. A named model rather than a bare union, so it's
+    in the OpenAPI schema and the frontend's generated types by this name.
+    """
 
 
 def to_stream_event(event: StreamEvent) -> StreamEventResponse:
+    return StreamEventResponse(_payload(event))
+
+
+def _payload(event: StreamEvent) -> TextEvent | ToolEvent | SourcesEvent:
     match event:
         case TextDelta(text=text):
             return TextEvent(text=text)

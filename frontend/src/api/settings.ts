@@ -1,6 +1,6 @@
 import { requestJson } from './client';
-import type { Schemas } from '../types';
+import type { SettingsResponse } from '../types';
 
-export function fetchSettings(): Promise<Schemas['SettingsResponse']> {
+export function fetchSettings(): Promise<SettingsResponse> {
   return requestJson('settings');
 }
