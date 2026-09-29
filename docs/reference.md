@@ -26,12 +26,12 @@ rag/
 ├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
-├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
+├── app.py                            # FastAPI-specific only: lifespan, app.state, routers, error handling
 │
 ├── domain/                           # zero imports — pure contracts + models
 │   ├── models.py
 │   ├── ports.py
-│   └── errors.py                     # RagError subclasses, each carrying its own `status_code`
+│   └── errors.py                     # AppError subclasses, each carrying its own `status_code`
 │
 ├── services/                         # business logic — depends only on domain/ports
 │   ├── retrieval_service/
@@ -54,8 +54,7 @@ rag/
 │   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
-│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
-│   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
+│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/AuthenticatedUserDep
 │   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
 │   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
@@ -252,9 +251,9 @@ app to pick it up immediately.
 [Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
 `auth` and `health` don't.
 
-Errors: services raise `rag.domain.errors.RagError` subclasses, each with a `status_code`
-class attribute (500 on the base). `api/error_handlers.py` registers one
-`@app.exception_handler(RagError)`, and Starlette's MRO-based dispatch sends every subclass
+Errors: services raise `rag.domain.errors.AppError` subclasses, each with a `status_code`
+class attribute (500 on the base). `app.py`'s `register_error_handlers` registers one
+`@app.exception_handler(AppError)`, and Starlette's MRO-based dispatch sends every subclass
 there, so the response status comes from the exception class itself.
 
 - `POST /api/auth/login` — `{email, password}` → `{access_token, token_type}`, sets the refresh
