@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 class RawDocument:
     source_id: str
     text: str
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,8 @@ class User:
 class Conversation:
     id: uuid.UUID
     user_id: uuid.UUID
-    title: str
+    # None only while the conversation is empty: its first message names it.
+    title: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -20,11 +20,11 @@ describe('createBubbleHandler', () => {
     expect(update).toHaveBeenLastCalledWith('m1', assistantText('Hello'));
   });
 
-  it('fills in the tool bubble when its result arrives', () => {
+  it('fills in the tool bubble when it is done', () => {
     const { append, update, handle } = setup();
 
-    handle({ type: 'tool_start', name: 'search', query: 'pricing' });
-    handle({ type: 'tool_result', name: 'search', output: '3 chunks' });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'pricing' });
+    handle({ type: 'tool', name: 'search', status: 'done', output: '3 chunks' });
 
     expect(append).toHaveBeenCalledExactlyOnceWith({
       type: 'tool',

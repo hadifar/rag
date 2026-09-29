@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
-import { fetchConversationMessages } from '../api/conversations';
+import { openKbSource } from '../api/kb';
+import {
+  createConversation,
+  fetchConversationMessages,
+  generateTitle,
+} from '../api/conversations';
 import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
 import { historyToMessages } from '../utils/history';
-import type { ChatStreamEvent } from '../types';
 import { useMessageList } from './useMessageList';
 
 function historyErrorText(err: unknown): string {
@@ -19,9 +23,9 @@ function historyErrorText(err: unknown): string {
 
 /** `conversationId` is the one in the URL; undefined for a new, not yet sent chat. */
 export function useChat(conversationId: string | undefined) {
-  const { upsert, rename } = useConversations();
+  const { upsert, bump, rename } = useConversations();
   const navigate = useNavigate();
-  const { messages, append, update, remove, replace } = useMessageList();
+  const { messages, append, update, showTyping, replace } = useMessageList();
 
   const abortRef = useRef<AbortController | null>(null);
   // The conversation on screen, which new messages go to. Ahead of the URL for a
@@ -54,6 +58,34 @@ export function useChat(conversationId: string | undefined) {
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // The conversation a message goes to: the one on screen, or a new one, which the URL
+  // then follows before anything streams.
+  const openConversation = useCallback(
+    async (signal: AbortSignal): Promise<{ id: string; isNew: boolean }> => {
+      const current = conversationIdRef.current;
+      if (current) {
+        bump(current);
+        return { id: current, isNew: false };
+      }
+      const conversation = await createConversation(signal);
+      upsert(conversation);
+      conversationIdRef.current = conversation.id; // before navigating, so it isn't reloaded
+      navigate(conversationPath(conversation.id), { replace: true });
+      return { id: conversation.id, isNew: true };
+    },
+    [bump, upsert, navigate]
+  );
+
+  // Gives a new chat a proper title once its first answer is in. On failure it keeps the
+  // title the server cut from the first message, which the sidebar shows on reload.
+  const nameConversation = useCallback(
+    async (id: string) => {
+      const { title } = await generateTitle(id).catch(() => ({ title: null }));
+      if (title) rename(id, title);
+    },
+    [rename]
+  );
+
   const sendMessage = useCallback(
     async (val: string) => {
       const text = val.trim();
@@ -64,58 +96,39 @@ export function useChat(conversationId: string | undefined) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // A new chat gets its id here, and the URL follows it before anything streams.
-      let id = conversationIdRef.current;
-      if (!id) {
-        id = crypto.randomUUID();
-        conversationIdRef.current = id;
-        navigate(conversationPath(id), { replace: true });
-      }
-
       append({ type: 'text', content: { text }, position: 'right' });
-
-      const typingId = append({ type: 'typing' });
-      let typingCleared = false;
-      const clearTyping = () => {
-        if (typingCleared) return;
-        typingCleared = true;
-        remove(typingId);
-      };
-
+      const hideTyping = showTyping();
       const showBubble = createBubbleHandler(append, update);
-      const onEvent = (event: ChatStreamEvent) => {
-        switch (event.type) {
-          case 'conversation':
-            upsert(event.conversation);
-            return;
-          case 'title':
-            rename(event.id, event.title);
-            return;
-          default:
-            clearTyping();
-            showBubble(event);
-        }
-      };
 
       try {
+        const { id, isNew } = await openConversation(controller.signal);
         await streamChat({
+          conversationId: id,
           message: text,
-          conversation_id: id,
-          onEvent,
+          onEvent: (event) => {
+            hideTyping();
+            showBubble(event);
+          },
           signal: controller.signal,
         });
+        if (isNew) void nameConversation(id);
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);
           append(assistantText(`Something went wrong: ${message}`));
         }
       } finally {
-        clearTyping();
+        hideTyping();
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [append, update, remove, upsert, rename, navigate],
+    [append, update, showTyping, openConversation, nameConversation]
   );
 
-  return { messages, sendMessage };
+  /** Opens a cited knowledge-base document in a new tab. */
+  const openSource = useCallback((name: string) => {
+    openKbSource(name).catch(() => window.alert("Couldn't open that document. Please try again."));
+  }, []);
+
+  return { messages, sendMessage, openSource };
 }

@@ -1,9 +1,8 @@
 from typing import Annotated
 
 from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from rag.config import Settings
 from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
@@ -11,23 +10,14 @@ from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-
-def get_app_settings(request: Request) -> Settings:
-    """FastAPI dependency: reads the Settings create_app() stashed on app.state."""
-    return request.app.state.settings
-
-
-SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+# A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
+# not the OAuth2 password form that /docs' Authorize button would post.
+_bearer = HTTPBearer()
 
 
 def get_container(request: Request) -> Container:
-    """FastAPI dependency: reads the Container the lifespan stashed on app.state."""
-    container = getattr(request.app.state, "container", None)
-    if container is None:
-        raise RuntimeError("Container not initialized — app lifespan hasn't started")
-    return container
+    """The Container the lifespan stashed on app.state."""
+    return request.app.state.container
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]
@@ -64,9 +54,10 @@ ConversationServiceDep = Annotated[
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(_oauth2_scheme)], auth_service: AuthServiceDep
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    auth_service: AuthServiceDep,
 ) -> User:
-    user_id = auth_service.verify_access_token(token)
+    user_id = auth_service.verify_access_token(credentials.credentials)
     return await auth_service.get_user(user_id)
 
 

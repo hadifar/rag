@@ -6,13 +6,9 @@ import {
   fetchLatestIngestionRun,
   uploadKnowledgeBase,
 } from '../api/ingestions';
-import type { Schemas } from '../types';
+import type { IngestionRunResponse, UploadPhase } from '../types';
 import { describeRun, runTime } from '../utils/ingestions';
-
-type IngestionRun = Schemas['IngestionRunResponse'];
-
-/** `failed` covers both a rejected upload and a run that failed; `error` says which. */
-export type UploadPhase = 'idle' | 'uploading' | 'running' | 'succeeded' | 'failed';
+import { useLoadOnMount } from './useLoadOnMount';
 
 export const POLL_INTERVAL_MS = 2000;
 // Consecutive failed status checks (network blips) tolerated before giving up.
@@ -24,28 +20,19 @@ const MAX_POLL_FAILURES = 5;
  * running one back up.
  */
 export function useKbUpload() {
-  const [latest, setLatest] = useState<IngestionRun | null>(null);
+  const [latest, setLatest] = useState<IngestionRunResponse | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchLatestIngestionRun()
-      .then((run) => {
-        if (cancelled) return;
-        setLatest(run);
-        if (run?.status === 'running') {
-          setRunId(run.id);
-          setPhase('running');
-        }
-      })
-      // Only the "last updated" line is missing then; uploading still works.
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // On failure only the "last updated" line is missing; uploading still works.
+  useLoadOnMount(fetchLatestIngestionRun, (run) => {
+    setLatest(run);
+    if (run?.status === 'running') {
+      setRunId(run.id);
+      setPhase('running');
+    }
+  });
 
   useEffect(() => {
     if (phase !== 'running' || runId === null) return;

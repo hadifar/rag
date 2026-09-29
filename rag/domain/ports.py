@@ -29,6 +29,12 @@ class VectorStorePort(Protocol):
         ...
 
 
+class SearchPort(Protocol):
+    """Finds knowledge-base passages for a query: the best first, with their scores."""
+
+    async def search(self, query: str) -> list[tuple[Document, float]]: ...
+
+
 class DocumentIndexPort(Protocol):
     """The write side of the knowledge base: what's indexed, and replacing it."""
 
@@ -94,10 +100,10 @@ class UserRepositoryPort(Protocol):
 
 
 class ConversationRepositoryPort(Protocol):
-    async def create(
-        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
-    ) -> Conversation:
-        """`conversation_id` is the client's id for it; None generates one."""
+    async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
+        """The user's empty (untitled) conversation, created if they have none, and
+        bumped to most recently used. A user has at most one.
+        """
         ...
 
     async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...
@@ -113,6 +119,9 @@ class ConversationRepositoryPort(Protocol):
     async def touch(self, conversation_id: uuid.UUID) -> Conversation | None: ...
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...
     async def delete(self, conversation_id: uuid.UUID) -> None: ...
+    async def all_ids(self) -> set[uuid.UUID]:
+        """Every conversation's id, whoever owns it."""
+        ...
 
 
 class GenerationPort(Protocol):
@@ -129,3 +138,6 @@ class GenerationPort(Protocol):
 
     async def get_history(self, thread_id: str) -> list[HistoryMessage]: ...
     async def delete_history(self, thread_id: str) -> None: ...
+    async def list_thread_ids(self) -> set[str]:
+        """Every thread that has stored messages."""
+        ...

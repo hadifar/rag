@@ -54,3 +54,5 @@ jobs:
       - run: pip install commitizen
       - name: Check commit messages follow Conventional Commits
         run: cz check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+      - name: Check committed migrations were not changed
+        run: bash scripts/check_migrations_append_only.sh ${{ github.event.pull_request.base.sha }}

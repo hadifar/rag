@@ -1,7 +1,7 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import { ArrowPathIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
-import type { UploadPhase } from '../../hooks/useKbUpload';
+import type { UploadPhase } from '../../types';
 
 type Props = {
   phase: UploadPhase;

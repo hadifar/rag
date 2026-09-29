@@ -44,8 +44,11 @@ async def test_create_get_touch_title_delete(
 ) -> None:
     repository = ConversationRepository(pool)
 
-    created = await repository.create(user_id, "first")
+    created = await repository.get_or_create_empty(user_id)
+    assert created.title is None
     assert await repository.get(created.id) == created
+    # Still empty, so asking again returns the same row instead of a second one.
+    assert (await repository.get_or_create_empty(user_id)).id == created.id
 
     touched = await repository.touch(created.id)
     assert touched is not None and touched.updated_at > created.updated_at
@@ -59,23 +62,15 @@ async def test_create_get_touch_title_delete(
     assert await repository.touch(created.id) is None
 
 
-async def test_create_uses_the_given_id(
-    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
-) -> None:
-    repository = ConversationRepository(pool)
-    client_id = uuid.uuid4()
-
-    created = await repository.create(user_id, "from the client", client_id)
-
-    assert created.id == client_id
-    assert await repository.get(client_id) == created
-
-
 async def test_keyset_pagination_visits_every_row_once_newest_first(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:
     repository = ConversationRepository(pool)
-    created = [await repository.create(user_id, f"chat {i}") for i in range(5)]
+    created = []
+    for i in range(5):
+        conversation = await repository.get_or_create_empty(user_id)
+        await repository.set_title(conversation.id, f"chat {i}")  # frees the next one
+        created.append(conversation)
     # Same updated_at for all: the id tiebreaker alone must keep pages disjoint.
     async with pool.connection() as conn:
         await conn.execute(
@@ -96,7 +91,7 @@ async def test_deleting_a_user_deletes_their_conversations(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:
     repository = ConversationRepository(pool)
-    conversation = await repository.create(user_id, "doomed")
+    conversation = await repository.get_or_create_empty(user_id)
 
     async with pool.connection() as conn:
         await conn.execute("DELETE FROM users WHERE id = %s", (user_id,))

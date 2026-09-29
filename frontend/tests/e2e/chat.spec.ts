@@ -12,13 +12,17 @@ test('asking a question streams back a sourced answer that is saved', async ({ p
 
   const question = 'What plans do you offer and how much do they cost?';
   const streamDone = page
-    .waitForResponse('**/api/chat/stream')
+    .waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/api\/conversations\/[^/]+\/messages$/.test(response.url()),
+    )
     .then((response) => response.finished());
 
   await page.getByPlaceholder('Type a message...').fill(question);
   await page.keyboard.press('Enter');
 
-  // A new chat gets its id from the client before anything streams.
+  // The new chat is created first, and the URL follows it before anything streams.
   await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
   const messages = page.getByRole('log', { name: 'Messages' });
   await expect(messages.getByText(question)).toBeVisible();

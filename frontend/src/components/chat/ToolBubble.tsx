@@ -22,7 +22,7 @@ export function ToolBubble({ name, query, output, status }: ToolContent) {
       </button>
       {!collapsed && (
         <div className="mt-1 whitespace-pre-wrap break-words text-slate-600">
-          {status === 'pending' ? `Searching for: ${query}` : output}
+          {status === 'pending' ? `Searching for: ${query ?? ''}` : output}
         </div>
       )}
     </div>

@@ -150,16 +150,18 @@ class FakeConversationRepository:
         self._clock += timedelta(seconds=1)
         return self._clock
 
-    async def create(
-        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
-    ) -> Conversation:
+    async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
+        empty = next(
+            (c for c in self.rows.values() if c.user_id == user_id and c.title is None),
+            None,
+        )
+        if empty is not None:
+            touched = await self.touch(empty.id)
+            assert touched is not None
+            return touched
         now = self._now()
         conversation = Conversation(
-            id=conversation_id or uuid.uuid4(),
-            user_id=user_id,
-            title=title,
-            created_at=now,
-            updated_at=now,
+            id=uuid.uuid4(), user_id=user_id, title=None, created_at=now, updated_at=now
         )
         self.rows[conversation.id] = conversation
         return conversation
@@ -195,6 +197,9 @@ class FakeConversationRepository:
 
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
+
+    async def all_ids(self) -> set[uuid.UUID]:
+        return set(self.rows)
 
 
 class StubGeneration:
@@ -237,6 +242,9 @@ class StubGeneration:
     async def delete_history(self, thread_id: str) -> None:
         self.deleted_threads.append(thread_id)
         self.threads.pop(thread_id, None)
+
+    async def list_thread_ids(self) -> set[str]:
+        return set(self.threads)
 
 
 class FakeTitleModel:

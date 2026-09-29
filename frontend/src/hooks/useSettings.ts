@@ -1,36 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { fetchSettings } from '../api/settings';
-import type { Schemas } from '../types';
+import { useLoadOnMount } from './useLoadOnMount';
+import type { LoadStatus, SettingsResponse } from '../types';
 
-type Settings = Schemas['SettingsResponse'];
-type LoadStatus = 'loading' | 'ready' | 'error';
-
-const EMPTY: Settings = { model: '', temperature: 0, top_k: 4 };
+const EMPTY: SettingsResponse = { model: '', temperature: 0, top_k: 4 };
 const SAVED_NOTICE_MS = 3000;
 
 /** The settings form: loaded from the server, edited locally, and saved. */
 export function useSettings() {
-  const [form, setForm] = useState<Settings>(EMPTY);
+  const [form, setForm] = useState<SettingsResponse>(EMPTY);
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchSettings()
-      .then((settings) => {
-        if (cancelled) return;
-        setForm(settings);
-        setStatus('ready');
-      })
-      .catch(() => {
-        // Keep the blank form so it can still be filled in.
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useLoadOnMount(
+    fetchSettings,
+    (settings) => {
+      setForm(settings);
+      setStatus('ready');
+    },
+    () => setStatus('error') // keeps the blank form, so it can still be filled in
+  );
 
   // Hide the "Saved" notice again after a moment.
   useEffect(() => {
@@ -39,9 +29,12 @@ export function useSettings() {
     return () => clearTimeout(timer);
   }, [saved]);
 
-  const update = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  }, []);
+  const update = useCallback(
+    <K extends keyof SettingsResponse>(key: K, value: SettingsResponse[K]) => {
+      setForm((current) => ({ ...current, [key]: value }));
+    },
+    []
+  );
 
   // TODO: persist via the settings API once the endpoint supports writes.
   const save = useCallback(() => setSaved(true), []);

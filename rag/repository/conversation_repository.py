@@ -10,18 +10,19 @@ _COLUMNS = "id, user_id, title, created_at, updated_at"
 class ConversationRepository(BaseRepository[Conversation]):
     row_type = Conversation
 
-    async def create(
-        self, user_id: uuid.UUID, title: str, conversation_id: uuid.UUID | None = None
-    ) -> Conversation:
+    async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
+        # One statement, so two concurrent calls can't both create one: the second
+        # hits ux_conversations_one_empty_per_user and gets the first's row back.
         conversation = await self._fetch_one(
             f"""
-            INSERT INTO conversations (id, user_id, title)
-            VALUES (%s, %s, %s)
+            INSERT INTO conversations (user_id) VALUES (%s)
+            ON CONFLICT (user_id) WHERE title IS NULL
+            DO UPDATE SET updated_at = now()
             RETURNING {_COLUMNS}
             """,
-            (conversation_id or uuid.uuid4(), user_id, title),
+            (user_id,),
         )
-        assert conversation is not None  # INSERT ... RETURNING always yields a row
+        assert conversation is not None  # the INSERT or the UPDATE always returns it
         return conversation
 
     async def get(self, conversation_id: uuid.UUID) -> Conversation | None:
@@ -78,3 +79,8 @@ class ConversationRepository(BaseRepository[Conversation]):
         await self._execute(
             "DELETE FROM conversations WHERE id = %s", (conversation_id,)
         )
+
+    async def all_ids(self) -> set[uuid.UUID]:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("SELECT id FROM conversations")
+            return {row[0] for row in await cur.fetchall()}

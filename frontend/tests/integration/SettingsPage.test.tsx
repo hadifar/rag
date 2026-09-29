@@ -5,12 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthContext } from '../../src/hooks/useAuth';
 import { SettingsPage } from '../../src/pages/SettingsPage';
-import type { Schemas } from '../../src/types';
+import type { IngestionRunResponse, SettingsResponse } from '../../src/types';
 import { server } from '../server';
 
-type Run = Schemas['IngestionRunResponse'];
-
-const running: Run = {
+const running: IngestionRunResponse = {
   id: 'run-1',
   status: 'running',
   started_at: '2026-09-28T10:00:00Z',
@@ -22,7 +20,7 @@ const running: Run = {
   error: null,
 };
 
-const succeeded: Run = {
+const succeeded: IngestionRunResponse = {
   ...running,
   status: 'succeeded',
   finished_at: '2026-09-28T10:00:05Z',
@@ -54,10 +52,10 @@ function answerUploads(respond: () => Response): FormData[] {
 }
 
 // The real page, hooks and API client; only the backend is faked (see ../server.ts).
-function renderSettings({ isAdmin = true, latest = null as Run | null } = {}) {
+function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse | null } = {}) {
   server.use(
     http.get('/api/settings', () =>
-      HttpResponse.json<Schemas['SettingsResponse']>({ model: 'm', temperature: 0.2, top_k: 4 }),
+      HttpResponse.json<SettingsResponse>({ model: 'm', temperature: 0.2, top_k: 4 }),
     ),
     http.get('/api/ingestions/latest', () => HttpResponse.json(latest)),
   );
@@ -105,7 +103,10 @@ describe('SettingsPage knowledge base', () => {
     await uploadZip(user);
 
     expect(await screen.findByRole('status')).toHaveTextContent('Indexing…');
-    expect((sent[0].get('file') as File).name).toBe('kb.zip');
+    expect(sent).toHaveLength(1);
+    const file = sent[0]?.get('file');
+    expect(file).toBeInstanceOf(File);
+    expect((file as File).name).toBe('kb.zip');
     // The second status check, one poll interval later, sees it finished.
     expect(
       await screen.findByText('Done: 2 added (2 documents)', {}, { timeout: 3000 }),

@@ -8,7 +8,7 @@ from psycopg_pool import AsyncConnectionPool
 class BaseRepository[T]:
     """Base for repositories whose rows map onto one domain dataclass, `row_type`."""
 
-    row_type: ClassVar[type]
+    row_type: ClassVar[type[Any]]
 
     def __init__(self, pool: AsyncConnectionPool[AsyncConnection]):
         self._pool = pool

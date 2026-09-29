@@ -1,8 +1,10 @@
+from datetime import timedelta
+from typing import Annotated
+
 from fastapi import APIRouter, Cookie, Response
 
-from rag.api.deps import AuthServiceDep, CurrentUserDep, SettingsDep
+from rag.api.deps import AuthServiceDep, CurrentUserDep
 from rag.api.schema.auth import LoginRequest, TokenResponse, UserResponse
-from rag.config import Settings
 from rag.domain.errors import InvalidTokenError
 
 _REFRESH_COOKIE = "refresh_token"
@@ -11,11 +13,11 @@ _REFRESH_COOKIE_PATH = "/api/auth"
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _set_refresh_cookie(response: Response, token: str, settings: Settings) -> None:
+def _set_refresh_cookie(response: Response, token: str, ttl: timedelta) -> None:
     response.set_cookie(
         key=_REFRESH_COOKIE,
         value=token,
-        max_age=settings.AUTH.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        max_age=int(ttl.total_seconds()),
         path=_REFRESH_COOKIE_PATH,
         httponly=True,
         secure=True,
@@ -25,19 +27,23 @@ def _set_refresh_cookie(response: Response, token: str, settings: Settings) -> N
 @router.post("/login")
 async def login(
     login_request: LoginRequest,
-    response: Response,
+    http_response: Response,
     auth_service: AuthServiceDep,
-    settings: SettingsDep,
 ) -> TokenResponse:
+
     user = await auth_service.authenticate(login_request.email, login_request.password)
-    _set_refresh_cookie(response, auth_service.create_refresh_token(user), settings)
+
+    _set_refresh_cookie(
+        http_response, auth_service.create_refresh_token(user), auth_service.refresh_ttl
+    )
+
     return TokenResponse(access_token=auth_service.create_access_token(user))
 
 
 @router.post("/refresh")
 async def refresh(
     auth_service: AuthServiceDep,
-    refresh_token: str | None = Cookie(default=None, alias=_REFRESH_COOKIE),
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ) -> TokenResponse:
     if refresh_token is None:
         raise InvalidTokenError("missing refresh cookie")

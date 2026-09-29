@@ -1,19 +1,15 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import type { ChatStreamEvent, Schemas } from '../src/types';
-
-type SseEvent = { [T in ChatStreamEvent['type']]: [T, unknown] }[ChatStreamEvent['type']];
+import type { ConversationPageResponse, StreamEventResponse } from '../src/types';
 
 /** A finished `text/event-stream` response, framed the way the backend sends it. */
-export function sse(events: SseEvent[]) {
-  const body = events
-    .map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    .join('');
+export function sse(events: StreamEventResponse[]) {
+  const body = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
   return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } });
 }
 
-export const emptyConversationPage: Schemas['ConversationPageResponse'] = {
+export const emptyConversationPage: ConversationPageResponse = {
   items: [],
   next_cursor: null,
 };

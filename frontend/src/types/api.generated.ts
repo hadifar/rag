@@ -106,23 +106,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/chat/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stream */
-        post: operations["stream_api_chat_stream_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/conversations": {
         parameters: {
             query?: never;
@@ -133,7 +116,11 @@ export interface paths {
         /** List Conversations */
         get: operations["list_conversations_api_conversations_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Conversation
+         * @description The caller's empty conversation: a new one, or the one they already have.
+         */
+        post: operations["create_conversation_api_conversations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -150,7 +137,32 @@ export interface paths {
         /** Get Messages */
         get: operations["get_messages_api_conversations__conversation_id__messages_get"];
         put?: never;
-        post?: never;
+        /**
+         * Send Message
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
+         */
+        post: operations["send_message_api_conversations__conversation_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Title
+         * @description Renames the conversation with an LLM-written title for its first exchange; the
+         *     client calls it once the first answer has streamed.
+         */
+        post: operations["generate_title_api_conversations__conversation_id__title_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -272,13 +284,6 @@ export interface components {
             /** File */
             file: string;
         };
-        /** ChatRequest */
-        ChatRequest: {
-            /** Conversation Id */
-            conversation_id?: string | null;
-            /** Message */
-            message: string;
-        };
         /** ConversationPageResponse */
         ConversationPageResponse: {
             /** Items */
@@ -294,7 +299,7 @@ export interface components {
              */
             id: string;
             /** Title */
-            title: string;
+            title: string | null;
             /**
              * Created At
              * Format: date-time
@@ -365,6 +370,11 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MessageRequest */
+        MessageRequest: {
+            /** Message */
+            message: string;
+        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Model */
@@ -373,6 +383,38 @@ export interface components {
             temperature: number;
             /** Top K */
             top_k: number;
+        };
+        /**
+         * SourcesEvent
+         * @description The turn's deduplicated sources, once it's done. Only sent if the turn searched.
+         */
+        SourcesEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "sources";
+            /** Sources */
+            sources: string[];
+        };
+        /**
+         * StreamEventResponse
+         * @description One event of the message stream. A named model rather than a bare union, so it's
+         *     in the OpenAPI schema and the frontend's generated types by this name.
+         */
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["SourcesEvent"];
+        /**
+         * TextEvent
+         * @description A piece of the answer, in order.
+         */
+        TextEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "text";
+            /** Text */
+            text: string;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -383,6 +425,28 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /**
+         * ToolEvent
+         * @description A knowledge-base search: `pending` with its query, then `done` with its output.
+         */
+        ToolEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool";
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done";
+            /** Query */
+            query?: string | null;
+            /** Output */
+            output?: string | null;
         };
         /** UserResponse */
         UserResponse: {
@@ -560,39 +624,6 @@ export interface operations {
             };
         };
     };
-    stream_api_chat_stream_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_conversations_api_conversations_get: {
         parameters: {
             query?: {
@@ -625,6 +656,26 @@ export interface operations {
             };
         };
     };
+    create_conversation_api_conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+        };
+    };
     get_messages_api_conversations__conversation_id__messages_get: {
         parameters: {
             query?: never;
@@ -643,6 +694,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryMessageResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_conversations__conversation_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_title_api_conversations__conversation_id__title_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
                 };
             };
             /** @description Validation Error */

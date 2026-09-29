@@ -29,19 +29,21 @@
 - `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
 ## Conversation & session state
-- Titles are LLM-generated after a new conversation's first answer, so the stream stays open
-  (after the answer is complete) for one more short LLM call, capped at 10s. If it fails or
-  times out, the conversation keeps its fallback title (the trimmed first message).
+- The LLM title is a separate request the client makes once a new conversation's first answer
+  has streamed (capped at 10s). If that request fails, times out or never happens (the tab was
+  closed), the conversation keeps its fallback title, the trimmed first message; nothing retries.
 - The sidebar paginates by `(updated_at, id)`, and using a conversation moves it to the top, so a
   conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
   but a conversation used on another device meanwhile won't show up until a reload.
 - Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
   threads, which live in separate tables with no user link — a full user deletion (GDPR) still
   has to delete each conversation's thread first.
-- Conversations created before the `conversations` table existed (checkpoint threads keyed by
-  the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
-- One database, two schema owners: Alembic owns `users`/`conversations`/`documents`/`chunks`/`ingestion_runs`, while
-  LangGraph's `checkpointer.setup()` creates and migrates its own checkpoint tables at every
+- A thread whose conversation row is gone (a delete that failed halfway, rows removed outside
+  the app) is unreachable; `rag prune-threads [--dry-run]` finds and deletes them, but nothing
+  runs it automatically.
+- One database, two schema owners: Alembic owns the tables in `public`
+  (`users`/`conversations`/`documents`/`chunks`/`ingestion_runs`), while LangGraph's
+  `checkpointer.setup()` creates and migrates its own tables in the `langgraph` schema at every
   boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.

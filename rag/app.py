@@ -2,12 +2,10 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 
-from rag.api.deps import get_current_admin, get_current_user
 from rag.api.error_handlers import register_error_handlers
 from rag.api.routers.auth import router as auth_router
-from rag.api.routers.chat import router as chat_router
 from rag.api.routers.conversations import router as conversations_router
 from rag.api.routers.health import router as health_router
 from rag.api.routers.ingestions import router as ingestions_router
@@ -22,8 +20,6 @@ logger = logging.getLogger(__name__)
 def _build_lifespan(container: Container | None, settings: Settings):
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        app.state.settings = settings
-
         if container is not None:
             app.state.container = container
             yield
@@ -52,17 +48,14 @@ def create_app(
     container: Container | None = None, settings: Settings | None = None
 ) -> FastAPI:
     settings = settings or get_settings()
-    require_user = [Depends(get_current_user)]
-
     app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
 
     app.include_router(auth_router)
     app.include_router(health_router)
-    app.include_router(chat_router, dependencies=require_user)
-    app.include_router(conversations_router, dependencies=require_user)
-    app.include_router(kb_router, dependencies=require_user)
-    app.include_router(ingestions_router, dependencies=[Depends(get_current_admin)])
-    app.include_router(settings_router, dependencies=require_user)
+    app.include_router(conversations_router)
+    app.include_router(kb_router)
+    app.include_router(ingestions_router)
+    app.include_router(settings_router)
 
     register_error_handlers(app)
 

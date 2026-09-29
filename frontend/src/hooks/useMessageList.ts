@@ -33,10 +33,21 @@ export function useMessageList() {
     setMessages((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
+  /** Shows the typing bubble; returns a function that hides it (calling it again is a no-op). */
+  const showTyping = useCallback(() => {
+    const id = append({ type: 'typing' });
+    let shown = true;
+    return () => {
+      if (!shown) return;
+      shown = false;
+      remove(id);
+    };
+  }, [append, remove]);
+
   const replace = useCallback(
     (inputs: ChatMessageInput[]) => setMessages(inputs.map((msg) => withId(msg))),
     [withId]
   );
 
-  return { messages, append, update, remove, replace };
+  return { messages, append, update, showTyping, replace };
 }

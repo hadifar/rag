@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
@@ -37,7 +37,7 @@ rag/
 │   ├── retrieval_service/
 │   ├── ingestion_service/
 │   ├── generation_service/
-│   ├── conversation_service/         # ownership, create-on-first-message, titles, paging, delete
+│   ├── conversation_service/         # ownership, one empty draft per user, titles, paging, delete
 │   └── auth_service/                 # hashing + JWT issuance/verification, via UserRepositoryPort
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
@@ -54,10 +54,10 @@ rag/
 │   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
-│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. SettingsDep/CurrentUserDep
+│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
 │   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
-│   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
-│   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
+│   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
+│   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
 migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
@@ -86,14 +86,14 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing, conversation titles; reads/deletes a thread's history | `BaseChatModel`, `retrieval_service`, checkpointer |
-| `conversation_service` | conversation ownership, create-on-first-message, fallback and generated titles, paging, delete; runs each turn through the generation service | `ConversationRepositoryPort`, `GenerationPort` (= `generation_service`) |
+| `generation_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing, conversation titles; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the generation service | `ConversationRepositoryPort`, `GenerationPort` (= `generation_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
 
 `container.py`'s `build_container` is the composition root: an async context manager that opens
 the Postgres pools and tracing, constructs every adapter, repository and service, and tears the
-connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
-`ContainerDep`/`SettingsDep` in `api/deps.py` read it.
+connections down on exit. `app.py` stores the result on `app.state`, where `ContainerDep` in
+`api/deps.py` reads it.
 
 Documents are read by `loaders.py`: `load_directory` (a directory of `.md` files) and
 `load_archive` (a `.zip`, read in memory, with member-count and uncompressed-size caps);
@@ -133,15 +133,13 @@ interface, so neither know or care which backend is selected.
 A conversation is a row in the `conversations` table (`id`, `user_id`, `title`, `created_at`,
 `updated_at`; `migrations/versions/0002_…`), owned by `ConversationService`. Its messages live in
 the LangGraph checkpointer, whose thread id is the conversation's id:
-- The client picks a new chat's id (a random UUID) and sends it with the first message; a
-  `conversation_id` the server hasn't seen starts a new conversation under that id, owned by the
-  caller. Omitting it also starts one, with a server-generated id. The stream's first SSE event
-  (`conversation`) carries the conversation either way.
-- A `conversation_id` that belongs to another user is a 404, checked before the stream starts.
-  Reading or deleting one that doesn't exist is the same 404, so ids can't be probed there;
-  chatting to an unknown id creates it, which reveals nothing a random UUID could find.
-- A new conversation is titled after its first message, then after the first answer an LLM
-  call writes a short title, sent as the stream's last event (`title`).
+- A new chat starts with `POST /api/conversations`, which returns the caller's one empty
+  (untitled) conversation, creating it if needed; the client then sends messages to its id.
+- A missing conversation and another user's are the same 404, so ids can't be probed; for the
+  message stream it's checked before the stream starts.
+- A conversation is untitled only while empty: its first message names it straight away (the
+  trimmed message). Once that first answer has streamed, the client calls
+  `POST /api/conversations/{id}/title`, and an LLM call renames it after the first exchange.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
   answer and sources; tool calls aren't replayed).
@@ -152,7 +150,9 @@ connection pool of its own on the app's `DATABASE_URL` (required). It's a separa
 repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
 so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Durable across restarts and safe for multiple backend replicas.
+(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
+across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
 in-memory messages would leave every conversation empty after a restart.
 
@@ -181,7 +181,7 @@ its own Postgres).
   revocation store, so a stolen refresh token stays valid until it naturally expires (see
   [limitation.md](limitation.md#security)).
 - **Gating** — `get_current_user` (`api/deps.py`) is applied as a router-level dependency to
-  `chat`/`conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
+  `conversations`/`kb`/`settings`, and `get_current_admin` (403 for non-admins) to
   `ingestions`; `auth` and `health` stay open (health is a liveness/readiness probe hit
   by infra with no session — see [conventions.md](conventions.md)).
 - **Storage** — a `users` table (`id`, `email`, `hashed_password`, `created_at`, `is_admin`) in the app's
@@ -196,9 +196,11 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `mo
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/chat/stream` turns it into SSE (`conversation` / `text` / `tool_start` /
-  `tool_result` / `sources` / `title` events). Every event's `data` is a single-line JSON object — including `text`
-  (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
+- FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
+  `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
+  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
+  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
+  generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
   (which links to `/api/kb/{filename}`).
@@ -246,7 +248,7 @@ app to pick it up immediately.
 
 ## API surface
 
-`chat`/`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
+`conversations`/`kb`/`settings` all require `Authorization: Bearer <access_token>` (see
 [Authentication](#authentication)); `ingestions` additionally requires an admin (403 otherwise);
 `auth` and `health` don't.
 
@@ -260,8 +262,14 @@ there, so the response status comes from the exception class itself.
 - `POST /api/auth/refresh` — reads the refresh cookie → a new `{access_token, token_type}`.
 - `POST /api/auth/logout` — clears the refresh cookie.
 - `GET /api/auth/me` — returns `{id, email, is_admin}` for the caller's access token.
-- `POST /api/chat/stream` — `{message: str, conversation_id?: uuid}` → SSE stream of normalized
-  events; an unseen (or no) `conversation_id` starts a new conversation. 404 for someone else's.
+- `POST /api/conversations` — the caller's empty conversation `{id, title: null, created_at,
+  updated_at}`: a new one, or the one they already have (a partial unique index allows one
+  untitled conversation per user, so empty chats can't pile up).
+- `POST /api/conversations/{id}/messages` — `{message: str}` → SSE stream of normalized events.
+  A first message also names the conversation (the trimmed message). 404 for a missing or
+  someone else's conversation, before the stream starts.
+- `POST /api/conversations/{id}/title` — renames the conversation with an LLM-written title for
+  its first exchange and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.

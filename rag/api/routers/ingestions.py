@@ -1,17 +1,30 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile
 
-from rag.api.deps import AdminUserDep, IngestionServiceDep
+from rag.api.deps import AdminUserDep, IngestionServiceDep, get_current_admin
 from rag.api.schema.ingestions import IngestionRunResponse
 
-# Admin-only: app.py includes this router behind get_current_admin.
-router = APIRouter(prefix="/api/ingestions", tags=["ingestions"])
+router = APIRouter(
+    prefix="/api/ingestions",
+    tags=["ingestions"],
+    dependencies=[Depends(get_current_admin)],
+)
+
+
+async def _read_archive(
+    file: UploadFile, ingestion_service: IngestionServiceDep
+) -> bytes:
+    """One byte over the limit is enough for the service to reject the upload, without
+    ever holding an oversized one in memory.
+    """
+    return await file.read(ingestion_service.max_archive_bytes + 1)
 
 
 @router.post("", status_code=202)
 async def upload_knowledge_base(
-    file: UploadFile,
+    archive: Annotated[bytes, Depends(_read_archive)],
     admin: AdminUserDep,
     ingestion_service: IngestionServiceDep,
     background_tasks: BackgroundTasks,
@@ -19,7 +32,7 @@ async def upload_knowledge_base(
     """Replaces the knowledge base with the uploaded .zip of .md files. Returns right
     away with a `running` run; poll `GET /api/ingestions/{id}` until it ends.
     """
-    run = await ingestion_service.start_upload(await file.read(), admin.id)
+    run = await ingestion_service.start_upload(archive, admin.id)
     background_tasks.add_task(ingestion_service.complete_run, run)
     return IngestionRunResponse.model_validate(run)
 

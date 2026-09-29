@@ -1,7 +1,5 @@
 import { ApiError, apiUrl, authFetch, requestJson } from './client';
-import type { Schemas } from '../types';
-
-type IngestionRun = Schemas['IngestionRunResponse'];
+import type { IngestionRunResponse } from '../types';
 
 // nginx answers these itself (as HTML), before the backend's JSON `detail` exists.
 const FALLBACK_MESSAGES: Record<number, string> = {
@@ -14,7 +12,7 @@ const FALLBACK_MESSAGES: Record<number, string> = {
  * throws an `ApiError` whose message is the backend's reason (e.g. not a zip, another
  * upload still running), fit to show as is.
  */
-export async function uploadKnowledgeBase(file: File): Promise<IngestionRun> {
+export async function uploadKnowledgeBase(file: File): Promise<IngestionRunResponse> {
   const body = new FormData();
   body.append('file', file);
   const res = await authFetch(apiUrl('ingestions'), { method: 'POST', body });
@@ -22,13 +20,15 @@ export async function uploadKnowledgeBase(file: File): Promise<IngestionRun> {
   return res.json();
 }
 
-export function fetchIngestionRun(id: string): Promise<IngestionRun> {
+export function fetchIngestionRun(id: string): Promise<IngestionRunResponse> {
   return requestJson(`ingestions/${encodeURIComponent(id)}`);
 }
 
 /** The most recent run, or null if nothing was ever uploaded. */
-export function fetchLatestIngestionRun(): Promise<IngestionRun | null> {
-  return requestJson('ingestions/latest');
+export function fetchLatestIngestionRun(
+  signal?: AbortSignal
+): Promise<IngestionRunResponse | null> {
+  return requestJson('ingestions/latest', { signal });
 }
 
 async function errorMessage(res: Response): Promise<string> {
