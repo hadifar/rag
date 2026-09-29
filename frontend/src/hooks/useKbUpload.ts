@@ -8,6 +8,7 @@ import {
 } from '../api/ingestions';
 import type { IngestionRunResponse, UploadPhase } from '../types';
 import { describeRun, runTime } from '../utils/ingestions';
+import { useLoadOnMount } from './useLoadOnMount';
 
 export const POLL_INTERVAL_MS = 2000;
 // Consecutive failed status checks (network blips) tolerated before giving up.
@@ -24,23 +25,14 @@ export function useKbUpload() {
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchLatestIngestionRun()
-      .then((run) => {
-        if (cancelled) return;
-        setLatest(run);
-        if (run?.status === 'running') {
-          setRunId(run.id);
-          setPhase('running');
-        }
-      })
-      // Only the "last updated" line is missing then; uploading still works.
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // On failure only the "last updated" line is missing; uploading still works.
+  useLoadOnMount(fetchLatestIngestionRun, (run) => {
+    setLatest(run);
+    if (run?.status === 'running') {
+      setRunId(run.id);
+      setPhase('running');
+    }
+  });
 
   useEffect(() => {
     if (phase !== 'running' || runId === null) return;

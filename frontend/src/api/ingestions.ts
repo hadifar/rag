@@ -25,8 +25,10 @@ export function fetchIngestionRun(id: string): Promise<IngestionRunResponse> {
 }
 
 /** The most recent run, or null if nothing was ever uploaded. */
-export function fetchLatestIngestionRun(): Promise<IngestionRunResponse | null> {
-  return requestJson('ingestions/latest');
+export function fetchLatestIngestionRun(
+  signal?: AbortSignal
+): Promise<IngestionRunResponse | null> {
+  return requestJson('ingestions/latest', { signal });
 }
 
 async function errorMessage(res: Response): Promise<string> {

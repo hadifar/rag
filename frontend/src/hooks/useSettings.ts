@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { fetchSettings } from '../api/settings';
+import { useLoadOnMount } from './useLoadOnMount';
 import type { LoadStatus, SettingsResponse } from '../types';
 
 const EMPTY: SettingsResponse = { model: '', temperature: 0, top_k: 4 };
@@ -12,22 +13,14 @@ export function useSettings() {
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchSettings()
-      .then((settings) => {
-        if (cancelled) return;
-        setForm(settings);
-        setStatus('ready');
-      })
-      .catch(() => {
-        // Keep the blank form so it can still be filled in.
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useLoadOnMount(
+    fetchSettings,
+    (settings) => {
+      setForm(settings);
+      setStatus('ready');
+    },
+    () => setStatus('error') // keeps the blank form, so it can still be filled in
+  );
 
   // Hide the "Saved" notice again after a moment.
   useEffect(() => {

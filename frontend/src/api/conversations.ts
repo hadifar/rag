@@ -16,10 +16,11 @@ export function generateTitle(id: string): Promise<ConversationResponse> {
 }
 
 export function listConversations(
-  cursor: string | null
+  cursor: string | null,
+  signal?: AbortSignal
 ): Promise<ConversationPageResponse> {
   const query = cursor ? `?${new URLSearchParams({ cursor })}` : '';
-  return requestJson(`conversations${query}`);
+  return requestJson(`conversations${query}`, { signal });
 }
 
 export function fetchConversationMessages(

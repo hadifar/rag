@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import type { ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 
@@ -12,6 +12,7 @@ import {
 } from '../utils/conversations';
 import type { ConversationResponse, LoadStatus } from '../types';
 import { ConversationsContext } from '../hooks/useConversations';
+import { useLoadOnMount } from '../hooks/useLoadOnMount';
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -22,22 +23,15 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, startLoadingMore] = useTransition();
 
-  useEffect(() => {
-    let cancelled = false;
-    listConversations(null)
-      .then((page) => {
-        if (cancelled) return;
-        setConversations(page.items);
-        setNextCursor(page.next_cursor);
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useLoadOnMount(
+    (signal) => listConversations(null, signal),
+    (page) => {
+      setConversations(page.items);
+      setNextCursor(page.next_cursor);
+      setStatus('ready');
+    },
+    () => setStatus('error')
+  );
 
   const loadMore = useCallback(() => {
     if (!nextCursor || isLoadingMore) return;
