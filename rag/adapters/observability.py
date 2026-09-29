@@ -16,13 +16,17 @@ TraceConfig = Callable[[str | None], RunnableConfig]
 class _LoggingCallbackHandler(BaseCallbackHandler):
     """LangChain callback: it's a drop-in trace_config backend with zero extra infra."""
 
-    def on_llm_start(self, serialized: dict, prompts: list[str], **kwargs: Any) -> None:
+    def on_llm_start(
+        self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any
+    ) -> None:
         logger.info("llm_start", extra={"run_id": str(kwargs.get("run_id"))})
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         logger.info("llm_end", extra={"run_id": str(kwargs.get("run_id"))})
 
-    def on_tool_start(self, serialized: dict, input_str: str, **kwargs: Any) -> None:
+    def on_tool_start(
+        self, serialized: dict[str, Any], input_str: str, **kwargs: Any
+    ) -> None:
         logger.info("tool_start", extra={"tool": serialized.get("name")})
 
     def on_tool_end(self, output: Any, **kwargs: Any) -> None:

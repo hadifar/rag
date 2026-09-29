@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Response
 
@@ -42,7 +43,7 @@ async def login(
 @router.post("/refresh")
 async def refresh(
     auth_service: AuthServiceDep,
-    refresh_token: str | None = Cookie(default=None, alias=_REFRESH_COOKIE),
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
 ) -> TokenResponse:
     if refresh_token is None:
         raise InvalidTokenError("missing refresh cookie")

@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 class RawDocument:
     source_id: str
     text: str
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True)

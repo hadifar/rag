@@ -43,10 +43,21 @@ build-backend = "hatchling.build"
 packages = ["rag"]
 
 [tool.ruff.lint]
-extend-select = ["C901", "B", "SIM", "C4", "RET", "UP", "ERA", "PLR2004", "PTH", "ASYNC"]
+extend-select = [
+    "C901", "B", "SIM", "C4", "RET", "UP", "ERA", "PLR2004", "PTH", "ASYNC",
+    "FAST",  # FastAPI: Annotated dependencies, no redundant response_model
+    "T20",   # no print(); the CLI talks through typer.echo
+    "TID251",  # banned APIs, below
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"fastapi.HTTPException".msg = "Raise a rag.domain.errors.RagError subclass (docs/conventions.md)."
+"os.environ".msg = "Read configuration through rag.config.Settings."
+"os.getenv".msg = "Read configuration through rag.config.Settings."
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004"]
+"tests/**" = ["PLR2004", "TID251"]  # tests may read the environment (e.g. CI)
+"scripts/**" = ["T20"]  # scripts write their output to stdout
 
 [tool.ruff.lint.mccabe]
 max-complexity = 5
@@ -61,6 +72,11 @@ version_provider = "pep621"
 
 [tool.pyright]
 typeCheckingMode = "basic"
+# Strict everywhere but rag/services, where LangChain's partly untyped API leaks in.
+strict = [
+    "rag/domain", "rag/api", "rag/repository", "rag/adapters",
+    "rag/app.py", "rag/cli.py", "rag/config.py", "rag/container.py", "rag/__main__.py",
+]
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
@@ -117,6 +133,17 @@ ignore_imports = [
     "rag.api.deps -> rag.container",
     "rag.api.deps -> rag.services.**",
 ]
+
+[[tool.importlinter.contracts]]
+name = "routers are independent of each other"
+type = "independence"
+modules = ["rag.api.routers.*"]
+
+[[tool.importlinter.contracts]]
+name = "services are independent of each other, except generation's search tool"
+type = "independence"
+modules = ["rag.services.*"]
+ignore_imports = ["rag.services.generation_service.** -> rag.services.retrieval_service.**"]
 
 [[tool.importlinter.contracts]]
 name = "layering"

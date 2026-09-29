@@ -3,15 +3,18 @@ import io
 import json
 import uuid
 import zipfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import timedelta
 from typing import cast
 
 import pytest
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from pydantic import SecretStr
 
+from rag.api.deps import get_current_user
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
@@ -452,6 +455,45 @@ def test_conversation_endpoints_require_auth(
     client: TestClient, method: str, path: str
 ) -> None:
     assert client.request(method, path).status_code == 401
+
+
+# Routes anyone may call. Every other route must require a signed-in user.
+_PUBLIC_ROUTES = {
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/refresh"),
+    ("POST", "/api/auth/logout"),
+    ("GET", "/api/health/live"),
+    ("GET", "/api/health/ready"),
+}
+
+
+def _dependency_calls(dependant: Dependant) -> set[Callable[..., object] | None]:
+    """Every callable in a route's dependency tree, router-level dependencies included."""
+    return {
+        dependant.call,
+        *(call for dep in dependant.dependencies for call in _dependency_calls(dep)),
+    }
+
+
+def test_every_route_requires_a_signed_in_user_unless_public() -> None:
+    """A new route, or a whole router, that forgets its auth dependency fails here
+    instead of shipping open. Admin routes count: get_current_admin depends on
+    get_current_user. A public route that became protected fails too, so the list
+    above can't go stale.
+    """
+    app = create_app(settings=_stub_settings())
+
+    # iter_route_contexts gives each route with its router's settings applied, as the
+    # OpenAPI schema sees it (app.routes only lists the included routers).
+    unprotected = {
+        (method, route.path)
+        for route in iter_route_contexts(app.routes)
+        if isinstance(route.original_route, APIRoute)
+        and get_current_user not in _dependency_calls(route.dependant)
+        for method in route.methods or ()
+    }
+
+    assert unprotected == _PUBLIC_ROUTES
 
 
 def _kb_zip() -> bytes:

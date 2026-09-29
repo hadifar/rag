@@ -94,6 +94,7 @@ repos:
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.414
     hooks:
+      # pre-commit stage, not pre-push, so CI's pre-commit job runs it: type errors gate merges.
       - id: pyright
         name: "🐍 python · Check types"
-        stages: [pre-push]
+        stages: [pre-commit]
