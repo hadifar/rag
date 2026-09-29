@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers
@@ -150,7 +150,9 @@ connection pool of its own on the app's `DATABASE_URL` (required). It's a separa
 repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
 so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Durable across restarts and safe for multiple backend replicas.
+(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
+across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
 in-memory messages would leave every conversation empty after a restart.
 

@@ -142,5 +142,21 @@ def set_admin(
     typer.echo(f"{user.email} is {'now' if user.is_admin else 'no longer'} an admin")
 
 
+@app.command(name="prune-threads")
+def prune_threads(
+    dry_run: bool = typer.Option(False, help="Only list them; delete nothing"),
+) -> None:
+    """Delete stored messages whose conversation no longer exists."""
+    orphans = _run(
+        lambda container: container.conversation_service.prune_orphaned_threads(
+            dry_run=dry_run
+        )
+    )
+    for thread_id in orphans:
+        typer.echo(thread_id)
+    verb = "Found" if dry_run else "Deleted"
+    typer.echo(f"{verb} {len(orphans)} orphaned thread(s)")
+
+
 if __name__ == "__main__":
     app()

@@ -81,8 +81,24 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   protected fails it too
 - `pytest tests/integration` only runs on manual `workflow_dispatch`
   (`integration-tests.yml`) — **not** a merge gate. That job starts a throwaway Postgres, runs
-  `alembic upgrade head` (so it also exercises the migrations), and fails — rather than skips —
-  when a required setting is missing, so it can't pass green with zero tests run
+  `alembic upgrade head`, then `downgrade base` and `upgrade head` again (so every migration
+  must also undo cleanly), and fails — rather than skips — when a required setting is missing,
+  so it can't pass green with zero tests run
+
+## Database
+- Migrations are append-only: the `migrations-append-only` pre-commit hook fails if a staged
+  change modifies, renames or deletes a committed migration, and a pull-request step in CI
+  (`pre-commit.yml`'s `commitizen` job) runs the same check against the PR's base
+  (`scripts/check_migrations_append_only.sh`). A deliberate exception, such as squashing
+  before 1.0, goes through `SKIP=migrations-append-only`
+- Postgres itself refuses rows that break a table's rules (migration `0007`): emails are
+  lowercase (so they're unique regardless of case), a conversation title is never blank, a
+  content hash is a SHA-256, chunk indexes aren't negative, and an ingestion run has exactly
+  the fields its status allows; partial unique indexes allow one running ingestion and one
+  empty conversation per user
+- LangGraph's checkpoint tables live in their own `langgraph` schema (migration `0008`; the
+  checkpointer connects with `search_path=langgraph`), so `public` holds only tables Alembic
+  owns
 
 ## General file hygiene
 `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-added-large-files`

@@ -189,3 +189,17 @@ async def test_history_returns_the_threads_messages() -> None:
         ("user", "hi"),
         ("assistant", "echo: hi"),
     ]
+
+
+async def test_prune_deletes_only_threads_without_a_conversation() -> None:
+    service, _, generation = _service()
+    kept = (await service.create(ALICE)).id
+    await _send(service, ALICE, kept, "hi")
+    generation.threads["orphan"] = []
+
+    assert await service.prune_orphaned_threads(dry_run=True) == ["orphan"]
+    assert generation.deleted_threads == []  # a dry run deletes nothing
+
+    assert await service.prune_orphaned_threads() == ["orphan"]
+    assert generation.deleted_threads == ["orphan"]
+    assert str(kept) in generation.threads

@@ -54,3 +54,10 @@ class GenerationService:
 
     async def delete_history(self, thread_id: str) -> None:
         await self._checkpointer.adelete_thread(thread_id)
+
+    async def list_thread_ids(self) -> set[str]:
+        return {
+            thread_id
+            async for checkpoint in self._checkpointer.alist(None)
+            if (thread_id := checkpoint.config.get("configurable", {}).get("thread_id"))
+        }

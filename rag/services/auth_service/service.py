@@ -48,11 +48,11 @@ class AuthService:
     ) -> User:
         hashed_password = await asyncio.to_thread(self._hasher.hash, password)
         return await self._user_repository.create(
-            email, hashed_password, is_admin=is_admin
+            _normalize_email(email), hashed_password, is_admin=is_admin
         )
 
     async def set_admin(self, email: str, is_admin: bool) -> User:
-        user = await self._user_repository.set_admin(email, is_admin)
+        user = await self._user_repository.set_admin(_normalize_email(email), is_admin)
         if user is None:
             raise UserEmailNotFoundError(email)
         return user
@@ -64,7 +64,7 @@ class AuthService:
         return user
 
     async def authenticate(self, email: str, password: str) -> User:
-        user = await self._user_repository.get_by_email(email)
+        user = await self._user_repository.get_by_email(_normalize_email(email))
         if user is None:
             raise InvalidCredentialsError()
         try:
@@ -122,3 +122,10 @@ class AuthService:
             return uuid.UUID(payload["sub"])
         except (KeyError, ValueError) as exc:
             raise InvalidTokenError("missing or invalid subject") from exc
+
+
+def _normalize_email(email: str) -> str:
+    """Emails are stored lowercase (the users table checks it), so `Ann@x.com` and
+    `ann@x.com` are one account and either one logs in.
+    """
+    return email.strip().lower()

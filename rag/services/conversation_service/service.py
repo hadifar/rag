@@ -87,6 +87,18 @@ class ConversationService:
         await self._generation.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
 
+    async def prune_orphaned_threads(self, *, dry_run: bool = False) -> list[str]:
+        """Deletes stored messages whose conversation no longer exists, and returns their
+        thread ids. Deleting a conversation removes its messages first, so these only come
+        from a delete that failed halfway or rows removed outside the app.
+        """
+        conversation_ids = {str(id_) for id_ in await self._repository.all_ids()}
+        orphans = sorted(await self._generation.list_thread_ids() - conversation_ids)
+        if not dry_run:
+            for thread_id in orphans:
+                await self._generation.delete_history(thread_id)
+        return orphans
+
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> Conversation:

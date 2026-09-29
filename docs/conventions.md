@@ -26,7 +26,12 @@ Follows PEP 20 and the
   `UserRepositoryPort` → `rag/repository/user_repository.py`), and wire it in `container.py`.
 - `adapters/` is for wrapped third-party SDK clients
   instead.
-- Schema changes go in a new Alembic revision under `migrations/versions/`.
+- Schema changes go in a new Alembic revision under `migrations/versions/`; a committed
+  migration is never edited (the `migrations-append-only` hook rejects it — a database that
+  already ran it would silently keep the old shape).
+- Encode a table's rules as constraints where the database can check them (a `CHECK`, a
+  partial unique index), not only in Python: then no code path, script or `psql` session can
+  write a row that breaks them (e.g. `ck_ingestion_runs_state`, `ux_conversations_one_empty_per_user`).
 
 ## Adding a new implementation of an existing capability: satisfy the `Protocol`, don't branch on type
 

@@ -79,3 +79,8 @@ class ConversationRepository(BaseRepository[Conversation]):
         await self._execute(
             "DELETE FROM conversations WHERE id = %s", (conversation_id,)
         )
+
+    async def all_ids(self) -> set[uuid.UUID]:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("SELECT id FROM conversations")
+            return {row[0] for row in await cur.fetchall()}

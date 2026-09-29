@@ -38,10 +38,12 @@
 - Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
   threads, which live in separate tables with no user link — a full user deletion (GDPR) still
   has to delete each conversation's thread first.
-- Conversations created before the `conversations` table existed (checkpoint threads keyed by
-  the old client-generated `thread_id`) have no row, so they're unreachable, not migrated.
-- One database, two schema owners: Alembic owns `users`/`conversations`/`documents`/`chunks`/`ingestion_runs`, while
-  LangGraph's `checkpointer.setup()` creates and migrates its own checkpoint tables at every
+- A thread whose conversation row is gone (a delete that failed halfway, rows removed outside
+  the app) is unreachable; `rag prune-threads [--dry-run]` finds and deletes them, but nothing
+  runs it automatically.
+- One database, two schema owners: Alembic owns the tables in `public`
+  (`users`/`conversations`/`documents`/`chunks`/`ingestion_runs`), while LangGraph's
+  `checkpointer.setup()` creates and migrates its own tables in the `langgraph` schema at every
   boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.

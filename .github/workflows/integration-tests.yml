@@ -45,5 +45,9 @@ jobs:
       - name: Apply database migrations
         run: uv run alembic upgrade head
 
+      # Every migration must also undo cleanly: down to nothing, then back up again.
+      - name: Check migrations round-trip
+        run: uv run alembic downgrade base && uv run alembic upgrade head
+
       - name: Run integration tests
         run: uv run pytest tests/integration

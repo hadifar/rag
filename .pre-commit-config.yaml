@@ -8,73 +8,6 @@ repos:
       - id: commitizen
         stages: [commit-msg]
 
-  # Enforce gitflow: master/dev only accept merges, other branches must
-  # follow the feat/fix/refactor/docs/chore/release/hotfix naming convention.
-  - repo: https://github.com/hadifar/precommit-gitguard
-    rev: v0.1.3
-    hooks:
-      - id: no-direct-commit
-      - id: no-direct-push
-      - id: branch-name
-      - id: stale-branch
-
-  # Keeps uv.lock in sync with pyproject.toml — auto-fixes locally (rerun `git add` + commit),
-  # like ruff --fix below.
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.17
-    hooks:
-      - id: uv-lock
-        stages: [pre-commit]
-
-  - repo: local
-    hooks:
-      - id: import-linter
-        name: import-linter
-        entry: uv run lint-imports
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-
-      # tests/unit is fast and has no external dependencies
-      - id: pytest-unit
-        name: pytest (tests/unit)
-        entry: uv run pytest tests/unit
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-
-      # Keeps frontend/src/types/api.generated.ts in sync with the backend's
-      # Pydantic schemas — auto-fixes locally (rerun `git add` + commit), like uv-lock above.
-      - id: frontend-api-types
-        name: frontend API types match backend schema
-        entry: bash scripts/generate_frontend_types.sh
-        language: system
-        pass_filenames: false
-        files: ^(rag/api/schema/.*\.py|rag/api/routers/.*\.py|frontend/src/types/api\.generated\.ts)$
-        stages: [pre-commit]
-
-      # The generated types only catch drift if the frontend is checked against them:
-      # a renamed backend field fails here, not at runtime. Runs after the hook above.
-      - id: frontend-typecheck
-        name: frontend type-checks against the API types
-        entry: bash -c 'cd frontend && npx --no-install tsc -b --noEmit'
-        language: system
-        pass_filenames: false
-        files: ^(frontend/(src|tests)/.*\.tsx?|frontend/tsconfig.*\.json)$
-        stages: [pre-commit]
-
-      # oxlint (frontend/.oxlintrc.json): hooks rules, plus the import boundaries — components
-      # and pages never import api/, types come from the types index, no bare fetch.
-      - id: frontend-lint
-        name: frontend lint (oxlint)
-        entry: bash -c 'cd frontend && npx --no-install oxlint --deny-warnings'
-        language: system
-        pass_filenames: false
-        files: ^frontend/(src|tests)/.*\.tsx?$|^frontend/\.oxlintrc\.json$
-        stages: [pre-commit]
-
-
-
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -87,8 +20,6 @@ repos:
           - id: check-merge-conflict
           - id: debug-statements
             name: pre-commit general file check
-
-
 
   # Ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -107,4 +38,77 @@ repos:
       # pre-commit stage, not pre-push, so CI's pre-commit job runs it: type errors gate merges.
       - id: pyright
         name: "🐍 python · Check types"
+        stages: [pre-commit]
+
+
+  # Enforce gitflow
+  - repo: https://github.com/hadifar/precommit-gitguard
+    rev: v0.1.3
+    hooks:
+      - id: no-direct-commit
+      - id: no-direct-push
+      - id: branch-name
+      - id: stale-branch
+
+  # Keeps uv.lock in sync with pyproject.toml
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.17
+    hooks:
+      - id: uv-lock
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: import-linter
+        name: import-linter
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      # Committed migrations never change: a database that already ran one wouldn't see it.
+      - id: migrations-append-only
+        name: migrations are append-only
+        entry: bash scripts/check_migrations_append_only.sh
+        language: system
+        pass_filenames: false
+        files: ^migrations/versions/
+        stages: [pre-commit]
+
+      # tests/unit is fast and has no external dependencies
+      - id: pytest-unit
+        name: pytest (tests/unit)
+        entry: uv run pytest tests/unit
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      # Keeps frontend/src/types/api.generated.ts in sync with the backend's
+      # Pydantic schemas
+      - id: frontend-api-types
+        name: frontend API types match backend schema
+        entry: bash scripts/generate_frontend_types.sh
+        language: system
+        pass_filenames: false
+        files: ^(rag/api/schema/.*\.py|rag/api/routers/.*\.py|frontend/src/types/api\.generated\.ts)$
+        stages: [pre-commit]
+
+      # The generated types only catch drift if the frontend is checked against them:
+      # a renamed backend field fails here, not at runtime.
+      - id: frontend-typecheck
+        name: frontend type-checks against the API types
+        entry: bash -c 'cd frontend && npx --no-install tsc -b --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(frontend/(src|tests)/.*\.tsx?|frontend/tsconfig.*\.json)$
+        stages: [pre-commit]
+
+      # oxlint (frontend/.oxlintrc.json): hooks rules, plus the import boundaries — components
+      # and pages never import api/, types come from the types index, no bare fetch.
+      - id: frontend-lint
+        name: frontend lint (oxlint)
+        entry: bash -c 'cd frontend && npx --no-install oxlint --deny-warnings'
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|tests)/.*\.tsx?$|^frontend/\.oxlintrc\.json$
         stages: [pre-commit]
