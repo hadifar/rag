@@ -6,13 +6,6 @@ import {
 import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
 import type { ChatStreamEvent, Schemas } from '../types';
 
-const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>([
-  'text',
-  'tool_start',
-  'tool_result',
-  'sources',
-]);
-
 export type StreamChatArgs = Schemas['MessageRequest'] & {
   conversationId: string;
   onEvent: (event: ChatStreamEvent) => void;
@@ -42,10 +35,9 @@ export function streamChat({
       throw new ApiError(response.status, `chat stream failed to open: ${response.status}`);
     },
 
-    onmessage({ event, data }) {
-      if (!STREAM_EVENT_TYPES.has(event)) return; // e.g. an event this client predates
-      // Each event's JSON is its fields.
-      onEvent({ type: event, ...JSON.parse(data) } as ChatStreamEvent);
+    onmessage({ data }) {
+      // Each event is one JSON object, told apart by its `type` (see Schemas).
+      onEvent(JSON.parse(data) as ChatStreamEvent);
     },
     onerror(err) {
       throw err;

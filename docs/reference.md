@@ -56,7 +56,6 @@ rag/
 ├── api/
 │   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
 │   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
-│   ├── sse.py                        # StreamEvent → ServerSentEvent (the chat stream's wire format)
 │   ├── schema/                       # request/response DTOs, one module per feature (conversations.py, auth.py, ...)
 │   └── routers/                      # conversations.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
 │
@@ -195,9 +194,11 @@ vocabulary (`TextDelta`, `ToolCallStart`, `ToolCallResult`), filtered to the `mo
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
-- FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE (`text` / `tool_start` /
-  `tool_result` / `sources` events). Every event's `data` is a single-line JSON object — including `text`
-  (`{"text": ...}`), because a raw token containing `\n\n` would end the SSE event early.
+- FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
+  `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
+  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
+  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
+  generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
   (which links to `/api/kb/{filename}`).

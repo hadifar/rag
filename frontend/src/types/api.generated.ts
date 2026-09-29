@@ -139,7 +139,7 @@ export interface paths {
         put?: never;
         /**
          * Send Message
-         * @description Streams the answer as server-sent events; see rag/api/sse.py for the events.
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
          */
         post: operations["send_message_api_conversations__conversation_id__messages_post"];
         delete?: never;
@@ -384,6 +384,32 @@ export interface components {
             /** Top K */
             top_k: number;
         };
+        /**
+         * SourcesEvent
+         * @description The turn's deduplicated sources, once it's done. Only sent if the turn searched.
+         */
+        SourcesEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "sources";
+            /** Sources */
+            sources: string[];
+        };
+        /**
+         * TextEvent
+         * @description A piece of the answer, in order.
+         */
+        TextEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "text";
+            /** Text */
+            text: string;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -393,6 +419,28 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /**
+         * ToolEvent
+         * @description A knowledge-base search: `pending` with its query, then `done` with its output.
+         */
+        ToolEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool";
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done";
+            /** Query */
+            query?: string | null;
+            /** Output */
+            output?: string | null;
         };
         /** UserResponse */
         UserResponse: {

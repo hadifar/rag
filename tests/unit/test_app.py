@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from pydantic import SecretStr
 
-from rag.api.sse import SseEventType
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
@@ -231,19 +230,18 @@ def test_logout_clears_refresh_cookie(client: TestClient) -> None:
     assert refresh_response.status_code == 401
 
 
-def _parse_sse(body: str) -> list[tuple[str, str]]:
-    """Splits an SSE body into (event, data) pairs, mirroring how
-    @microsoft/fetch-event-source (lib/cjs/parse.js) hands events to
-    frontend/src/api/chat.ts's onmessage: a blank line ends an event, repeated
-    `data:` lines are joined with "\\n", and one space after the colon is dropped.
+def _parse_sse(body: str) -> list[dict]:
+    """Each SSE event's `data`, JSON-parsed, mirroring how @microsoft/fetch-event-source
+    (lib/cjs/parse.js) hands events to frontend/src/api/chat.ts's onmessage, which
+    JSON-parses them: a blank line ends an event, repeated `data:` lines are joined
+    with "\\n", one space after the colon is dropped, and comment lines are skipped.
     """
     events = []
     for block in filter(None, body.split("\n\n")):
         fields = [line.partition(":")[::2] for line in block.split("\n")]
-        values = [(name, value.removeprefix(" ")) for name, value in fields]
-        event = next((value for name, value in values if name == "event"), "")
-        data = "\n".join(value for name, value in values if name == "data")
-        events.append((event, data))
+        data = "\n".join(v.removeprefix(" ") for name, v in fields if name == "data")
+        if data:
+            events.append(json.loads(data))
     return events
 
 
@@ -293,48 +291,38 @@ def test_send_message_streams_the_answer(
 ) -> None:
     body = _send(client, auth_headers, _create_conversation(client, auth_headers), "hi")
 
-    assert "event: text" in body
-    assert "echo: hi" in body
+    assert {"type": "text", "text": "echo: hi"} in _parse_sse(body)
 
 
 def test_send_message_contract_matches_frontend_parsing(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    """Locks the SSE wire format to what frontend/src/api/chat.ts actually parses.
-
-    The OpenAPI schema only says this endpoint streams events, not what's in them
-    (so openapi-typescript can't type them) — this test is the only thing that
-    catches a field rename here before it breaks the frontend at runtime.
+    """Locks the wire format to what frontend/src/api/chat.ts parses: one JSON object
+    per event's `data`, told apart by `type`. The payloads' fields are typed through
+    OpenAPI (TextEvent/ToolEvent/SourcesEvent); this checks they arrive that way.
     """
     conversation_id = _create_conversation(client, auth_headers)
 
     events = _parse_sse(_send(client, auth_headers, conversation_id, "hi"))
 
-    assert [event for event, _ in events] == [
-        SseEventType.TEXT,
-        SseEventType.TOOL_START,
-        SseEventType.TOOL_RESULT,
-        SseEventType.SOURCES,
+    assert events == [
+        {"type": "text", "text": "echo: hi"},
+        {
+            "type": "tool",
+            "name": "search",
+            "status": "pending",
+            "query": "hi",
+            "output": None,
+        },
+        {
+            "type": "tool",
+            "name": "search",
+            "status": "done",
+            "query": None,
+            "output": "stub result",
+        },
+        {"type": "sources", "sources": ["doc-a", "doc-b"]},
     ]
-    text_event, tool_start_event, tool_result_event, sources_event = events
-
-    # frontend: const { text } = JSON.parse(ev.data)
-    assert json.loads(text_event[1]) == {"text": "echo: hi"}
-
-    # frontend: const { name, query } = JSON.parse(ev.data)
-    assert json.loads(tool_start_event[1]) == {
-        "name": "search",
-        "query": "hi",
-    }
-
-    # frontend: const { name, output } = JSON.parse(ev.data)
-    assert json.loads(tool_result_event[1]) == {
-        "name": "search",
-        "output": "stub result",
-    }
-
-    # frontend: const { names } = JSON.parse(ev.data)
-    assert json.loads(sources_event[1]) == {"sources": ["doc-a", "doc-b"]}
 
 
 def test_send_message_text_with_newlines_survives_sse_framing(
@@ -348,8 +336,8 @@ def test_send_message_text_with_newlines_survives_sse_framing(
 
     body = _send(client, auth_headers, conversation_id, message)
 
-    text_events = [data for event, data in _parse_sse(body) if event == "text"]
-    assert [json.loads(data) for data in text_events] == [{"text": f"echo: {message}"}]
+    text_events = [e for e in _parse_sse(body) if e["type"] == "text"]
+    assert text_events == [{"type": "text", "text": f"echo: {message}"}]
 
 
 def test_generate_title_renames_the_conversation(

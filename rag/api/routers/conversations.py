@@ -3,7 +3,7 @@ from collections.abc import AsyncIterable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.sse import EventSourceResponse
 
 from rag.api.deps import ConversationServiceDep, CurrentUserDep, get_current_user
 from rag.api.schema.conversations import (
@@ -11,8 +11,9 @@ from rag.api.schema.conversations import (
     ConversationResponse,
     HistoryMessageResponse,
     MessageRequest,
+    StreamEventResponse,
+    to_stream_event,
 )
-from rag.api.sse import to_sse
 
 router = APIRouter(
     prefix="/api/conversations",
@@ -72,12 +73,12 @@ async def send_message(
     message_request: MessageRequest,
     current_user: CurrentUserDep,
     conversation_service: ConversationServiceDep,
-) -> AsyncIterable[ServerSentEvent]:
-    """Streams the answer as server-sent events; see rag/api/sse.py for the events."""
+) -> AsyncIterable[StreamEventResponse]:
+    """Streams the answer as server-sent events, one `StreamEventResponse` each."""
     async for event in conversation_service.chat(
         current_user.id, conversation_id, message_request.message
     ):
-        yield to_sse(event)
+        yield to_stream_event(event)
 
 
 @router.post("/{conversation_id}/title")

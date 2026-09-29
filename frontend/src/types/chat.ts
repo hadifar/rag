@@ -1,11 +1,8 @@
+import type { Schemas } from './api';
+
 export type TextContent = { text: string };
 
-export type ToolContent = {
-  name: string;
-  query?: string;
-  output?: string;
-  status: 'pending' | 'done';
-};
+export type ToolContent = Omit<Schemas['ToolEvent'], 'type'>;
 
 export type SourcesContent = { sources: string[] };
 
@@ -17,8 +14,8 @@ export type ChatMessageInput =
 
 export type ChatMessage = ChatMessageInput & { id: string };
 
+/** One event of a message's answer stream; the shapes come from the backend's schema. */
 export type ChatStreamEvent =
-  | { type: 'text'; text: string }
-  | { type: 'tool_start'; name: string; query: string }
-  | { type: 'tool_result'; name: string; output: string }
-  | ({ type: 'sources' } & SourcesContent);
+  | Schemas['TextEvent']
+  | Schemas['ToolEvent']
+  | Schemas['SourcesEvent'];

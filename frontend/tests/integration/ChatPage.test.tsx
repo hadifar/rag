@@ -50,11 +50,11 @@ describe('ChatPage', () => {
         expect(params.id).toBe(newConversation.id);
         sent = (await request.json()) as Schemas['MessageRequest'];
         return sse([
-          ['tool_start', { name: 'search_kb', query: 'plans' }],
-          ['tool_result', { name: 'search_kb', output: '2 chunks' }],
-          ['text', { text: 'We offer ' }],
-          ['text', { text: 'three plans.' }],
-          ['sources', { sources: ['02-plans-and-pricing.md'] }],
+          { type: 'tool', name: 'search_kb', status: 'pending', query: 'plans' },
+          { type: 'tool', name: 'search_kb', status: 'done', output: '2 chunks' },
+          { type: 'text', text: 'We offer ' },
+          { type: 'text', text: 'three plans.' },
+          { type: 'sources', sources: ['02-plans-and-pricing.md'] },
         ]);
       }),
       http.post('/api/conversations/:id/title', () =>

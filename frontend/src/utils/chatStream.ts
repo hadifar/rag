@@ -9,7 +9,7 @@ export function assistantText(text: string): ChatMessageInput {
 
 /**
  * Turns one answer's stream into bubbles: text deltas grow a single assistant bubble,
- * a tool call's bubble is filled in when its result arrives, and sources get their own.
+ * a tool's bubble is filled in when it's `done`, and sources get their own.
  * Create one per answer.
  */
 export function createBubbleHandler(append: AppendMessage, update: UpdateMessage) {
@@ -27,20 +27,15 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
           update(assistantMsgId, assistantText(assistantMsgText));
         }
         break;
-      case 'tool_start':
-        toolMsgId = append({
-          type: 'tool',
-          content: { name: event.name, query: event.query, status: 'pending' },
-        });
-        break;
-      case 'tool_result':
-        if (toolMsgId !== null) {
-          update(toolMsgId, {
-            type: 'tool',
-            content: { name: event.name, output: event.output, status: 'done' },
-          });
+      case 'tool': {
+        const { type, ...content } = event;
+        if (content.status === 'pending') {
+          toolMsgId = append({ type, content });
+        } else if (toolMsgId !== null) {
+          update(toolMsgId, { type, content });
         }
         break;
+      }
       case 'sources':
         // Sent only when the answer searched; an empty list still gets its bubble.
         append({ type: 'sources', content: { sources: event.sources } });

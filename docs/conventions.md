@@ -79,14 +79,16 @@ class ChunkerPort(Protocol):
 
 ## Adding a new SSE event
 
-The `POST /api/conversations/{id}/messages` wire format is hand-kept in four places; change all four together:
+Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSON, told apart by
+its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
 1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
-2. its encoder in `_ENCODERS` in `rag/api/sse.py`, returning the event name and a
-   dict or Pydantic model as `data` (FastAPI's `ServerSentEvent` serializes it as one-line JSON);
-3. its name in `STREAM_EVENT_TYPES` in `frontend/src/api/chat.ts` and its member of
-   `ChatStreamEvent` in `frontend/src/types/chat.ts` (the event's JSON fields are spread into it);
-4. `test_send_message_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only
-   check that catches the two sides drifting apart.
+2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/conversations.py`, added to
+   `StreamEventResponse`, and its case in `to_stream_event`;
+3. its `Schemas[...]` member in `ChatStreamEvent` (`frontend/src/types/chat.ts`) and its case in
+   `createBubbleHandler` (`frontend/src/utils/chatStream.ts`).
+
+The `frontend-api-types` pre-commit hook regenerates the types, and `frontend-typecheck` fails
+if the frontend no longer matches them.
 
 ## Adding a new schema/DTO
 
