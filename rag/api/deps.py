@@ -27,25 +27,25 @@ def get_retrieval_service(container: ContainerDep) -> RetrievalService:
     return container.retrieval_service
 
 
-RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
-
-
 def get_auth_service(container: ContainerDep) -> AuthService:
     return container.auth_service
-
-
-AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 def get_ingestion_service(container: ContainerDep) -> IngestionService:
     return container.ingestion_service
 
 
+def get_conversation_service(container: ContainerDep) -> ConversationService:
+    return container.conversation_service
+
+
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
-def get_conversation_service(container: ContainerDep) -> ConversationService:
-    return container.conversation_service
+RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
+
+
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 ConversationServiceDep = Annotated[

@@ -33,6 +33,8 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   - `rag.api` may not import the entrypoints (`app.py`, `cli.py`)
   - within `rag.api`, only `deps.py` reaches `rag.services` and the container; routers get
     services through its `Annotated` aliases
+  - routers may not import `rag.domain` directly; only `deps.py` and `rag.api.schema` translate
+    domain types into the API layer (`CurrentUserDep`'s `AuthenticatedIdentity`, `to_stream_event`)
   - routers are independent of each other
   - services are independent of each other, with no exceptions: one that needs another depends
     on a port in `rag.domain.ports` (`GenerationPort`, `SearchPort`), and `container.py` wires in
