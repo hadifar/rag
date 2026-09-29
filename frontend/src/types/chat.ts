@@ -1,10 +1,9 @@
 import type { Schemas } from './api';
 
-export type TextContent = { text: string };
-
+// A bubble's content is the stream event it shows, minus its `type`.
+export type TextContent = Omit<Schemas['TextEvent'], 'type'>;
 export type ToolContent = Omit<Schemas['ToolEvent'], 'type'>;
-
-export type SourcesContent = { sources: string[] };
+export type SourcesContent = Omit<Schemas['SourcesEvent'], 'type'>;
 
 export type ChatMessageInput =
   | { type: 'typing' }
