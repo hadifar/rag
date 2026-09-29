@@ -63,6 +63,16 @@ repos:
         files: ^(frontend/(src|tests)/.*\.tsx?|frontend/tsconfig.*\.json)$
         stages: [pre-commit]
 
+      # oxlint (frontend/.oxlintrc.json): hooks rules, plus the import boundaries — components
+      # and pages never import api/, types come from the types index, no bare fetch.
+      - id: frontend-lint
+        name: frontend lint (oxlint)
+        entry: bash -c 'cd frontend && npx --no-install oxlint --deny-warnings'
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|tests)/.*\.tsx?$|^frontend/\.oxlintrc\.json$
+        stages: [pre-commit]
+
 
 
   # General file checks

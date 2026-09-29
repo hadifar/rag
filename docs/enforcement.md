@@ -40,6 +40,19 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
   - an explicit layering contract: `rag.api` → `rag.services` → `rag.domain`
 - `uv-lock` keeps `uv.lock` in sync with `pyproject.toml`, auto-fixing locally
 
+## Frontend code quality
+- `frontend-lint` runs oxlint (`frontend/.oxlintrc.json`) on every commit with
+  `--deny-warnings`, so CI's `pre-commit` job gates on it. Besides the React hooks rules, it
+  enforces the frontend's layering:
+  - components and pages never import `api/`: they only present, and reach the server through
+    a hook or context (`no-restricted-imports`)
+  - types come from the `types` index, never a single file inside `types/`; only
+    `types/api.ts` imports the generated `api.generated.ts`
+  - no bare `fetch` outside `api/client.ts` and `api/auth.ts`, so every call goes through the
+    client that adds the token and refreshes it (`no-restricted-globals`)
+- `tsc` runs strict (the TypeScript 6 default) plus `noUncheckedIndexedAccess`, so `list[i]` is
+  `T | undefined` and has to be checked (`frontend-typecheck`, below)
+
 ## Backend/frontend schema sync
 - The `frontend-api-types` pre-commit hook regenerates
   `frontend/src/types/api.generated.ts` from the backend's OpenAPI schema whenever
@@ -77,5 +90,5 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
 
 ## What CI actually gates on PR / push to master
 `pre-commit.yml` runs three jobs: the full pre-commit suite (ruff, pyright, import-linter, unit
-tests, the frontend type sync and type check, …), `pytest tests/unit`, and (PR only) the
+tests, the frontend type sync, type check and lint, …), `pytest tests/unit`, and (PR only) the
 Conventional Commits check across the PR's commit range.

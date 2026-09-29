@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
+import { openKbSource } from '../api/kb';
 import {
   createConversation,
   fetchConversationMessages,
@@ -124,5 +125,10 @@ export function useChat(conversationId: string | undefined) {
     [append, update, showTyping, openConversation, nameConversation]
   );
 
-  return { messages, sendMessage };
+  /** Opens a cited knowledge-base document in a new tab. */
+  const openSource = useCallback((name: string) => {
+    openKbSource(name).catch(() => window.alert("Couldn't open that document. Please try again."));
+  }, []);
+
+  return { messages, sendMessage, openSource };
 }

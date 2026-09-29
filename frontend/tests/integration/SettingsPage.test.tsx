@@ -103,7 +103,10 @@ describe('SettingsPage knowledge base', () => {
     await uploadZip(user);
 
     expect(await screen.findByRole('status')).toHaveTextContent('Indexing…');
-    expect((sent[0].get('file') as File).name).toBe('kb.zip');
+    expect(sent).toHaveLength(1);
+    const file = sent[0]?.get('file');
+    expect(file).toBeInstanceOf(File);
+    expect((file as File).name).toBe('kb.zip');
     // The second status check, one poll interval later, sees it finished.
     expect(
       await screen.findByText('Done: 2 added (2 documents)', {}, { timeout: 3000 }),

@@ -63,10 +63,13 @@ class ChunkerPort(Protocol):
 - App-level values reach routes through `app.state` (as `ContainerDep` does), not
   `dependency_overrides`, which is for tests.
 - On failure, raise a `rag.domain.errors.RagError` subclass with a `status_code: ClassVar[int]`,
-  never `fastapi.HTTPException`. No change to `app.py` or `error_handlers.py` is needed.
+  never `fastapi.HTTPException` (ruff bans it). No change to `app.py` or `error_handlers.py` is
+  needed.
 - Its frontend calls go in the matching `frontend/src/api/x.ts` (one module per router), through
   `authFetch` from `api/client.ts` — never a bare `fetch` or a token passed in by the caller
-  (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`).
+  (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`; oxlint
+  rejects `fetch` anywhere else). Components and pages never import `api/` (oxlint rejects that
+  too): they get data and actions from a hook or context.
   Request/response types are the named types in `frontend/src/types/api.ts` (one per backend
   model, same name) — add the new model's line there, never a hand-written interface.
 
@@ -105,7 +108,8 @@ if the frontend no longer matches them.
 
 - A type another file uses lives in `frontend/src/types/<feature>.ts` (`auth.ts`,
   `conversations.ts`, …), re-exported from `types/index.ts`, and is imported from `'../types'` —
-  never from a hook or component file. Backend shapes go only in `types/api.ts` (see above).
+  never from a hook or component file, nor from a single file inside `types/` (oxlint rejects
+  both). Backend shapes go only in `types/api.ts` (see above).
 - A type only one file uses (a component's props, a local helper signature) stays in that file.
 - Before adding one, check `types/` for an equal type to reuse (e.g. `LoadStatus`).
 
