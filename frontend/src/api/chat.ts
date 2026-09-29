@@ -7,7 +7,6 @@ import { ApiError, apiUrl, authFetch, jsonPostInit } from './client';
 import type { ChatStreamEvent, Schemas } from '../types';
 
 const STREAM_EVENT_TYPES: ReadonlySet<string> = new Set<ChatStreamEvent['type']>([
-  'title',
   'text',
   'tool_start',
   'tool_result',

@@ -6,6 +6,11 @@ export function createConversation(signal?: AbortSignal): Promise<Schemas['Conve
   return requestJson('conversations', { method: 'POST', signal });
 }
 
+/** Renames the conversation with an LLM-written title; call once its first answer is in. */
+export function generateTitle(id: string): Promise<Schemas['ConversationResponse']> {
+  return requestJson(`conversations/${encodeURIComponent(id)}/title`, { method: 'POST' });
+}
+
 export function listConversations(
   cursor: string | null
 ): Promise<Schemas['ConversationPageResponse']> {

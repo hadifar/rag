@@ -29,9 +29,9 @@
 - `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
 ## Conversation & session state
-- Titles are LLM-generated after a new conversation's first answer, so the stream stays open
-  (after the answer is complete) for one more short LLM call, capped at 10s. If it fails or
-  times out, the conversation keeps its fallback title (the trimmed first message).
+- The LLM title is a separate request the client makes once a new conversation's first answer
+  has streamed (capped at 10s). If that request fails, times out or never happens (the tab was
+  closed), the conversation keeps its fallback title, the trimmed first message; nothing retries.
 - The sidebar paginates by `(updated_at, id)`, and using a conversation moves it to the top, so a
   conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
   but a conversation used on another device meanwhile won't show up until a reload.

@@ -3,12 +3,6 @@ import type { ChatMessageInput, ChatStreamEvent } from '../types';
 type AppendMessage = (msg: ChatMessageInput) => string;
 type UpdateMessage = (id: string, msg: ChatMessageInput) => void;
 
-/** The streamed events that become bubbles; the rest update the sidebar or the URL. */
-export type BubbleEvent = Extract<
-  ChatStreamEvent,
-  { type: 'text' | 'tool_start' | 'tool_result' | 'sources' }
->;
-
 export function assistantText(text: string): ChatMessageInput {
   return { type: 'text', content: { text } };
 }
@@ -23,7 +17,7 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
   let assistantMsgText = '';
   let toolMsgId: string | null = null;
 
-  return (event: BubbleEvent) => {
+  return (event: ChatStreamEvent) => {
     switch (event.type) {
       case 'text':
         assistantMsgText += event.text;

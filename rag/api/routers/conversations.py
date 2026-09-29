@@ -80,6 +80,21 @@ async def send_message(
         yield to_sse(event)
 
 
+@router.post("/{conversation_id}/title")
+async def generate_title(
+    conversation_id: uuid.UUID,
+    current_user: CurrentUserDep,
+    conversation_service: ConversationServiceDep,
+) -> ConversationResponse:
+    """Renames the conversation with an LLM-written title for its first exchange; the
+    client calls it once the first answer has streamed.
+    """
+    conversation = await conversation_service.generate_title(
+        current_user.id, conversation_id
+    )
+    return ConversationResponse.model_validate(conversation)
+
+
 @router.delete("/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: uuid.UUID,

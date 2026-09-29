@@ -27,16 +27,4 @@ class SourcesReady:
     sources: list[str]
 
 
-@dataclass
-class ConversationTitled:
-    """A conversation's first message names it: first event of its first turn, from the
-    message, and last event too if an LLM-written title replaces it.
-    """
-
-    conversation_id: str
-    title: str
-
-
-StreamEvent = (
-    TextDelta | ToolCallStart | ToolCallResult | SourcesReady | ConversationTitled
-)
+StreamEvent = TextDelta | ToolCallStart | ToolCallResult | SourcesReady

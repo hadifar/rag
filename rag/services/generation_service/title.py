@@ -14,7 +14,7 @@ TITLE_PROMPT = (
 MAX_TITLE_LENGTH = 80
 # Only the start of the answer is needed to title it; caps the title call's cost.
 TITLE_ANSWER_EXCERPT = 1000
-# The stream stays open until the title arrives; don't hold it on a slow LLM.
+# The client waits on this for the sidebar title; don't hold it on a slow LLM.
 TITLE_TIMEOUT_SECONDS = 10
 
 

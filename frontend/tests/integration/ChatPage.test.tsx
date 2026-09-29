@@ -57,6 +57,9 @@ describe('ChatPage', () => {
           ['sources', { sources: ['02-plans-and-pricing.md'] }],
         ]);
       }),
+      http.post('/api/conversations/:id/title', () =>
+        HttpResponse.json({ ...newConversation, title: 'Plans and pricing' }),
+      ),
     );
     const { router, user } = renderChat('/chat');
 

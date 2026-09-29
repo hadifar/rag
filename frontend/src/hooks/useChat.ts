@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
-import { createConversation, fetchConversationMessages } from '../api/conversations';
+import {
+  createConversation,
+  fetchConversationMessages,
+  generateTitle,
+} from '../api/conversations';
 import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
 import { conversationPath } from '../utils/conversations';
@@ -76,14 +80,12 @@ export function useChat(conversationId: string | undefined) {
 
       const showBubble = createBubbleHandler(append, update);
       const onEvent = (event: ChatStreamEvent) => {
-        if (event.type === 'title') {
-          rename(event.id, event.title);
-          return;
-        }
         clearTyping();
         showBubble(event);
       };
 
+      let newChatId: string | undefined;
+      let answered = false;
       try {
         let id = conversationIdRef.current;
         if (id) {
@@ -92,7 +94,7 @@ export function useChat(conversationId: string | undefined) {
           // A new chat is created first; the URL follows it before anything streams.
           const conversation = await createConversation(controller.signal);
           upsert(conversation);
-          id = conversation.id;
+          id = newChatId = conversation.id;
           conversationIdRef.current = id; // before navigating, so the chat isn't reloaded
           navigate(conversationPath(id), { replace: true });
         }
@@ -102,6 +104,7 @@ export function useChat(conversationId: string | undefined) {
           onEvent,
           signal: controller.signal,
         });
+        answered = true;
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);
@@ -110,6 +113,16 @@ export function useChat(conversationId: string | undefined) {
       } finally {
         clearTyping();
         if (abortRef.current === controller) abortRef.current = null;
+      }
+
+      // A new chat's first answer is in: give it a proper title for the sidebar.
+      if (newChatId && answered) {
+        try {
+          const { title } = await generateTitle(newChatId);
+          if (title) rename(newChatId, title);
+        } catch {
+          // It keeps the title the server cut from the message; the sidebar shows it on reload.
+        }
       }
     },
     [append, update, remove, upsert, bump, rename, navigate],

@@ -5,7 +5,6 @@ from typing import Any
 from fastapi.sse import ServerSentEvent
 
 from rag.domain.events import (
-    ConversationTitled,
     SourcesReady,
     StreamEvent,
     TextDelta,
@@ -19,7 +18,6 @@ class SseEventType(StrEnum):
     TOOL_START = "tool_start"
     TOOL_RESULT = "tool_result"
     SOURCES = "sources"
-    TITLE = "title"
 
 
 _ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, Any]]] = {
@@ -33,10 +31,6 @@ _ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, Any]]] = {
         {"name": e.name, "output": e.output},
     ),
     SourcesReady: lambda e: (SseEventType.SOURCES, {"sources": e.sources}),
-    ConversationTitled: lambda e: (
-        SseEventType.TITLE,
-        {"id": e.conversation_id, "title": e.title},
-    ),
 }
 
 

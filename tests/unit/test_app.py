@@ -311,24 +311,12 @@ def test_send_message_contract_matches_frontend_parsing(
     events = _parse_sse(_send(client, auth_headers, conversation_id, "hi"))
 
     assert [event for event, _ in events] == [
-        SseEventType.TITLE,
         SseEventType.TEXT,
         SseEventType.TOOL_START,
         SseEventType.TOOL_RESULT,
         SseEventType.SOURCES,
-        SseEventType.TITLE,
     ]
-    (
-        first_title_event,
-        text_event,
-        tool_start_event,
-        tool_result_event,
-        sources_event,
-        title_event,
-    ) = events
-
-    # frontend: const { id, title } = JSON.parse(ev.data) — named from the message first
-    assert json.loads(first_title_event[1]) == {"id": conversation_id, "title": "hi"}
+    text_event, tool_start_event, tool_result_event, sources_event = events
 
     # frontend: const { text } = JSON.parse(ev.data)
     assert json.loads(text_event[1]) == {"text": "echo: hi"}
@@ -348,9 +336,6 @@ def test_send_message_contract_matches_frontend_parsing(
     # frontend: const { names } = JSON.parse(ev.data)
     assert json.loads(sources_event[1]) == {"sources": ["doc-a", "doc-b"]}
 
-    # ...then renamed with the LLM-written title once the answer is done
-    assert json.loads(title_event[1]) == {"id": conversation_id, "title": "Greeting"}
-
 
 def test_send_message_text_with_newlines_survives_sse_framing(
     client: TestClient, auth_headers: dict[str, str]
@@ -367,15 +352,19 @@ def test_send_message_text_with_newlines_survives_sse_framing(
     assert [json.loads(data) for data in text_events] == [{"text": f"echo: {message}"}]
 
 
-def test_follow_up_message_is_not_retitled(
+def test_generate_title_renames_the_conversation(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     conversation_id = _start_conversation(client, auth_headers)
 
-    events = dict(_parse_sse(_send(client, auth_headers, conversation_id, "again")))
+    response = client.post(
+        f"/api/conversations/{conversation_id}/title", headers=auth_headers
+    )
 
-    assert SseEventType.TEXT in events
-    assert SseEventType.TITLE not in events  # only the first answer names it
+    assert response.status_code == 200
+    assert response.json()["title"] == "Greeting"
+    listed = client.get("/api/conversations", headers=auth_headers).json()
+    assert listed["items"][0]["title"] == "Greeting"
 
 
 def test_send_message_404s_for_a_conversation_the_user_does_not_own(
@@ -408,7 +397,7 @@ def test_conversations_list_is_newest_first_and_paginated(
     ).json()
 
     assert [c["id"] for c in page1["items"] + page2["items"]] == [second, first]
-    assert page1["items"][0]["title"] == "Greeting"
+    assert page1["items"][0]["title"] == "second"  # named from its first message
     assert page2["next_cursor"] is None
 
 
@@ -467,6 +456,7 @@ def test_conversations_of_another_user_are_invisible(
         ("POST", "/api/conversations"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
+        ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )

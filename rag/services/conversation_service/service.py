@@ -3,10 +3,11 @@ import binascii
 import json
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import datetime
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
-from rag.domain.events import ConversationTitled, StreamEvent, TextDelta
+from rag.domain.events import StreamEvent
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import ConversationRepositoryPort, GenerationPort
 
@@ -31,28 +32,37 @@ class ConversationService:
     async def chat(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> AsyncIterator[StreamEvent]:
-        """Streams the answer to `message`. A first message names the conversation
-        straight away (a title cut from the message); once it's answered, an
-        LLM-written title replaces that if one can be generated.
+        """Streams the answer to `message`. A first message also names the conversation,
+        with a title cut from the message (see `generate_title` for a better one).
         """
         conversation = await self._touch_owned(user_id, conversation_id)
-        is_first = conversation.title is None
-        if is_first:
+        if conversation.title is None:
             # Titled before streaming, so an empty conversation is always untitled
             # and vice versa — even if the answer then fails.
-            yield await self._set_title(conversation_id, _fallback_title(message))
-
-        answer: list[str] = []
+            await self._repository.set_title(conversation_id, _fallback_title(message))
         async for event in self._generation.stream_chat(message, str(conversation_id)):
-            if isinstance(event, TextDelta):
-                answer.append(event.text)
             yield event
 
-        answer_text = "".join(answer)
-        if is_first and (
-            title := await self._generation.generate_title(message, answer_text)
-        ):
-            yield await self._set_title(conversation_id, title)
+    async def generate_title(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation:
+        """Renames the conversation with an LLM-written title for its first exchange.
+        Keeps the current title if there's no answered exchange yet or the LLM fails.
+        """
+        conversation = await self.get_owned(user_id, conversation_id)
+        match await self._generation.get_history(str(conversation_id)):
+            case [
+                HistoryMessage(role="user", text=question),
+                HistoryMessage(role="assistant", text=answer),
+                *_,
+            ]:
+                title = await self._generation.generate_title(question, answer)
+            case _:
+                title = None
+        if title is None:
+            return conversation
+        await self._repository.set_title(conversation_id, title)
+        return replace(conversation, title=title)
 
     async def list_for_user(
         self, user_id: uuid.UUID, limit: int, cursor: str | None
@@ -94,12 +104,6 @@ class ConversationService:
         if await self._repository.touch(conversation_id) is None:
             raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
         return conversation
-
-    async def _set_title(
-        self, conversation_id: uuid.UUID, title: str
-    ) -> ConversationTitled:
-        await self._repository.set_title(conversation_id, title)
-        return ConversationTitled(conversation_id=str(conversation_id), title=title)
 
 
 def _fallback_title(message: str) -> str:

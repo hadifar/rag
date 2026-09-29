@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
-from rag.domain.events import ConversationTitled, StreamEvent, TextDelta
+from rag.domain.events import StreamEvent, TextDelta
 from rag.domain.models import Conversation
 from rag.services.conversation_service.service import ConversationService
 from tests.unit.fakes import FakeConversationRepository, StubGeneration
@@ -51,18 +51,16 @@ async def test_create_returns_the_users_one_empty_conversation() -> None:
     assert (await service.create(ALICE)).id != conversation.id
 
 
-async def test_first_message_names_it_and_its_answer_renames_it() -> None:
+async def test_generate_title_renames_it_after_the_first_exchange() -> None:
     service, repository, generation = _service(StubGeneration(title="Password reset"))
     conversation_id = (await service.create(ALICE)).id
+    await _send(service, ALICE, conversation_id, "How do I reset my password?")
+    # Named from the message as soon as it arrived.
+    assert repository.rows[conversation_id].title == "How do I reset my password?"
 
-    events = await _send(service, ALICE, conversation_id, "How do I reset my password?")
+    renamed = await service.generate_title(ALICE, conversation_id)
 
-    assert events[0] == ConversationTitled(
-        conversation_id=str(conversation_id), title="How do I reset my password?"
-    )
-    assert events[-1] == ConversationTitled(
-        conversation_id=str(conversation_id), title="Password reset"
-    )
+    assert renamed.title == "Password reset"
     assert repository.rows[conversation_id].title == "Password reset"
     # The title is generated from both sides of the first exchange.
     assert generation.title_requests == [
@@ -70,21 +68,17 @@ async def test_first_message_names_it_and_its_answer_renames_it() -> None:
     ]
 
 
-async def test_failed_title_generation_names_it_after_the_message() -> None:
+async def test_failed_title_generation_keeps_the_title_from_the_message() -> None:
     service, repository, _ = _service(StubGeneration(title=None))
     conversation_id = (await service.create(ALICE)).id
-
     events = await _send(
         service, ALICE, conversation_id, "  How do I\nreset my password?  "
     )
+    assert [e for e in events if isinstance(e, TextDelta)]  # the answer streamed
 
-    assert [e for e in events if isinstance(e, TextDelta)]  # the answer still streamed
-    titles = [e for e in events if isinstance(e, ConversationTitled)]
-    assert titles == [
-        ConversationTitled(
-            conversation_id=str(conversation_id), title="How do I reset my password?"
-        )
-    ]
+    conversation = await service.generate_title(ALICE, conversation_id)
+
+    assert conversation.title == "How do I reset my password?"
     assert repository.rows[conversation_id].title == "How do I reset my password?"
 
 
@@ -100,14 +94,14 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
 
 
 async def test_follow_up_message_is_not_retitled() -> None:
-    service, _, generation = _service()
+    service, repository, generation = _service()
     conversation_id = (await service.create(ALICE)).id
     await _send(service, ALICE, conversation_id, "first")
 
-    second = await _send(service, ALICE, conversation_id, "second")
+    await _send(service, ALICE, conversation_id, "second")
 
-    assert not any(isinstance(e, ConversationTitled) for e in second)
-    assert len(generation.title_requests) == 1
+    assert repository.rows[conversation_id].title == "first"
+    assert generation.title_requests == []  # chat never asks the LLM for a title
     assert len(generation.threads[str(conversation_id)]) == 4
 
 
@@ -117,6 +111,8 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
 
     with pytest.raises(ConversationNotFoundError):
         await _send(service, ALICE, conversation_id, "hi")
+    with pytest.raises(ConversationNotFoundError):
+        await service.generate_title(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
