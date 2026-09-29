@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -23,6 +24,10 @@ class _TokenType(StrEnum):
 
 
 class AuthService:
+    """Password hashing runs in a thread: argon2 is slow on purpose, and on the event
+    loop it would stall every other request, including open chat streams.
+    """
+
     def __init__(
         self,
         user_repository: UserRepositoryPort,
@@ -41,8 +46,9 @@ class AuthService:
     async def create_user(
         self, email: str, password: str, *, is_admin: bool = False
     ) -> User:
+        hashed_password = await asyncio.to_thread(self._hasher.hash, password)
         return await self._user_repository.create(
-            email, self._hasher.hash(password), is_admin=is_admin
+            email, hashed_password, is_admin=is_admin
         )
 
     async def set_admin(self, email: str, is_admin: bool) -> User:
@@ -62,7 +68,7 @@ class AuthService:
         if user is None:
             raise InvalidCredentialsError()
         try:
-            self._hasher.verify(user.hashed_password, password)
+            await asyncio.to_thread(self._hasher.verify, user.hashed_password, password)
         except VerifyMismatchError as exc:
             raise InvalidCredentialsError() from exc
         return user
@@ -72,6 +78,10 @@ class AuthService:
         if user is None:
             raise UserNotFoundError(user_id)
         return user
+
+    @property
+    def refresh_ttl(self) -> timedelta:
+        return self._refresh_ttl
 
     def create_access_token(self, user: User) -> str:
         return self._encode(user.id, _TokenType.ACCESS, self._access_ttl)

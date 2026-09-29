@@ -1,10 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
-from rag.api.deps import RetrievalServiceDep
+from rag.api.deps import RetrievalServiceDep, get_current_user
 from rag.domain.errors import DocumentNotFoundError
 
-router = APIRouter(prefix="/api/kb", tags=["kb"])
+router = APIRouter(
+    prefix="/api/kb", tags=["kb"], dependencies=[Depends(get_current_user)]
+)
 
 
 @router.get("/{filename}")

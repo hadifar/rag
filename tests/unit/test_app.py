@@ -272,9 +272,9 @@ def test_chat_stream_contract_matches_frontend_parsing(
 ) -> None:
     """Locks the SSE wire format to what frontend/src/api/chat.ts actually parses.
 
-    This endpoint returns raw text/event-stream, so it's invisible to the OpenAPI
-    schema (and therefore to openapi-typescript) — this test is the only thing
-    that catches a field rename here before it breaks the frontend at runtime.
+    The OpenAPI schema only says this endpoint streams events, not what's in them
+    (so openapi-typescript can't type them) — this test is the only thing that
+    catches a field rename here before it breaks the frontend at runtime.
     """
     with client.stream(
         "POST",

@@ -46,16 +46,17 @@ class ChunkerPort(Protocol):
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 
 - Module-level `router = APIRouter(prefix="/api/x", tags=["x"])` in `rag/api/routers/`, each
-  endpoint a plain `@router.get`/`post` function.
+  endpoint a plain `@router.get`/`post` function. A gate every route shares goes on the router
+  itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
+  `get_current_admin`). A dependency only one route needs goes on that route.
 - Take dependencies as `Annotated[T, Depends(...)]` aliases from `deps.py` (`ContainerDep`,
-  `SettingsDep`, `CurrentUserDep`, …); never construct a service inline.
+  `CurrentUserDep`, `ConversationServiceDep`, …); never construct a service inline.
 - A route reads as "call the service, shape the result" — business logic lives in the service.
-- Return typed Pydantic models; use a `Response` subclass (`StreamingResponse`,
+- Return typed Pydantic models; use another response class (`EventSourceResponse`,
   `PlainTextResponse`) only when the body genuinely isn't JSON.
-- In `app.py`, import the router object and `app.include_router(router, dependencies=...)`. The
-  prefix stays on the router; `dependencies=` is only for a gate every route shares (e.g.
-  `[Depends(get_current_user)]`). A dependency only one route needs goes on that route.
-- App-level values reach routes through `app.state` (as `SettingsDep`/`ContainerDep` do), not
+- In `app.py`, import the router object and add an `app.include_router(router)` line — no
+  `dependencies=` there.
+- App-level values reach routes through `app.state` (as `ContainerDep` does), not
   `dependency_overrides`, which is for tests.
 - On failure, raise a `rag.domain.errors.RagError` subclass with a `status_code: ClassVar[int]`,
   never `fastapi.HTTPException`. No change to `app.py` or `error_handlers.py` is needed.
@@ -69,15 +70,16 @@ class ChunkerPort(Protocol):
 - Look it up by id *and* check it against the caller in the service (example:
   `ConversationService._get_owned`), never in the router.
 - Missing and someone-else's raise the same not-found error (404), so ids can't be probed.
-- If a streaming endpoint uses it, resolve it before the `StreamingResponse` starts (`start_turn`),
-  so a bad id is a clean 404 instead of an error inside an already-200 stream.
+- If a streaming endpoint uses it, resolve it in a dependency in `deps.py` (`TurnDep`): a
+  generator route's body only runs once the response has started, so a bad id raised there
+  would be an error inside an already-200 stream instead of a clean 404.
 
 ## Adding a new SSE event
 
 The `/api/chat/stream` wire format is hand-kept in four places; change all four together:
 1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
-2. its encoder in `_ENCODERS` in `rag/api/routers/chat.py` — `data` must be single-line JSON
-   (`json.dumps`/`model_dump_json`), never raw text, or a `\n\n` ends the event early;
+2. its encoder in `_ENCODERS` in `rag/api/routers/chat.py`, returning the event name and a
+   dict or Pydantic model as `data` (FastAPI's `ServerSentEvent` serializes it as one-line JSON);
 3. its name in `STREAM_EVENT_TYPES` in `frontend/src/api/chat.ts` and its member of
    `ChatStreamEvent` in `frontend/src/types/chat.ts` (the event's JSON fields are spread into it);
 4. `test_chat_stream_contract_matches_frontend_parsing` in `tests/unit/test_app.py`, the only

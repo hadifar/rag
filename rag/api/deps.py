@@ -1,25 +1,22 @@
 from typing import Annotated
 
-from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Request, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from rag.config import Settings
+from rag.api.schema.chat import ChatRequest
 from rag.container import Container
 from rag.domain.models import User
 from rag.services.auth_service.service import AuthService
-from rag.services.conversation_service.service import ConversationService
-from rag.services.ingestion_service.service import IngestionService
+from rag.services.conversation_service.service import ConversationService, Turn
+from rag.services.ingestion_service.service import (
+    MAX_ARCHIVE_BYTES,
+    IngestionService,
+)
 from rag.services.retrieval_service.service import RetrievalService
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-
-def get_app_settings(request: Request) -> Settings:
-    """FastAPI dependency: reads the Settings create_app() stashed on app.state."""
-    return request.app.state.settings
-
-
-SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+# A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
+# not the OAuth2 password form that /docs' Authorize button would post.
+_bearer = HTTPBearer()
 
 
 def get_container(request: Request) -> Container:
@@ -64,9 +61,10 @@ ConversationServiceDep = Annotated[
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(_oauth2_scheme)], auth_service: AuthServiceDep
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    auth_service: AuthServiceDep,
 ) -> User:
-    user_id = auth_service.verify_access_token(token)
+    user_id = auth_service.verify_access_token(credentials.credentials)
     return await auth_service.get_user(user_id)
 
 
@@ -78,3 +76,29 @@ def get_current_admin(user: CurrentUserDep) -> User:
 
 
 AdminUserDep = Annotated[User, Depends(get_current_admin)]
+
+
+async def start_turn(
+    chat_request: ChatRequest,
+    current_user: CurrentUserDep,
+    conversation_service: ConversationServiceDep,
+) -> Turn:
+    """A dependency, so it runs before a streaming response starts: an unknown or
+    foreign conversation is a plain 404 rather than an error in an already-200 stream.
+    """
+    return await conversation_service.start_turn(
+        current_user.id, chat_request.conversation_id, chat_request.message
+    )
+
+
+TurnDep = Annotated[Turn, Depends(start_turn)]
+
+
+async def read_archive_upload(file: UploadFile) -> bytes:
+    """One byte over the limit is enough for the service to reject the upload, without
+    ever holding an oversized one in memory.
+    """
+    return await file.read(MAX_ARCHIVE_BYTES + 1)
+
+
+ArchiveUploadDep = Annotated[bytes, Depends(read_archive_upload)]

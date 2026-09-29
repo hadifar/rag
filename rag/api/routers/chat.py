@@ -1,12 +1,11 @@
-import json
-from collections.abc import Callable
+from collections.abc import AsyncIterable, Callable
 from enum import StrEnum
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from rag.api.deps import ConversationServiceDep, CurrentUserDep
+from rag.api.deps import ConversationServiceDep, TurnDep, get_current_user
 from rag.api.schema.chat import ChatRequest
 from rag.api.schema.conversations import ConversationResponse
 from rag.domain.events import (
@@ -29,52 +28,43 @@ class SseEventType(StrEnum):
     TITLE = "title"
 
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+router = APIRouter(
+    prefix="/api/chat", tags=["chat"], dependencies=[Depends(get_current_user)]
+)
 
 
-@router.post("/stream")
+@router.post("/stream", response_class=EventSourceResponse)
 async def stream(
     chat_request: ChatRequest,
-    current_user: CurrentUserDep,
+    turn: TurnDep,
     conversation_service: ConversationServiceDep,
-) -> StreamingResponse:
-    # Resolved before the response starts, so an unknown or foreign conversation is a
-    # plain 404 rather than an error in the middle of an already-200 stream.
-    turn = await conversation_service.start_turn(
-        current_user.id, chat_request.conversation_id, chat_request.message
-    )
-
-    async def event_stream():
-        async for event in conversation_service.stream_turn(turn, chat_request.message):
-            yield _to_sse(event)
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+) -> AsyncIterable[ServerSentEvent]:
+    async for event in conversation_service.stream_turn(turn, chat_request.message):
+        yield _to_sse(event)
 
 
-# Every payload is single-line JSON: json.dumps escapes "\n", which would otherwise end
-# the SSE event early and drop the rest of e.g. a markdown token.
-_ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, str]]] = {
+_ENCODERS: dict[type, Callable[[Any], tuple[SseEventType, Any]]] = {
     ConversationReady: lambda e: (
         SseEventType.CONVERSATION,
-        ConversationResponse.model_validate(e.conversation).model_dump_json(),
+        ConversationResponse.model_validate(e.conversation),
     ),
-    TextDelta: lambda e: (SseEventType.TEXT, json.dumps({"text": e.text})),
+    TextDelta: lambda e: (SseEventType.TEXT, {"text": e.text}),
     ToolCallStart: lambda e: (
         SseEventType.TOOL_START,
-        json.dumps({"name": e.name, "query": e.query}),
+        {"name": e.name, "query": e.query},
     ),
     ToolCallResult: lambda e: (
         SseEventType.TOOL_RESULT,
-        json.dumps({"name": e.name, "output": e.output}),
+        {"name": e.name, "output": e.output},
     ),
-    SourcesReady: lambda e: (SseEventType.SOURCES, json.dumps({"sources": e.sources})),
+    SourcesReady: lambda e: (SseEventType.SOURCES, {"sources": e.sources}),
     ConversationTitled: lambda e: (
         SseEventType.TITLE,
-        json.dumps({"id": e.conversation_id, "title": e.title}),
+        {"id": e.conversation_id, "title": e.title},
     ),
 }
 
 
-def _to_sse(event: StreamEvent) -> str:
+def _to_sse(event: StreamEvent) -> ServerSentEvent:
     event_type, data = _ENCODERS[type(event)](event)
-    return f"event: {event_type.value}\ndata: {data}\n\n"
+    return ServerSentEvent(event=event_type, data=data)

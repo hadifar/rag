@@ -1,15 +1,19 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from rag.api.deps import ConversationServiceDep, CurrentUserDep
+from rag.api.deps import ConversationServiceDep, CurrentUserDep, get_current_user
 from rag.api.schema.conversations import (
     ConversationPageResponse,
     HistoryMessageResponse,
 )
 
-router = APIRouter(prefix="/api/conversations", tags=["conversations"])
+router = APIRouter(
+    prefix="/api/conversations",
+    tags=["conversations"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("")

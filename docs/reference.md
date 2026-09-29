@@ -54,7 +54,7 @@ rag/
 │   └── ingestion_run_repository.py   # one row per upload; at most one `running`
 │
 ├── api/
-│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. SettingsDep/CurrentUserDep
+│   ├── deps.py                       # `Annotated[T, Depends(...)]` aliases, incl. ContainerDep/CurrentUserDep
 │   ├── error_handlers.py             # one handler, dispatches on each RagError's `status_code`
 │   ├── schema/                       # request/response DTOs, one module per feature (chat.py, auth.py, ...)
 │   └── routers/                      # chat.py, health.py, auth.py, etc. — flat `router = APIRouter(...)`
@@ -92,8 +92,8 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 
 `container.py`'s `build_container` is the composition root: an async context manager that opens
 the Postgres pools and tracing, constructs every adapter, repository and service, and tears the
-connections down on exit. `app.py` stores the result (and `Settings`) on `app.state`, where
-`ContainerDep`/`SettingsDep` in `api/deps.py` read it.
+connections down on exit. `app.py` stores the result on `app.state`, where `ContainerDep` in
+`api/deps.py` reads it.
 
 Documents are read by `loaders.py`: `load_directory` (a directory of `.md` files) and
 `load_archive` (a `.zip`, read in memory, with member-count and uncompressed-size caps);
