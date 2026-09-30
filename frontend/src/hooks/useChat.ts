@@ -8,6 +8,7 @@ import {
   createConversation,
   fetchConversationMessages,
   generateTitle,
+  touchConversation,
 } from '../api/conversations';
 import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
@@ -64,6 +65,7 @@ export function useChat(conversationId: string | undefined) {
     async (signal: AbortSignal): Promise<{ id: string; isNew: boolean }> => {
       const current = conversationIdRef.current;
       if (current) {
+        await touchConversation(current, signal);
         bump(current);
         return { id: current, isNew: false };
       }
@@ -77,7 +79,7 @@ export function useChat(conversationId: string | undefined) {
   );
 
   // Gives a new chat a proper title from its first message, without waiting for the answer.
-  // On failure it keeps the title the server cut from that message.
+  // If the request itself fails the conversation stays untitled until reloaded.
   const nameConversation = useCallback(
     async (id: string, message: string) => {
       const { title } = await generateTitle(id, message).catch(() => ({ title: null }));

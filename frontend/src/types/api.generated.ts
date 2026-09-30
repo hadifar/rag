@@ -148,6 +148,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/touch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Touch Conversation
+         * @description Marks the conversation as just used, so it sorts first in the list; the client
+         *     calls it as it sends a message.
+         */
+        post: operations["touch_conversation_api_conversations__conversation_id__touch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/title": {
         parameters: {
             query?: never;
@@ -159,8 +180,9 @@ export interface paths {
         put?: never;
         /**
          * Generate Title
-         * @description Renames the conversation with an LLM-written title for its first message; the
-         *     client calls it as it sends that message, without waiting for the answer.
+         * @description Names the conversation from its first message (an LLM-written title, or one cut
+         *     from the message if that fails); the client calls it as it sends that message,
+         *     without waiting for the answer.
          */
         post: operations["generate_title_api_conversations__conversation_id__title_post"];
         delete?: never;
@@ -730,6 +752,35 @@ export interface operations {
                 content: {
                     "text/event-stream": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    touch_conversation_api_conversations__conversation_id__touch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

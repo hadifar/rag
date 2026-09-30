@@ -277,7 +277,14 @@ def _send(
 def _start_conversation(
     client: TestClient, headers: dict[str, str], message: str = "hi"
 ) -> str:
+    """What the UI does for a first message: create, name it, then stream the answer."""
     conversation_id = _create_conversation(client, headers)
+    response = client.post(
+        f"/api/conversations/{conversation_id}/title",
+        json={"message": message},
+        headers=headers,
+    )
+    assert response.status_code == 200
     _send(client, headers, conversation_id, message)
     return conversation_id
 
@@ -396,8 +403,21 @@ def test_conversations_list_is_newest_first_and_paginated(
     ).json()
 
     assert [c["id"] for c in page1["items"] + page2["items"]] == [second, first]
-    assert page1["items"][0]["title"] == "second"  # named from its first message
+    assert page1["items"][0]["title"] == "Greeting"  # named from its first message
     assert page2["next_cursor"] is None
+
+
+def test_touch_moves_a_conversation_to_the_top_of_the_list(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    first = _start_conversation(client, auth_headers, "first")
+    second = _start_conversation(client, auth_headers, "second")
+
+    response = client.post(f"/api/conversations/{first}/touch", headers=auth_headers)
+
+    assert response.status_code == 204
+    listed = client.get("/api/conversations", headers=auth_headers).json()
+    assert [c["id"] for c in listed["items"]] == [first, second]
 
 
 @pytest.mark.parametrize(
@@ -443,6 +463,12 @@ def test_conversations_of_another_user_are_invisible(
         == 404
     )
     assert (
+        client.post(
+            f"/api/conversations/{others}/touch", headers=auth_headers
+        ).status_code
+        == 404
+    )
+    assert (
         client.delete(f"/api/conversations/{others}", headers=auth_headers).status_code
         == 404
     )
@@ -456,6 +482,7 @@ def test_conversations_of_another_user_are_invisible(
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
+        ("POST", f"/api/conversations/{uuid.uuid4()}/touch"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )

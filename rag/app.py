@@ -10,6 +10,7 @@ from rag.api.routers.conversations import router as conversations_router
 from rag.api.routers.health import router as health_router
 from rag.api.routers.ingestions import router as ingestions_router
 from rag.api.routers.kb import router as kb_router
+from rag.api.routers.rag import router as rag_router
 from rag.api.routers.settings import router as settings_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
@@ -61,6 +62,7 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(conversations_router)
+    app.include_router(rag_router)
     app.include_router(kb_router)
     app.include_router(ingestions_router)
     app.include_router(settings_router)

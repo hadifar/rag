@@ -33,34 +33,26 @@ class ConversationService:
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
-        conversations can't pile up. Its first message names it (see `chat`).
+        conversations can't pile up. Its first message names it (see `generate_title`).
         """
         return await self._repository.get_or_create_empty(user_id)
 
-    async def begin_chat(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
-    ) -> None:
-        """Readies the conversation for a turn: marks it used, and if it is untitled
-        (a first message) names it with a title cut from `message` (see
-        `generate_title` for a better one). Call before streaming the answer.
-        """
-        conversation = await self._touch_owned(user_id, conversation_id)
-        if conversation.title is None:
-            # Titled before streaming, so an empty conversation is always untitled
-            # and vice versa — even if the answer then fails.
-            await self._repository.set_title(conversation_id, _fallback_title(message))
+    async def touch(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+        """Marks the user's conversation as just used, so it sorts first in their list."""
+        await self.get_owned(user_id, conversation_id)
+        if await self._repository.touch(conversation_id) is None:
+            raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
 
     async def generate_title(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> Conversation:
-        """Renames the conversation with an LLM-written title for its first `message`.
-        Needs no answer, so the client asks as it sends the message, not after the reply.
-        Keeps the current title if the LLM fails.
+        """Names the conversation from its first `message`, with an LLM-written title, or
+        if the LLM fails, one cut from the message. Needs no answer, so the client asks
+        as it sends the message, not after the reply. Titling it also ends its life as
+        the user's empty draft (see `create`).
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        title = await self._llm_title(message)
-        if title is None:
-            return conversation
+        title = await self._llm_title(message) or _fallback_title(message)
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
 
@@ -121,15 +113,6 @@ class ConversationService:
         # Same error for "missing" and "someone else's", so ids can't be probed.
         if conversation is None or conversation.user_id != user_id:
             raise ConversationNotFoundError(conversation_id)
-        return conversation
-
-    async def _touch_owned(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation:
-        """The user's conversation, marked as just used."""
-        conversation = await self.get_owned(user_id, conversation_id)
-        if await self._repository.touch(conversation_id) is None:
-            raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
         return conversation
 
 

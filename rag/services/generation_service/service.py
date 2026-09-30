@@ -39,8 +39,8 @@ class GenerationService:
         parse: Callable[[Mapping[str, Any]], E | None],
     ) -> AsyncIterator[E]:
         """Runs `graph` on `messages` and yields what `parse` makes of each of its raw
-        stream events (LangGraph `astream_events`, v2); events it returns None for are
-        skipped. What the events mean is the caller's business, not generation's.
+        stream events; events it returns None for are skipped.
+        What the events mean is the caller's business, not generation's.
         """
         async for raw_event in graph.astream_events(
             {"messages": messages}, config=config, version="v2"
