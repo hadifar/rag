@@ -205,7 +205,7 @@ text stream too. Two consumers read the normalized stream:
   generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
-  (which links to `/api/kb/{filename}`).
+  (which links to `/api/retrieval/{filename}`).
 
 ## Observability
 
@@ -287,7 +287,7 @@ there, so the response status comes from the exception class itself.
 - `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
   404 if unknown.
 - `GET /api/ingestions/latest` — the most recent run, or `null`.
-- `GET /api/kb/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
+- `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).
 - `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI.

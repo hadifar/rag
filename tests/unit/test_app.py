@@ -163,23 +163,23 @@ def test_settings_endpoint_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_kb_endpoint_returns_document(
+def test_retrieval_endpoint_returns_document(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    response = client.get("/api/kb/some-doc", headers=auth_headers)
+    response = client.get("/api/retrieval/some-doc", headers=auth_headers)
     assert response.status_code == 200
     assert response.text == "content for some-doc"
 
 
-def test_kb_endpoint_404_when_document_missing(
+def test_retrieval_endpoint_404_when_document_missing(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    response = client.get("/api/kb/missing", headers=auth_headers)
+    response = client.get("/api/retrieval/missing", headers=auth_headers)
     assert response.status_code == 404
 
 
-def test_kb_endpoint_requires_auth(client: TestClient) -> None:
-    response = client.get("/api/kb/some-doc")
+def test_retrieval_endpoint_requires_auth(client: TestClient) -> None:
+    response = client.get("/api/retrieval/some-doc")
     assert response.status_code == 401
 
 

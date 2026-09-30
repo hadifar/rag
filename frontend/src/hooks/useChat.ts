@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
-import { openKbSource } from '../api/kb';
+import { openKbSource } from '../api/retrieval';
 import {
   createConversation,
   fetchConversationMessages,

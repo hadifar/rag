@@ -208,7 +208,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/kb/{filename}": {
+    "/api/retrieval/{filename}": {
         parameters: {
             query?: never;
             header?: never;
@@ -216,7 +216,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Document */
-        get: operations["get_document_api_kb__filename__get"];
+        get: operations["get_document_api_retrieval__filename__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -857,7 +857,7 @@ export interface operations {
             };
         };
     };
-    get_document_api_kb__filename__get: {
+    get_document_api_retrieval__filename__get: {
         parameters: {
             query?: never;
             header?: never;
