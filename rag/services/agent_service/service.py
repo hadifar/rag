@@ -1,60 +1,79 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
+from typing import cast
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from pydantic import BaseModel
 
-from rag.domain.events import StreamEvent
-from rag.domain.models import HistoryMessage
-from rag.domain.ports import SearchPort
-from rag.services.agent_service.graph import build_graph
-from rag.services.agent_service.streaming import stream_events
-from rag.services.agent_service.tools import build_search_tool
-from rag.services.agent_service.turn import to_history
+from rag.domain.agents import AgentSpec, Tool, ToolAgentSpec, ToolPort
+from rag.domain.constants import LLM_RETRY_ATTEMPTS
+from rag.domain.prompts import FALLBACK_MESSAGE
+from rag.domain.resilience import or_default
+from rag.services.agent_service.agent import Agent
+from rag.services.agent_service.graphs.tool_agent import build_tool_agent
+from rag.services.agent_service.tools import to_langchain_tool
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
     return {}
 
 
-class GenerationService:
+class AgentService:
+    """The only holder of the LLM, and the only place LangChain is used: single-shot
+    generation, and the tools and agents built on the model.
+    """
+
     def __init__(
         self,
         llm: BaseChatModel,
-        knowledge_base: SearchPort,
         checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
-        tools = [build_search_tool(knowledge_base)]
         self._llm = llm
-        self._graph = build_graph(llm, tools, checkpointer)
         self._checkpointer = checkpointer
         self._trace_config = trace_config
 
-    async def stream_chat(
-        self, message: str, thread_id: str
-    ) -> AsyncIterator[StreamEvent]:
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+        """One-shot completion as plain text, tried up to `attempts` times; raises if
+        all fail. To bound the time, wrap the call in `asyncio.timeout`.
+        """
+        llm = self._llm.with_retry(stop_after_attempt=attempts)
+        return (await llm.ainvoke(prompt)).text
 
-        config: RunnableConfig = {
-            "configurable": {"thread_id": thread_id},
-            **self._trace_config("chat"),
-        }
-        async for event in stream_events(
-            self._graph, [HumanMessage(content=message)], config
-        ):
-            yield event
+    async def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T], *, attempts: int = 1
+    ) -> T:
+        """One-shot completion enforced to fit `schema` (a Pydantic model class)"""
+        llm = self._llm.with_structured_output(schema).with_retry(
+            stop_after_attempt=attempts
+        )
+        return cast(T, await llm.ainvoke(prompt))
 
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        state = await self._graph.aget_state({"configurable": {"thread_id": thread_id}})
-        return to_history(state.values.get("messages", []))
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
+        """Each tool, ready for an agent; raises ValueError if two share a name, which
+        LangChain would otherwise only trip over once the agent runs.
+        """
+        names = [tool.name for tool in tools]
+        if duplicates := sorted({name for name in names if names.count(name) > 1}):
+            raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
+        return [to_langchain_tool(tool) for tool in tools]
 
-    async def delete_history(self, thread_id: str) -> None:
-        await self._checkpointer.adelete_thread(thread_id)
+    def create_agent(self, spec: AgentSpec) -> Agent:
+        """A chat agent built as `spec` describes. A new kind of agent adds its spec
+        to AgentSpec, a graph builder in graphs/, and a case here.
+        """
+        match spec:
+            case ToolAgentSpec():
+                graph = build_tool_agent(
+                    self._llm, spec, self._classify, self._checkpointer
+                )
+        return Agent(graph, self._trace_config)
 
-    async def list_thread_ids(self) -> set[str]:
-        return {
-            thread_id
-            async for checkpoint in self._checkpointer.alist(None)
-            if (thread_id := checkpoint.config.get("configurable", {}).get("thread_id"))
-        }
+    async def _classify(self, prompt: str) -> str:
+        """The guards' LLM call: retried, and if it still fails, answers with the
+        fallback message, which neither guard reads as a rejection (they fail open).
+        """
+        return await or_default(
+            self.generate(prompt, attempts=LLM_RETRY_ATTEMPTS), FALLBACK_MESSAGE
+        )

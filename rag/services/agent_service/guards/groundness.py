@@ -9,25 +9,17 @@ from langchain.agents.middleware import (
     hook_config,
 )
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
+from rag.domain.prompts import (
+    REVISION_INSTRUCTION,
+    VERIFIER_PROMPT,
+)
+from rag.services.agent_service.guards.topical import Classify
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
     turn_tool_messages,
-)
-
-VERIFIER_PROMPT = (
-    "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
-    "factual claim in the ANSWER is supported by the CONTEXT. Reply with exactly one word: "
-    "GROUNDED if fully supported, or UNGROUNDED otherwise.\n\n"
-    "CONTEXT:\n{context}\n\nANSWER:\n{answer}"
-)
-
-REVISION_INSTRUCTION = (
-    "Your previous answer wasn't fully supported by the retrieved context. Revise it (e.g., by rephrasing query) to "
-    "state only what the context actually supports, or say you don't know."
 )
 
 
@@ -37,7 +29,7 @@ def _collect_context(messages: Sequence[BaseMessage]) -> str:
     )
 
 
-async def is_grounded(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
+async def is_grounded(verify: Classify, messages: Sequence[BaseMessage]) -> bool:
     context = _collect_context(messages)
     answer = messages[-1]
 
@@ -45,10 +37,10 @@ async def is_grounded(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
         return True
 
-    verdict = await llm.ainvoke(
+    verdict = await verify(
         VERIFIER_PROMPT.format(context=context, answer=answer.content)
     )
-    return "UNGROUNDED" not in str(verdict.content).upper()
+    return "UNGROUNDED" not in verdict.upper()
 
 
 def _turn_answers(messages: Sequence[BaseMessage]) -> list[AIMessage]:
@@ -66,7 +58,7 @@ class GroundednessGuard(AgentMiddleware):
     between turns.
     """
 
-    def __init__(self, verifier: Runnable, max_revisions: int):
+    def __init__(self, verifier: Classify, max_revisions: int):
         super().__init__()
         self._verifier = verifier
         self._max_revisions = max_revisions

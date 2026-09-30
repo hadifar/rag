@@ -1,22 +1,20 @@
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool, StructuredTool
 
-from rag.domain.ports import SearchPort
+from rag.domain.agents import Tool
 
 
-def build_search_tool(knowledge_base: SearchPort) -> BaseTool:
+def to_langchain_tool(tool: Tool) -> BaseTool:
+    """The model reads the result's content; its references ride along as the
+    ToolMessage's artifact, where the turn's references are collected from.
+    """
 
-    @tool(response_format="content_and_artifact")
-    async def search_kb(query: str) -> tuple[str, list[str]]:
-        """Search the AtlasFlow knowledge base for relevant documentation."""
+    async def run(query: str) -> tuple[str, list[str] | None]:
+        result = await tool.run(query)
+        return result.content, result.references
 
-        results = await knowledge_base.search(query)
-        if not results:
-            return "No relevant documentation found.", []
-
-        documents = [doc for doc, _score in results]
-        content = "\n\n".join(
-            f"[source: {doc.metadata['source_id']}]\n{doc.text}" for doc in documents
-        )
-        return content, [str(doc.metadata["source_id"]) for doc in documents]
-
-    return search_kb
+    return StructuredTool.from_function(
+        coroutine=run,
+        name=tool.name,
+        description=tool.description,
+        response_format="content_and_artifact",
+    )

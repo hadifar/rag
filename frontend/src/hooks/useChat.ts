@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { streamChat } from '../api/chat';
-import { openKbSource } from '../api/kb';
+import { openKbSource } from '../api/retrieval';
 import {
   createConversation,
   fetchConversationMessages,
   generateTitle,
+  touchConversation,
 } from '../api/conversations';
 import { useConversations } from './useConversations';
 import { assistantText, createBubbleHandler } from '../utils/chatStream';
@@ -64,6 +65,7 @@ export function useChat(conversationId: string | undefined) {
     async (signal: AbortSignal): Promise<{ id: string; isNew: boolean }> => {
       const current = conversationIdRef.current;
       if (current) {
+        await touchConversation(current, signal);
         bump(current);
         return { id: current, isNew: false };
       }
@@ -76,11 +78,11 @@ export function useChat(conversationId: string | undefined) {
     [bump, upsert, navigate]
   );
 
-  // Gives a new chat a proper title once its first answer is in. On failure it keeps the
-  // title the server cut from the first message, which the sidebar shows on reload.
+  // Gives a new chat a proper title from its first message, without waiting for the answer.
+  // If the request itself fails the conversation stays untitled until reloaded.
   const nameConversation = useCallback(
-    async (id: string) => {
-      const { title } = await generateTitle(id).catch(() => ({ title: null }));
+    async (id: string, message: string) => {
+      const { title } = await generateTitle(id, message).catch(() => ({ title: null }));
       if (title) rename(id, title);
     },
     [rename]
@@ -102,6 +104,7 @@ export function useChat(conversationId: string | undefined) {
 
       try {
         const { id, isNew } = await openConversation(controller.signal);
+        if (isNew) void nameConversation(id, text);
         await streamChat({
           conversationId: id,
           message: text,
@@ -111,7 +114,6 @@ export function useChat(conversationId: string | undefined) {
           },
           signal: controller.signal,
         });
-        if (isNew) void nameConversation(id);
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);

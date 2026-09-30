@@ -9,7 +9,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         answer = ""
         tool_calls = []
 
-        async for event in container.generation_service.stream_chat(
+        async for event in container.rag_service.stream_chat(
             message, thread_id=str(uuid.uuid4())
         ):
             if isinstance(event, TextDelta):

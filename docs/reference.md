@@ -139,8 +139,9 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
 - A missing conversation and another user's are the same 404, so ids can't be probed; for the
   message stream it's checked before the stream starts.
 - A conversation is untitled only while empty: its first message names it straight away (the
-  trimmed message). Once that first answer has streamed, the client calls
-  `POST /api/conversations/{id}/title`, and an LLM call renames it after the first exchange.
+  trimmed message). As it sends that message, the client also calls
+  `POST /api/conversations/{id}/title` (not waiting for the answer), and an LLM call renames it
+  from that message.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
   answer and sources; tool calls aren't replayed).
@@ -204,7 +205,7 @@ text stream too. Two consumers read the normalized stream:
   generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
   (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
-  (which links to `/api/kb/{filename}`).
+  (which links to `/api/retrieval/{filename}`).
 
 ## Observability
 
@@ -269,8 +270,8 @@ there, so the response status comes from the exception class itself.
 - `POST /api/conversations/{id}/messages` — `{message: str}` → SSE stream of normalized events.
   A first message also names the conversation (the trimmed message). 404 for a missing or
   someone else's conversation, before the stream starts.
-- `POST /api/conversations/{id}/title` — renames the conversation with an LLM-written title for
-  its first exchange and returns it; keeps the current title if the LLM fails. 404 as above.
+- `POST /api/conversations/{id}/title` — `{message: str}` → renames the conversation with an
+  LLM-written title for that first message and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
@@ -286,7 +287,7 @@ there, so the response status comes from the exception class itself.
 - `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
   404 if unknown.
 - `GET /api/ingestions/latest` — the most recent run, or `null`.
-- `GET /api/kb/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
+- `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).
 - `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI.

@@ -21,14 +21,16 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
-from rag.domain.events import SourcesReady, StreamEvent, TextDelta
+from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.services.agent_service.graph import build_graph
+from rag.domain.prompts import PLANNING_INSTRUCTIONS
+from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.streaming import stream_events
-from rag.services.agent_service.tools import build_search_tool
+from rag.services.agent_service.service import AgentService
 from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.service import RagService
+from rag.services.rag_service.tools import search_tool
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -138,19 +140,15 @@ def _answer(text: str) -> AIMessage:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        search_tool = build_search_tool(_StubRetrievalService())
-        self.graph: CompiledStateGraph = build_graph(
-            model, [search_tool], InMemorySaver()
-        )
-        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
+        agents = AgentService(model, InMemorySaver())
+        self.rag = RagService(_StubRetrievalService(), agents)
+        agent = self.rag._agent
+        assert isinstance(agent, Agent)
+        self.graph: CompiledStateGraph = agent._graph
+        self.config: RunnableConfig = agent.get_config("t1")
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [
-            event
-            async for event in stream_events(
-                self.graph, [HumanMessage(content=text)], self.config
-            )
-        ]
+        return [event async for event in self.rag.stream_chat(text, "t1")]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -158,7 +156,7 @@ class _Chat:
 
 def _sources(events: list[StreamEvent]) -> list[str]:
     return [
-        source for e in events if isinstance(e, SourcesReady) for source in e.sources
+        ref for e in events if isinstance(e, ReferencesReady) for ref in e.references
     ]
 
 
@@ -195,8 +193,8 @@ async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
 
     events = await _Chat(model).send("first")
 
-    assert [e for e in events if isinstance(e, SourcesReady)] == [
-        SourcesReady(sources=[])
+    assert [e for e in events if isinstance(e, ReferencesReady)] == [
+        ReferencesReady(references=[])
     ]
 
 
@@ -205,7 +203,7 @@ async def test_a_turn_without_a_search_sends_no_sources() -> None:
 
     events = await _Chat(model).send("hello")
 
-    assert not any(isinstance(e, SourcesReady) for e in events)
+    assert not any(isinstance(e, ReferencesReady) for e in events)
 
 
 async def test_ungrounded_answer_is_revised_again_in_a_later_turn() -> None:
@@ -280,6 +278,7 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert off_topic_call["tools"] == []
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
+    assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
 
@@ -339,3 +338,11 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
     # A thread the checkpointer doesn't have (e.g. a conversation whose messages were
     # never saved) reads back as no messages; that used to crash with a zip() ValueError.
     assert to_history([]) == []
+
+
+def test_tools_with_the_same_name_are_rejected_up_front() -> None:
+    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver())
+    docs = search_tool(_StubRetrievalService())
+
+    with pytest.raises(ValueError, match="search_kb"):
+        agents.create_tools([docs, docs])

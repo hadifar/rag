@@ -16,8 +16,12 @@ class ToolCall:
 
 
 @dataclass
-class SourcesReady:
-    sources: list[str]
+class ReferencesReady:
+    """What the turn's tools cited (e.g. knowledge-base source ids), deduplicated; sent
+    once the turn is done, and only if a tool that cites anything ran.
+    """
+
+    references: list[str]
 
 
-StreamEvent = TextDelta | ToolCall | SourcesReady
+StreamEvent = TextDelta | ToolCall | ReferencesReady

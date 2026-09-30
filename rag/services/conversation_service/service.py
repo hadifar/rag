@@ -2,67 +2,78 @@ import base64
 import binascii
 import json
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
-from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
-from rag.domain.events import StreamEvent
-from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import CompletionPort, ConversationRepositoryPort, GenerationPort
+from pydantic import BaseModel, Field, field_validator
 
-FALLBACK_TITLE_LENGTH = 60
+from rag.domain.constants import (
+    FALLBACK_TITLE_LENGTH,
+    MAX_TITLE_LENGTH,
+    TITLE_MESSAGE_EXCERPT,
+)
+from rag.domain.errors import (
+    BlankTitleError,
+    ConversationNotFoundError,
+    InvalidCursorError,
+)
+from rag.domain.models import Conversation, ConversationPage, HistoryMessage
+from rag.domain.ports import AgentServicePort, ConversationRepositoryPort
+from rag.domain.prompts import TITLE_PROMPT
+from rag.domain.resilience import or_default
+
+
+class TitleOutput(BaseModel):
+    """The LLM's title, tidied on the way in: trimmed and capped in length, and a blank
+    one is rejected (`BlankTitleError`), so a `TitleOutput` always holds a usable title.
+    """
+
+    title: str = Field(description="At most 6 words, no quotes and no trailing period.")
+
+    @field_validator("title")
+    @classmethod
+    def _tidy(cls, title: str) -> str:
+        title = title.strip()[:MAX_TITLE_LENGTH]
+        if not title:
+            raise BlankTitleError
+        return title
 
 
 class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        generation: GenerationPort,
-        completion: CompletionPort,
+        agent_service: AgentServicePort,
     ):
         self._repository = repository
-        self._generation = generation
-        self._completion = completion
+        self._agent_service = agent_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
-        conversations can't pile up. Its first message names it (see `chat`).
+        conversations can't pile up. Its first message names it (see `generate_title`).
         """
         return await self._repository.get_or_create_empty(user_id)
 
-    async def chat(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
-    ) -> AsyncIterator[StreamEvent]:
-        """Streams the answer to `message`. A first message also names the conversation,
-        with a title cut from the message (see `generate_title` for a better one).
-        """
-        conversation = await self._touch_owned(user_id, conversation_id)
-        if conversation.title is None:
-            # Titled before streaming, so an empty conversation is always untitled
-            # and vice versa — even if the answer then fails.
-            await self._repository.set_title(conversation_id, _fallback_title(message))
-        async for event in self._generation.stream_chat(message, str(conversation_id)):
-            yield event
+    async def touch(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+        """Marks the user's conversation as just used, so it sorts first in their list."""
+        await self.get_owned(user_id, conversation_id)
+        if await self._repository.touch(conversation_id) is None:
+            raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
 
     async def generate_title(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> Conversation:
-        """Renames the conversation with an LLM-written title for its first exchange.
-        Keeps the current title if there's no answered exchange yet or the LLM fails.
+        """Names the conversation from its first `message`, with an LLM-written title, or
+        if the LLM fails, one cut from the message. Needs no answer, so the client asks
+        as it sends the message, not after the reply. Titling it also ends its life as
+        the user's empty draft (see `create`).
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        match await self._generation.get_history(str(conversation_id)):
-            case [
-                HistoryMessage(role="user", text=question),
-                HistoryMessage(role="assistant", text=answer),
-                *_,
-            ]:
-                title = await self._completion.generate_title(question, answer)
-            case _:
-                title = None
-        if title is None:
-            return conversation
+        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
+        reply = await or_default(
+            self._agent_service.generate_structured(prompt, TitleOutput), None
+        )
+        title = reply.title if reply is not None else _fallback_title(message)
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
 
@@ -80,13 +91,13 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         await self.get_owned(user_id, conversation_id)
-        return await self._generation.get_history(str(conversation_id))
+        return await self._repository.get_history(str(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         await self.get_owned(user_id, conversation_id)
         # Messages first: if this fails, the row is still there to retry the delete,
         # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._generation.delete_history(str(conversation_id))
+        await self._repository.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
 
     async def prune_orphaned_threads(self, *, dry_run: bool = False) -> list[str]:
@@ -95,10 +106,10 @@ class ConversationService:
         from a delete that failed halfway or rows removed outside the app.
         """
         conversation_ids = {str(id_) for id_ in await self._repository.all_ids()}
-        orphans = sorted(await self._generation.list_thread_ids() - conversation_ids)
+        orphans = sorted(await self._repository.list_thread_ids() - conversation_ids)
         if not dry_run:
             for thread_id in orphans:
-                await self._generation.delete_history(thread_id)
+                await self._repository.delete_history(thread_id)
         return orphans
 
     async def get_owned(
@@ -108,15 +119,6 @@ class ConversationService:
         # Same error for "missing" and "someone else's", so ids can't be probed.
         if conversation is None or conversation.user_id != user_id:
             raise ConversationNotFoundError(conversation_id)
-        return conversation
-
-    async def _touch_owned(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation:
-        """The user's conversation, marked as just used."""
-        conversation = await self.get_owned(user_id, conversation_id)
-        if await self._repository.touch(conversation_id) is None:
-            raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
         return conversation
 
 

@@ -4,7 +4,9 @@ from fastapi.responses import PlainTextResponse
 from rag.api.deps import RetrievalServiceDep, get_current_user
 
 router = APIRouter(
-    prefix="/api/kb", tags=["kb"], dependencies=[Depends(get_current_user)]
+    prefix="/api/retrieval",
+    tags=["retrieval"],
+    dependencies=[Depends(get_current_user)],
 )
 
 

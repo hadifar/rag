@@ -8,6 +8,7 @@ from rag.domain.models import HistoryMessage
 
 # Guards inject their instructions per model call instead of saving them to the
 # thread, so every HumanMessage in state is the user's and marks the start of a turn.
+# TODO: we must refactor this
 
 
 def is_final_answer(message: BaseMessage | None) -> TypeGuard[AIMessage]:
@@ -25,9 +26,9 @@ def turn_tool_messages(messages: Sequence[BaseMessage]) -> list[ToolMessage]:
     return [m for m in current_turn(messages) if isinstance(m, ToolMessage)]
 
 
-def turn_sources(messages: Sequence[BaseMessage]) -> list[str] | None:
-    """Deduplicated source ids search_kb attached (as its artifact) this turn; empty if
-    it searched and found nothing, None if it didn't search at all.
+def turn_references(messages: Sequence[BaseMessage]) -> list[str] | None:
+    """Deduplicated ids the tools cited (as their artifacts) this turn; empty if
+    they found nothing, None if no citing tool ran.
     """
     return _sources(current_turn(messages))
 
