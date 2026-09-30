@@ -142,8 +142,8 @@ class GenerationPort(Protocol):
 class CompletionPort(Protocol):
     """Small, single-shot LLM completions that stand outside any chat turn."""
 
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        """A title for a conversation opening with this exchange, or None if one
+    async def generate_title(self, message: str) -> str | None:
+        """A title for a conversation opening with this message, or None if one
         couldn't be generated. Never raises.
         """
         ...

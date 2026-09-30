@@ -76,11 +76,11 @@ export function useChat(conversationId: string | undefined) {
     [bump, upsert, navigate]
   );
 
-  // Gives a new chat a proper title once its first answer is in. On failure it keeps the
-  // title the server cut from the first message, which the sidebar shows on reload.
+  // Gives a new chat a proper title from its first message, without waiting for the answer.
+  // On failure it keeps the title the server cut from that message.
   const nameConversation = useCallback(
-    async (id: string) => {
-      const { title } = await generateTitle(id).catch(() => ({ title: null }));
+    async (id: string, message: string) => {
+      const { title } = await generateTitle(id, message).catch(() => ({ title: null }));
       if (title) rename(id, title);
     },
     [rename]
@@ -102,6 +102,7 @@ export function useChat(conversationId: string | undefined) {
 
       try {
         const { id, isNew } = await openConversation(controller.signal);
+        if (isNew) void nameConversation(id, text);
         await streamChat({
           conversationId: id,
           message: text,
@@ -111,7 +112,6 @@ export function useChat(conversationId: string | undefined) {
           },
           signal: controller.signal,
         });
-        if (isNew) void nameConversation(id);
       } catch (err) {
         if (!controller.signal.aborted) {
           const message = err instanceof Error ? err.message : String(err);

@@ -8,8 +8,8 @@ from rag.services.completion_service.prompts import TITLE_PROMPT
 logger = logging.getLogger(__name__)
 
 MAX_TITLE_LENGTH = 80
-# Only the start of the answer is needed to title it; caps the title call's cost.
-TITLE_ANSWER_EXCERPT = 1000
+# Only the start of the message is needed to title it; caps the title call's cost.
+TITLE_MESSAGE_EXCERPT = 1000
 # The client waits on this for the sidebar title; don't hold it on a slow LLM.
 TITLE_TIMEOUT_SECONDS = 10
 
@@ -20,13 +20,11 @@ class CompletionService:
     def __init__(self, llm: Runnable):
         self._llm = llm
 
-    async def generate_title(self, question: str, answer: str) -> str | None:
+    async def generate_title(self, message: str) -> str | None:
         """An LLM-written title, or None to keep the fallback. Never raises: a failed
         title must not fail the turn the user already got an answer for.
         """
-        prompt = TITLE_PROMPT.format(
-            question=question, answer=answer[:TITLE_ANSWER_EXCERPT]
-        )
+        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
         try:
             async with asyncio.timeout(TITLE_TIMEOUT_SECONDS):
                 reply = await self._llm.ainvoke(prompt)

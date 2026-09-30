@@ -159,8 +159,8 @@ export interface paths {
         put?: never;
         /**
          * Generate Title
-         * @description Renames the conversation with an LLM-written title for its first exchange; the
-         *     client calls it once the first answer has streamed.
+         * @description Renames the conversation with an LLM-written title for its first message; the
+         *     client calls it as it sends that message, without waiting for the answer.
          */
         post: operations["generate_title_api_conversations__conversation_id__title_post"];
         delete?: never;
@@ -751,7 +751,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

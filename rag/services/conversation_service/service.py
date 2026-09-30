@@ -46,21 +46,14 @@ class ConversationService:
             yield event
 
     async def generate_title(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> Conversation:
-        """Renames the conversation with an LLM-written title for its first exchange.
-        Keeps the current title if there's no answered exchange yet or the LLM fails.
+        """Renames the conversation with an LLM-written title for its first `message`.
+        Needs no answer, so the client asks as it sends the message, not after the reply.
+        Keeps the current title if the LLM fails.
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        match await self._generation.get_history(str(conversation_id)):
-            case [
-                HistoryMessage(role="user", text=question),
-                HistoryMessage(role="assistant", text=answer),
-                *_,
-            ]:
-                title = await self._completion.generate_title(question, answer)
-            case _:
-                title = None
+        title = await self._completion.generate_title(message)
         if title is None:
             return conversation
         await self._repository.set_title(conversation_id, title)

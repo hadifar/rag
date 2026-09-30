@@ -57,34 +57,31 @@ async def test_create_returns_the_users_one_empty_conversation() -> None:
     assert (await service.create(ALICE)).id != conversation.id
 
 
-async def test_generate_title_renames_it_after_the_first_exchange() -> None:
-    service, repository, _, completion = _service(
+async def test_generate_title_renames_it_from_the_first_message() -> None:
+    service, repository, generation, completion = _service(
         completion=StubCompletion(title="Password reset")
     )
     conversation_id = (await service.create(ALICE)).id
-    await _send(service, ALICE, conversation_id, "How do I reset my password?")
-    # Named from the message as soon as it arrived.
-    assert repository.rows[conversation_id].title == "How do I reset my password?"
 
-    renamed = await service.generate_title(ALICE, conversation_id)
+    renamed = await service.generate_title(
+        ALICE, conversation_id, "How do I reset my password?"
+    )
 
     assert renamed.title == "Password reset"
     assert repository.rows[conversation_id].title == "Password reset"
-    # The title is generated from both sides of the first exchange.
-    assert completion.title_requests == [
-        ("How do I reset my password?", "echo: How do I reset my password?")
-    ]
+    # Needs no answer: nothing was sent to the chat.
+    assert completion.title_requests == ["How do I reset my password?"]
+    assert generation.threads == {}
 
 
 async def test_failed_title_generation_keeps_the_title_from_the_message() -> None:
     service, repository, _, _ = _service(completion=StubCompletion(title=None))
     conversation_id = (await service.create(ALICE)).id
-    events = await _send(
-        service, ALICE, conversation_id, "  How do I\nreset my password?  "
-    )
+    message = "  How do I\nreset my password?  "
+    events = await _send(service, ALICE, conversation_id, message)
     assert [e for e in events if isinstance(e, TextDelta)]  # the answer streamed
 
-    conversation = await service.generate_title(ALICE, conversation_id)
+    conversation = await service.generate_title(ALICE, conversation_id, message)
 
     assert conversation.title == "How do I reset my password?"
     assert repository.rows[conversation_id].title == "How do I reset my password?"
@@ -120,7 +117,7 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
     with pytest.raises(ConversationNotFoundError):
         await _send(service, ALICE, conversation_id, "hi")
     with pytest.raises(ConversationNotFoundError):
-        await service.generate_title(ALICE, conversation_id)
+        await service.generate_title(ALICE, conversation_id, "hi")
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):

@@ -84,14 +84,15 @@ async def send_message(
 @router.post("/{conversation_id}/title")
 async def generate_title(
     conversation_id: uuid.UUID,
+    message_request: MessageRequest,
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> ConversationResponse:
-    """Renames the conversation with an LLM-written title for its first exchange; the
-    client calls it once the first answer has streamed.
+    """Renames the conversation with an LLM-written title for its first message; the
+    client calls it as it sends that message, without waiting for the answer.
     """
     conversation = await conversation_service.generate_title(
-        current_user.id, conversation_id
+        current_user.id, conversation_id, message_request.message
     )
     return ConversationResponse.model_validate(conversation)
 

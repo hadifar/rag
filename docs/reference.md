@@ -139,8 +139,9 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
 - A missing conversation and another user's are the same 404, so ids can't be probed; for the
   message stream it's checked before the stream starts.
 - A conversation is untitled only while empty: its first message names it straight away (the
-  trimmed message). Once that first answer has streamed, the client calls
-  `POST /api/conversations/{id}/title`, and an LLM call renames it after the first exchange.
+  trimmed message). As it sends that message, the client also calls
+  `POST /api/conversations/{id}/title` (not waiting for the answer), and an LLM call renames it
+  from that message.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
   answer and sources; tool calls aren't replayed).
@@ -269,8 +270,8 @@ there, so the response status comes from the exception class itself.
 - `POST /api/conversations/{id}/messages` — `{message: str}` → SSE stream of normalized events.
   A first message also names the conversation (the trimmed message). 404 for a missing or
   someone else's conversation, before the stream starts.
-- `POST /api/conversations/{id}/title` — renames the conversation with an LLM-written title for
-  its first exchange and returns it; keeps the current title if the LLM fails. 404 as above.
+- `POST /api/conversations/{id}/title` — `{message: str}` → renames the conversation with an
+  LLM-written title for that first message and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
 - `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.

@@ -1,4 +1,4 @@
-import { request, requestJson } from './client';
+import { jsonPostInit, request, requestJson } from './client';
 import type {
   ConversationPageResponse,
   ConversationResponse,
@@ -10,9 +10,9 @@ export function createConversation(signal?: AbortSignal): Promise<ConversationRe
   return requestJson('conversations', { method: 'POST', signal });
 }
 
-/** Renames the conversation with an LLM-written title; call once its first answer is in. */
-export function generateTitle(id: string): Promise<ConversationResponse> {
-  return requestJson(`conversations/${encodeURIComponent(id)}/title`, { method: 'POST' });
+/** Renames the conversation with an LLM-written title for its first message; needs no answer. */
+export function generateTitle(id: string, message: string): Promise<ConversationResponse> {
+  return requestJson(`conversations/${encodeURIComponent(id)}/title`, jsonPostInit({ message }));
 }
 
 export function listConversations(

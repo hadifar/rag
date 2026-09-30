@@ -264,10 +264,10 @@ class StubCompletion:
 
     def __init__(self, title: str | None = "Generated title"):
         self.title = title
-        self.title_requests: list[tuple[str, str]] = []
+        self.title_requests: list[str] = []
 
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        self.title_requests.append((question, answer))
+    async def generate_title(self, message: str) -> str | None:
+        self.title_requests.append(message)
         return self.title
 
 

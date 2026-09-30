@@ -354,7 +354,9 @@ def test_generate_title_renames_the_conversation(
     conversation_id = _start_conversation(client, auth_headers)
 
     response = client.post(
-        f"/api/conversations/{conversation_id}/title", headers=auth_headers
+        f"/api/conversations/{conversation_id}/title",
+        json={"message": "hi"},
+        headers=auth_headers,
     )
 
     assert response.status_code == 200
