@@ -20,8 +20,7 @@ from rag.services.agent_service.resilience import (
 )
 
 SYSTEM_PROMPT = (
-    "You are a support assistant for AtlasFlow. For multi-part questions, use write_todos "
-    "to plan your searches before diving in. Use the search_kb tool to find relevant "
+    "You are a support assistant for AtlasFlow. Use the search_kb tool to find relevant "
     "documentation before answering. Only answer based on retrieved content, and say you "
     "don't know if the knowledge base doesn't cover it."
 )
