@@ -3,7 +3,9 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
+
+from pydantic import BaseModel
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
@@ -247,27 +249,20 @@ class StubGeneration:
         self.error = error
         self.prompts: list[str] = []
 
-    async def generate(
-        self,
-        prompt: str,
-        schema: type[Any] | None = None,
-        *,
-        attempts: int = 1,
-        fallback: Any = ...,
-    ) -> Any:
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
-        try:
-            if self.error is not None:
-                raise self.error
-            # The reply, as the one field of a structured answer or as plain text.
-            return self.reply if schema is None else schema(title=self.reply)
-        except Exception:
-            if fallback is ...:
-                raise
-            return fallback
+        if self.error is not None:
+            raise self.error
+        return self.reply
+
+    async def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T], *, attempts: int = 1
+    ) -> T:
+        # The reply, as the one field of the structured answer.
+        return schema.model_validate({"title": await self.generate(prompt)})
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
-        yield cast(str, await self.generate(prompt))
+        yield await self.generate(prompt)
 
     def create_agent(
         self,

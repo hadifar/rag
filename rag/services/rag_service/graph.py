@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 
 from langchain.agents.middleware import (
@@ -16,10 +15,9 @@ from rag.domain.prompts import (
     FALLBACK_MESSAGE,
     SYSTEM_PROMPT,
 )
+from rag.domain.resilience import or_default
 from rag.services.rag_service.guards.groundness import GroundednessGuard
 from rag.services.rag_service.guards.topical import TopicalGuard
-
-logger = logging.getLogger(__name__)
 
 
 def _fallback_message(_exc: Exception) -> str:
@@ -35,11 +33,9 @@ def build_graph(
         """The guards' LLM call: retried, and if it still fails, answers with the
         fallback message, which neither guard reads as a rejection (they fail open).
         """
-        try:
-            return await generation.generate(prompt, attempts=LLM_RETRY_ATTEMPTS)
-        except Exception:
-            logger.warning("Guard LLM call failed; failing open", exc_info=True)
-            return FALLBACK_MESSAGE
+        return await or_default(
+            generation.generate(prompt, attempts=LLM_RETRY_ATTEMPTS), FALLBACK_MESSAGE
+        )
 
     middleware: list[AgentMiddleware[Any, Any]] = [
         TopicalGuard(classify),

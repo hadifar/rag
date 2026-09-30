@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import datetime
-from typing import Any, Protocol, overload
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -155,46 +155,17 @@ class GenerationPort(Protocol):
     loosely: the domain stays free of LangChain.
     """
 
-    @overload
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str: ...
-    @overload
-    async def generate[F](
-        self,
-        prompt: str,
-        *,
-        attempts: int = 1,
-        fallback: F,
-    ) -> str | F: ...
-    @overload
-    async def generate[T: BaseModel](
-        self,
-        prompt: str,
-        schema: type[T],
-        *,
-        attempts: int = 1,
-    ) -> T: ...
-    @overload
-    async def generate[T: BaseModel, F](
-        self,
-        prompt: str,
-        schema: type[T],
-        *,
-        attempts: int = 1,
-        fallback: F,
-    ) -> T | F: ...
-    async def generate(
-        self,
-        prompt: str,
-        schema: type[BaseModel] | None = None,
-        *,
-        attempts: int = 1,
-        fallback: Any = ...,
-    ) -> Any:
-        """One-shot completion, tried up to `attempts` times. With a `schema` (a Pydantic
-        model class) the reply is enforced to fit it and comes back as an instance;
-        without one, as plain text. If it fails (LLM error, a reply the schema rejects)
-        it raises, unless a `fallback` is given: then it logs and returns that instead.
-        To bound the time, wrap the call in `asyncio.timeout`; that too then raises.
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+        """One-shot completion as plain text, tried up to `attempts` times; raises if
+        all fail. To bound the time, wrap the call in `asyncio.timeout`.
+        """
+        ...
+
+    async def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T], *, attempts: int = 1
+    ) -> T:
+        """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
+        instance of it; raises if all `attempts` fail or the reply is rejected.
         """
         ...
 

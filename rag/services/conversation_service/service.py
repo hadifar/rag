@@ -20,6 +20,7 @@ from rag.domain.errors import (
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import ConversationRepositoryPort, GenerationPort
 from rag.domain.prompts import TITLE_PROMPT
+from rag.domain.resilience import or_default
 
 
 class TitleOutput(BaseModel):
@@ -69,7 +70,9 @@ class ConversationService:
         """
         conversation = await self.get_owned(user_id, conversation_id)
         prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
-        reply = await self._generation.generate(prompt, TitleOutput, fallback=None)
+        reply = await or_default(
+            self._generation.generate_structured(prompt, TitleOutput), None
+        )
         title = reply.title if reply is not None else _fallback_title(message)
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
