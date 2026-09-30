@@ -1,6 +1,10 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph.state import CompiledStateGraph
 
 
 class GenerationService:
@@ -26,3 +30,21 @@ class GenerationService:
         async for chunk in self._llm.astream(prompt):
             if chunk.text:
                 yield chunk.text
+
+    async def stream_events[E](
+        self,
+        graph: CompiledStateGraph,
+        messages: list[BaseMessage],
+        config: RunnableConfig,
+        parse: Callable[[Mapping[str, Any]], E | None],
+    ) -> AsyncIterator[E]:
+        """Runs `graph` on `messages` and yields what `parse` makes of each of its raw
+        stream events (LangGraph `astream_events`, v2); events it returns None for are
+        skipped. What the events mean is the caller's business, not generation's.
+        """
+        async for raw_event in graph.astream_events(
+            {"messages": messages}, config=config, version="v2"
+        ):
+            event = parse(raw_event)
+            if event is not None:
+                yield event

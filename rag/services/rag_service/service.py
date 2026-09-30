@@ -5,11 +5,12 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.domain.events import StreamEvent
+from rag.domain.events import SourcesReady, StreamEvent
 from rag.domain.ports import ModelPort, SearchPort
 from rag.services.rag_service.graph import build_graph
-from rag.services.rag_service.streaming import stream_events
+from rag.services.rag_service.streaming import parse_event
 from rag.services.rag_service.tools import build_search_tool
+from rag.services.rag_service.turn import turn_sources
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
@@ -30,6 +31,7 @@ class RagService:
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
         tools = [build_search_tool(retrieval_service)]
+        self._generation = generation_service
         self._graph: CompiledStateGraph = build_graph(
             generation_service.chat_model, tools, checkpointer
         )
@@ -47,7 +49,12 @@ class RagService:
     ) -> AsyncIterator[StreamEvent]:
         config: RunnableConfig = self.get_config(thread_id)
 
-        async for event in stream_events(
-            self._graph, [HumanMessage(content=message)], config
+        async for event in self._generation.stream_events(
+            self._graph, [HumanMessage(content=message)], config, parse_event
         ):
             yield event
+
+        final_state = await self._graph.aget_state(config)
+        sources = turn_sources(final_state.values.get("messages", []))
+        if sources is not None:
+            yield SourcesReady(sources=sources)

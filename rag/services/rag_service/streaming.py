@@ -1,12 +1,9 @@
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import Mapping
 from typing import Any
 
-from langchain_core.messages import BaseMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
-from langgraph.graph.state import CompiledStateGraph
+from langchain_core.messages import ToolMessage
 
-from rag.domain.events import SourcesReady, StreamEvent, TextDelta, ToolCall
-from rag.services.rag_service.turn import turn_sources
+from rag.domain.events import StreamEvent, TextDelta, ToolCall
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same
@@ -15,23 +12,8 @@ from rag.services.rag_service.turn import turn_sources
 _USER_FACING_NODE = "model"
 
 
-async def stream_events(
-    graph: CompiledStateGraph, messages: list[BaseMessage], config: RunnableConfig
-) -> AsyncIterator[StreamEvent]:
-    async for raw_event in graph.astream_events(
-        {"messages": messages}, config=config, version="v2"
-    ):
-        event = _parse_event(raw_event)
-        if event is not None:
-            yield event
-
-    final_state = await graph.aget_state(config)
-    sources = turn_sources(final_state.values.get("messages", []))
-    if sources is not None:
-        yield SourcesReady(sources=sources)
-
-
-def _parse_event(raw_event: Mapping[str, Any]) -> StreamEvent | None:
+def parse_event(raw_event: Mapping[str, Any]) -> StreamEvent | None:
+    """The user-facing event a raw graph event stands for, or None if it isn't one."""
     kind = raw_event["event"]
 
     if kind == "on_chat_model_stream":

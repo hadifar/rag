@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -158,9 +158,21 @@ class GenerationPort(Protocol):
 
 
 class ModelPort(Protocol):
-    """Hands out the chat model for callers that build their own chat flow on it. Typed
-    loosely: the domain stays free of LangChain (it is a `BaseChatModel`).
+    """The chat model, and streaming a chat flow built on it. Graph, messages and config
+    are typed loosely: the domain stays free of LangChain.
     """
 
     @property
-    def chat_model(self) -> Any: ...
+    def chat_model(self) -> Any:
+        """The `BaseChatModel`, for callers that build their own chat flow on it."""
+        ...
+
+    def stream_events[E](
+        self,
+        graph: Any,
+        messages: list[Any],
+        config: Any,
+        parse: Callable[[Mapping[str, Any]], E | None],
+    ) -> AsyncIterator[E]:
+        """Runs `graph` and yields what `parse` makes of each raw event (None skips)."""
+        ...
