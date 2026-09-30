@@ -1,4 +1,5 @@
 import uuid
+from typing import cast
 
 import pytest
 
@@ -6,7 +7,7 @@ from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.events import StreamEvent, TextDelta
 from rag.domain.models import Conversation
 from rag.services.conversation_service.service import ConversationService
-from tests.unit.fakes import FakeConversationRepository, StubCompletion, StubGeneration
+from tests.unit.fakes import FakeConversationRepository, StubGeneration, StubRag
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
@@ -14,17 +15,11 @@ BOB = uuid.uuid4()
 
 def _service(
     generation: StubGeneration | None = None,
-    completion: StubCompletion | None = None,
-) -> tuple[
-    ConversationService, FakeConversationRepository, StubGeneration, StubCompletion
-]:
+) -> tuple[ConversationService, FakeConversationRepository, StubGeneration]:
     repository = FakeConversationRepository()
     generation = generation or StubGeneration()
-    completion = completion or StubCompletion()
-    service = ConversationService(
-        repository=repository, rag_service=generation, generation_service=completion
-    )
-    return service, repository, generation, completion
+    service = ConversationService(repository=repository, generation_service=generation)
+    return service, repository, generation
 
 
 async def _titled(
@@ -41,11 +36,15 @@ async def _send(
     conversation_id: uuid.UUID,
     message: str,
 ) -> list[StreamEvent]:
-    return [e async for e in service.chat(user_id, conversation_id, message)]
+    """What the router does for a turn: ready the conversation, then stream the answer."""
+    await service.begin_chat(user_id, conversation_id, message)
+    repository = cast(FakeConversationRepository, service._repository)
+    rag = StubRag(repository.threads)
+    return [e async for e in rag.stream_chat(message, str(conversation_id))]
 
 
 async def test_create_returns_the_users_one_empty_conversation() -> None:
-    service, repository, _, _ = _service()
+    service, repository, _ = _service()
 
     conversation = await service.create(ALICE)
 
@@ -58,9 +57,7 @@ async def test_create_returns_the_users_one_empty_conversation() -> None:
 
 
 async def test_generate_title_renames_it_from_the_first_message() -> None:
-    service, repository, generation, completion = _service(
-        completion=StubCompletion(title="Password reset")
-    )
+    service, repository, generation = _service(StubGeneration("Password reset"))
     conversation_id = (await service.create(ALICE)).id
 
     renamed = await service.generate_title(
@@ -70,12 +67,12 @@ async def test_generate_title_renames_it_from_the_first_message() -> None:
     assert renamed.title == "Password reset"
     assert repository.rows[conversation_id].title == "Password reset"
     # Needs no answer: nothing was sent to the chat.
-    assert completion.title_requests == ["How do I reset my password?"]
-    assert generation.threads == {}
+    assert "How do I reset my password?" in generation.prompts[0]
+    assert repository.threads == {}
 
 
 async def test_failed_title_generation_keeps_the_title_from_the_message() -> None:
-    service, repository, _, _ = _service(completion=StubCompletion(title=None))
+    service, repository, _ = _service(StubGeneration(error=RuntimeError("LLM down")))
     conversation_id = (await service.create(ALICE)).id
     message = "  How do I\nreset my password?  "
     events = await _send(service, ALICE, conversation_id, message)
@@ -88,7 +85,7 @@ async def test_failed_title_generation_keeps_the_title_from_the_message() -> Non
 
 
 async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
-    service, repository, _, _ = _service(completion=StubCompletion(title=None))
+    service, repository, _ = _service(StubGeneration(error=RuntimeError("LLM down")))
     conversation_id = (await service.create(ALICE)).id
 
     await _send(service, ALICE, conversation_id, "word " * 50)
@@ -99,19 +96,19 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
 
 
 async def test_follow_up_message_is_not_retitled() -> None:
-    service, repository, generation, completion = _service()
+    service, repository, generation = _service()
     conversation_id = (await service.create(ALICE)).id
     await _send(service, ALICE, conversation_id, "first")
 
     await _send(service, ALICE, conversation_id, "second")
 
     assert repository.rows[conversation_id].title == "first"
-    assert completion.title_requests == []  # chat never asks the LLM for a title
-    assert len(generation.threads[str(conversation_id)]) == 4
+    assert generation.prompts == []  # chat never asks the LLM for a title
+    assert len(repository.threads[str(conversation_id)]) == 4
 
 
 async def test_cannot_use_a_conversation_someone_else_owns() -> None:
-    service, repository, generation, _ = _service()
+    service, repository, _ = _service()
     conversation_id = (await repository.get_or_create_empty(BOB)).id
 
     with pytest.raises(ConversationNotFoundError):
@@ -122,24 +119,24 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
-    assert generation.threads == {}
-    assert generation.deleted_threads == []
+    assert repository.threads == {}
+    assert repository.deleted_threads == []
     assert repository.rows[conversation_id].user_id == BOB
 
 
 async def test_cannot_read_or_delete_a_conversation_that_does_not_exist() -> None:
-    service, _, generation, _ = _service()
+    service, repository, _ = _service()
     conversation_id = uuid.uuid4()
 
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
-    assert generation.deleted_threads == []
+    assert repository.deleted_threads == []
 
 
 async def test_list_pages_through_the_users_conversations_newest_first() -> None:
-    service, repository, _, _ = _service()
+    service, repository, _ = _service()
     mine = [await _titled(repository, ALICE, f"chat {i}") for i in range(5)]
     await _titled(repository, BOB, "not mine")
     await repository.touch(mine[0].id)  # most recently used goes first
@@ -154,7 +151,7 @@ async def test_list_pages_through_the_users_conversations_newest_first() -> None
 
 
 async def test_list_has_no_next_page_when_it_fits_exactly() -> None:
-    service, repository, _, _ = _service()
+    service, repository, _ = _service()
     for i in range(2):
         await _titled(repository, ALICE, f"chat {i}")
 
@@ -166,25 +163,25 @@ async def test_list_has_no_next_page_when_it_fits_exactly() -> None:
 
 @pytest.mark.parametrize("cursor", ["not-base64!", "bm90IGpzb24=", "WzEsIDJd"])
 async def test_list_rejects_a_malformed_cursor(cursor: str) -> None:
-    service, _, _, _ = _service()
+    service, _, _ = _service()
 
     with pytest.raises(InvalidCursorError):
         await service.list_for_user(ALICE, limit=2, cursor=cursor)
 
 
 async def test_delete_removes_the_messages_and_the_conversation() -> None:
-    service, repository, generation, _ = _service()
+    service, repository, _ = _service()
     conversation_id = (await service.create(ALICE)).id
     await _send(service, ALICE, conversation_id, "hi")
 
     await service.delete(ALICE, conversation_id)
 
-    assert generation.deleted_threads == [str(conversation_id)]
+    assert repository.deleted_threads == [str(conversation_id)]
     assert conversation_id not in repository.rows
 
 
 async def test_history_returns_the_threads_messages() -> None:
-    service, _, _, _ = _service()
+    service, _, _ = _service()
     conversation_id = (await service.create(ALICE)).id
     await _send(service, ALICE, conversation_id, "hi")
 
@@ -197,14 +194,35 @@ async def test_history_returns_the_threads_messages() -> None:
 
 
 async def test_prune_deletes_only_threads_without_a_conversation() -> None:
-    service, _, generation, _ = _service()
+    service, repository, _ = _service()
     kept = (await service.create(ALICE)).id
     await _send(service, ALICE, kept, "hi")
-    generation.threads["orphan"] = []
+    repository.threads["orphan"] = []
 
     assert await service.prune_orphaned_threads(dry_run=True) == ["orphan"]
-    assert generation.deleted_threads == []  # a dry run deletes nothing
+    assert repository.deleted_threads == []  # a dry run deletes nothing
 
     assert await service.prune_orphaned_threads() == ["orphan"]
-    assert generation.deleted_threads == ["orphan"]
-    assert str(kept) in generation.threads
+    assert repository.deleted_threads == ["orphan"]
+    assert str(kept) in repository.threads
+
+
+async def test_generated_title_is_the_first_line_without_quotes_or_trailing_period() -> (
+    None
+):
+    service, _, _ = _service(StubGeneration('"Password reset."\nextra line'))
+    conversation_id = (await service.create(ALICE)).id
+
+    renamed = await service.generate_title(ALICE, conversation_id, "question")
+
+    assert renamed.title == "Password reset"
+
+
+async def test_blank_generated_title_keeps_the_current_title() -> None:
+    service, repository, _ = _service(StubGeneration("  \n "))
+    conversation_id = (await service.create(ALICE)).id
+
+    renamed = await service.generate_title(ALICE, conversation_id, "question")
+
+    assert renamed.title is None
+    assert repository.rows[conversation_id].title is None

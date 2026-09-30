@@ -4,10 +4,8 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
-from langchain_core.messages import AIMessage
-
 from rag.domain.errors import IngestionInProgressError
-from rag.domain.events import StreamEvent, TextDelta
+from rag.domain.events import SourcesReady, StreamEvent, TextDelta
 from rag.domain.models import (
     Conversation,
     HistoryMessage,
@@ -166,6 +164,10 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
+        # Stored chat messages by thread id: what a real generation service writes
+        # (through the checkpointer) and this repository reads back.
+        self.threads: dict[str, list[HistoryMessage]] = {}
+        self.deleted_threads: list[str] = []
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -223,31 +225,6 @@ class FakeConversationRepository:
     async def all_ids(self) -> set[uuid.UUID]:
         return set(self.rows)
 
-
-class StubGeneration:
-    """GenerationPort that echoes the message and records threads it was asked to
-    delete.
-    """
-
-    def __init__(self, extra_events: list[StreamEvent] | None = None):
-        self.extra_events = extra_events or []
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
-
-    async def stream_chat(
-        self, message: str, thread_id: str
-    ) -> AsyncIterator[StreamEvent]:
-        reply = f"echo: {message}"
-        self.threads.setdefault(thread_id, []).extend(
-            [
-                HistoryMessage(role="user", text=message),
-                HistoryMessage(role="assistant", text=reply),
-            ]
-        )
-        yield TextDelta(text=reply)
-        for event in self.extra_events:
-            yield event
-
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         return self.threads.get(thread_id, [])
 
@@ -259,26 +236,53 @@ class StubGeneration:
         return set(self.threads)
 
 
-class StubCompletion:
-    """CompletionPort that answers title requests with `title` and records them."""
+class StubGeneration:
+    """GenerationPort that answers every prompt with `reply`, or raises `error`, and
+    records the prompts.
+    """
 
-    def __init__(self, title: str | None = "Generated title"):
-        self.title = title
-        self.title_requests: list[str] = []
-
-    async def generate_title(self, message: str) -> str | None:
-        self.title_requests.append(message)
-        return self.title
-
-
-class FakeTitleModel:
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
 
-    async def ainvoke(self, prompt: str) -> AIMessage:
+    async def generate(self, prompt: str) -> str:
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error
-        return AIMessage(content=self.reply)
+        return self.reply
+
+    async def stream(self, prompt: str) -> AsyncIterator[str]:
+        yield await self.generate(prompt)
+
+
+class StubRag:
+    """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
+    the fake repository's, so it shows up in its history) with `sources` on the answer.
+    """
+
+    def __init__(
+        self,
+        threads: dict[str, list[HistoryMessage]],
+        extra_events: list[StreamEvent] | None = None,
+        sources: list[str] | None = None,
+    ):
+        self.threads = threads
+        self.extra_events = extra_events or []
+        self.sources = sources
+
+    async def stream_chat(
+        self, message: str, thread_id: str
+    ) -> AsyncIterator[StreamEvent]:
+        reply = f"echo: {message}"
+        self.threads.setdefault(thread_id, []).extend(
+            [
+                HistoryMessage(role="user", text=message),
+                HistoryMessage(role="assistant", text=reply, sources=self.sources),
+            ]
+        )
+        yield TextDelta(text=reply)
+        for event in self.extra_events:
+            yield event
+        if self.sources is not None:
+            yield SourcesReady(sources=self.sources)

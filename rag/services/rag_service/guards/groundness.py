@@ -12,22 +12,14 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
+from rag.domain.prompts import (
+    REVISION_INSTRUCTION,
+    VERIFIER_PROMPT,
+)
 from rag.services.rag_service.turn import (
     current_turn,
     is_final_answer,
     turn_tool_messages,
-)
-
-VERIFIER_PROMPT = (
-    "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
-    "factual claim in the ANSWER is supported by the CONTEXT. Reply with exactly one word: "
-    "GROUNDED if fully supported, or UNGROUNDED otherwise.\n\n"
-    "CONTEXT:\n{context}\n\nANSWER:\n{answer}"
-)
-
-REVISION_INSTRUCTION = (
-    "Your previous answer wasn't fully supported by the retrieved context. Revise it (e.g., by rephrasing query) to "
-    "state only what the context actually supports, or say you don't know."
 )
 
 

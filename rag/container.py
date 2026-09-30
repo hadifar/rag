@@ -6,6 +6,7 @@ from datetime import timedelta
 from rag.adapters.archive_store import open_archive_store
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
+from rag.adapters.history_store import CheckpointHistoryStore
 from rag.adapters.llm_client import build_embeddings, build_llm
 from rag.adapters.observability import open_trace_config
 from rag.config import Settings
@@ -25,8 +26,8 @@ from rag.services.retrieval_service.service import RetrievalService
 @dataclass
 class Container:
     retrieval_service: RetrievalService
-    rag_service: RagService
     generation_service: GenerationService
+    rag_service: RagService
     ingestion_service: IngestionService
     auth_service: AuthService
     conversation_service: ConversationService
@@ -45,16 +46,14 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
         retrieval_service = RetrievalService(vector_store=vector_store)
 
-        llm = build_llm(settings)
+        generation_service = GenerationService(llm=build_llm(settings))
 
         rag_service = RagService(
-            llm=llm,
-            knowledge_base=retrieval_service,
+            retrieval_service=retrieval_service,
+            generation_service=generation_service,
             checkpointer=checkpointer,
             trace_config=trace_config,
         )
-
-        generation_service = GenerationService(llm=llm)
 
         ingestion_service = IngestionService(
             index=vector_store,
@@ -72,15 +71,16 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         conversation_service = ConversationService(
-            repository=ConversationRepository(db_pool),
-            rag_service=rag_service,
+            repository=ConversationRepository(
+                db_pool, CheckpointHistoryStore(checkpointer)
+            ),
             generation_service=generation_service,
         )
 
         yield Container(
             retrieval_service,
-            rag_service,
             generation_service,
+            rag_service,
             ingestion_service,
             auth_service,
             conversation_service,

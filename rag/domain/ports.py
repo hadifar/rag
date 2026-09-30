@@ -1,9 +1,8 @@
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
-from rag.domain.events import StreamEvent
 from rag.domain.models import (
     Chunk,
     Conversation,
@@ -125,25 +124,43 @@ class ConversationRepositoryPort(Protocol):
         """Every conversation's id, whoever owns it."""
         ...
 
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
+        ...
 
-class GenerationPort(Protocol):
-    """Runs chat turns and owns their message history, keyed by thread id."""
-
-    def stream_chat(
-        self, message: str, thread_id: str
-    ) -> AsyncIterator[StreamEvent]: ...
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]: ...
     async def delete_history(self, thread_id: str) -> None: ...
     async def list_thread_ids(self) -> set[str]:
         """Every thread that has stored messages."""
         ...
 
 
-class CompletionPort(Protocol):
-    """Small, single-shot LLM completions that stand outside any chat turn."""
+class HistoryStorePort(Protocol):
+    """The chat messages stored per thread, which the chat agent writes as it answers."""
 
-    async def generate_title(self, message: str) -> str | None:
-        """A title for a conversation opening with this message, or None if one
-        couldn't be generated. Never raises.
-        """
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
         ...
+
+    async def delete_history(self, thread_id: str) -> None: ...
+    async def list_thread_ids(self) -> set[str]:
+        """Every thread that has stored messages."""
+        ...
+
+
+class GenerationPort(Protocol):
+    """Plain LLM text generation."""
+
+    async def generate(self, prompt: str) -> str:
+        """One-shot completion; raises if the LLM call fails."""
+        ...
+
+    def stream(self, prompt: str) -> AsyncIterator[str]: ...
+
+
+class ModelPort(Protocol):
+    """Hands out the chat model for callers that build their own chat flow on it. Typed
+    loosely: the domain stays free of LangChain (it is a `BaseChatModel`).
+    """
+
+    @property
+    def chat_model(self) -> Any: ...

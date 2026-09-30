@@ -1,29 +1,35 @@
+import asyncio
 import base64
 import binascii
 import json
+import logging
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
-from rag.domain.events import StreamEvent
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import CompletionPort, ConversationRepositoryPort, GenerationPort
+from rag.domain.ports import ConversationRepositoryPort, GenerationPort
+from rag.domain.prompts import TITLE_PROMPT
+
+logger = logging.getLogger(__name__)
 
 FALLBACK_TITLE_LENGTH = 60
+MAX_TITLE_LENGTH = 80
+# Only the start of the message is needed to title it; caps the title call's cost.
+TITLE_MESSAGE_EXCERPT = 1000
+# The client waits on this for the sidebar title; don't hold it on a slow LLM.
+TITLE_TIMEOUT_SECONDS = 10
 
 
 class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        rag_service: GenerationPort,
-        generation_service: CompletionPort,
+        generation_service: GenerationPort,
     ):
         self._repository = repository
-        self._generation = rag_service
-        self._generatioin_service = generation_service
+        self._generation = generation_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -31,19 +37,18 @@ class ConversationService:
         """
         return await self._repository.get_or_create_empty(user_id)
 
-    async def chat(
+    async def begin_chat(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
-    ) -> AsyncIterator[StreamEvent]:
-        """Streams the answer to `message`. A first message also names the conversation,
-        with a title cut from the message (see `generate_title` for a better one).
+    ) -> None:
+        """Readies the conversation for a turn: marks it used, and if it is untitled
+        (a first message) names it with a title cut from `message` (see
+        `generate_title` for a better one). Call before streaming the answer.
         """
         conversation = await self._touch_owned(user_id, conversation_id)
         if conversation.title is None:
             # Titled before streaming, so an empty conversation is always untitled
             # and vice versa — even if the answer then fails.
             await self._repository.set_title(conversation_id, _fallback_title(message))
-        async for event in self._generation.stream_chat(message, str(conversation_id)):
-            yield event
 
     async def generate_title(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
@@ -53,11 +58,26 @@ class ConversationService:
         Keeps the current title if the LLM fails.
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        title = await self._generatioin_service.generate_title(message)
+        title = await self._llm_title(message)
         if title is None:
             return conversation
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
+
+    async def _llm_title(self, message: str) -> str | None:
+        """An LLM-written title, or None to keep the fallback. Never raises: a failed
+        title must not fail the turn the user already got an answer for.
+        """
+        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
+        try:
+            async with asyncio.timeout(TITLE_TIMEOUT_SECONDS):
+                raw = await self._generation.generate(prompt)
+        except Exception:
+            logger.warning(
+                "Title generation failed; keeping the fallback", exc_info=True
+            )
+            return None
+        return _clean_title(raw)
 
     async def list_for_user(
         self, user_id: uuid.UUID, limit: int, cursor: str | None
@@ -73,13 +93,13 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         await self.get_owned(user_id, conversation_id)
-        return await self._generation.get_history(str(conversation_id))
+        return await self._repository.get_history(str(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         await self.get_owned(user_id, conversation_id)
         # Messages first: if this fails, the row is still there to retry the delete,
         # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._generation.delete_history(str(conversation_id))
+        await self._repository.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
 
     async def prune_orphaned_threads(self, *, dry_run: bool = False) -> list[str]:
@@ -88,10 +108,10 @@ class ConversationService:
         from a delete that failed halfway or rows removed outside the app.
         """
         conversation_ids = {str(id_) for id_ in await self._repository.all_ids()}
-        orphans = sorted(await self._generation.list_thread_ids() - conversation_ids)
+        orphans = sorted(await self._repository.list_thread_ids() - conversation_ids)
         if not dry_run:
             for thread_id in orphans:
-                await self._generation.delete_history(thread_id)
+                await self._repository.delete_history(thread_id)
         return orphans
 
     async def get_owned(
@@ -118,6 +138,12 @@ def _fallback_title(message: str) -> str:
     if len(title) <= FALLBACK_TITLE_LENGTH:
         return title
     return title[: FALLBACK_TITLE_LENGTH - 1].rstrip() + "…"
+
+
+def _clean_title(raw: str) -> str | None:
+    first_line = next(iter(raw.strip().splitlines()), "")
+    title = first_line.strip().strip("\"'`").strip().rstrip(".")
+    return title[:MAX_TITLE_LENGTH] or None
 
 
 def _encode_cursor(conversation: Conversation) -> str:

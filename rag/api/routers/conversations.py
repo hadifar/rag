@@ -5,7 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.sse import EventSourceResponse
 
-from rag.api.deps import AuthenticatedUserDep, ConversationServiceDep, get_current_user
+from rag.api.deps import (
+    AuthenticatedUserDep,
+    ConversationServiceDep,
+    RagServiceDep,
+    get_current_user,
+)
 from rag.api.schema.conversations import (
     ConversationPageResponse,
     ConversationResponse,
@@ -73,10 +78,14 @@ async def send_message(
     message_request: MessageRequest,
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
+    rag_service: RagServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
-    async for event in conversation_service.chat(
+    await conversation_service.begin_chat(
         current_user.id, conversation_id, message_request.message
+    )
+    async for event in rag_service.stream_chat(
+        message_request.message, str(conversation_id)
     ):
         yield to_stream_event(event)
 

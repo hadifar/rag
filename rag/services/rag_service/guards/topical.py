@@ -12,18 +12,9 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
-GUARDRAIL_PROMPT = (
-    "You are a scope classifier for a support assistant that only answers questions about "
-    "the AtlasFlow product (workflows, integrations, billing, security, API, etc.). Given "
-    "the user's latest message, reply with exactly one word: RELEVANT if it's a question "
-    "about AtlasFlow or its product/support domain, or IRRELEVANT if it's unrelated "
-    "(small talk, general knowledge, other products, etc.).\n\nMESSAGE:\n{message}"
-)
-
-OFF_TOPIC_INSTRUCTION = (
-    "The user's question is unrelated to AtlasFlow. Politely explain that you can only "
-    "help with AtlasFlow questions, and ask them to rephrase around AtlasFlow's product, "
-    "features, or support topics. Do not attempt to answer the question itself."
+from rag.domain.prompts import (
+    GUARDRAIL_PROMPT,
+    OFF_TOPIC_INSTRUCTION,
 )
 
 

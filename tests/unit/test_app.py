@@ -23,7 +23,7 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import SourcesReady, ToolCall
+from rag.domain.events import ToolCall
 from rag.domain.models import Chunk
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -38,8 +38,8 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakeUserRepository,
-    StubCompletion,
     StubGeneration,
+    StubRag,
 )
 
 _TEST_EMAIL = "test@example.com"
@@ -90,18 +90,20 @@ def client() -> Generator[TestClient]:
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
-    generation = StubGeneration(
+    conversation_repository = FakeConversationRepository()
+    generation = StubGeneration("Greeting")
+    rag = StubRag(
+        conversation_repository.threads,
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
-            SourcesReady(sources=["doc-a", "doc-b"]),
         ],
+        sources=["doc-a", "doc-b"],
     )
-    completion = StubCompletion(title="Greeting")
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        rag_service=cast(RagService, generation),
-        generation_service=cast(GenerationService, completion),
+        generation_service=cast(GenerationService, generation),
+        rag_service=cast(RagService, rag),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -110,9 +112,8 @@ def client() -> Generator[TestClient]:
         ),
         auth_service=auth_service,
         conversation_service=ConversationService(
-            repository=FakeConversationRepository(),
-            rag_service=generation,
-            generation_service=completion,
+            repository=conversation_repository,
+            generation_service=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())
