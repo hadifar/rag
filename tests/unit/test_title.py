@@ -2,12 +2,12 @@ from typing import cast
 
 from langchain_core.runnables import Runnable
 
-from rag.services.completion_service.service import CompletionService
+from rag.services.generation_service.service import GenerationService
 from tests.unit.fakes import FakeTitleModel
 
 
-def _service(model: FakeTitleModel) -> CompletionService:
-    return CompletionService(cast(Runnable, model))
+def _service(model: FakeTitleModel) -> GenerationService:
+    return GenerationService(cast(Runnable, model))
 
 
 async def test_title_is_the_first_line_without_quotes_or_trailing_period() -> None:

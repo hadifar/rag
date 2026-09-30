@@ -23,12 +23,12 @@ from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.services.agent_service.graph import build_graph
-from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.streaming import stream_events
-from rag.services.agent_service.tools import build_search_tool
-from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.graph import build_graph
+from rag.services.rag_service.guards.groundness import REVISION_INSTRUCTION
+from rag.services.rag_service.guards.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.rag_service.streaming import stream_events
+from rag.services.rag_service.tools import build_search_tool
+from rag.services.rag_service.turn import to_history
 
 
 class _ScriptedChatModel(BaseChatModel):

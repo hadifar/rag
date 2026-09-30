@@ -11,9 +11,9 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.services.agent_service.guards.groundness import GroundednessGuard
-from rag.services.agent_service.guards.topical import TopicalGuard
-from rag.services.agent_service.resilience import (
+from rag.services.rag_service.guards.groundness import GroundednessGuard
+from rag.services.rag_service.guards.topical import TopicalGuard
+from rag.services.rag_service.resilience import (
     FALLBACK_MESSAGE,
     LLM_RETRY_ATTEMPTS,
     with_resilience,

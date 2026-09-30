@@ -13,20 +13,20 @@ from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
-from rag.services.agent_service.service import GenerationService
 from rag.services.auth_service.service import AuthService
-from rag.services.completion_service.service import CompletionService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 
 
 @dataclass
 class Container:
     retrieval_service: RetrievalService
+    rag_service: RagService
     generation_service: GenerationService
-    completion_service: CompletionService
     ingestion_service: IngestionService
     auth_service: AuthService
     conversation_service: ConversationService
@@ -47,14 +47,14 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         llm = build_llm(settings)
 
-        generation_service = GenerationService(
+        rag_service = RagService(
             llm=llm,
             knowledge_base=retrieval_service,
             checkpointer=checkpointer,
             trace_config=trace_config,
         )
 
-        completion_service = CompletionService(llm=llm)
+        generation_service = GenerationService(llm=llm)
 
         ingestion_service = IngestionService(
             index=vector_store,
@@ -73,14 +73,14 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
-            generation=generation_service,
-            completion=completion_service,
+            rag_service=rag_service,
+            generation_service=generation_service,
         )
 
         yield Container(
             retrieval_service,
+            rag_service,
             generation_service,
-            completion_service,
             ingestion_service,
             auth_service,
             conversation_service,

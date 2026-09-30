@@ -3,7 +3,7 @@ import logging
 
 from langchain_core.runnables import Runnable
 
-from rag.services.completion_service.prompts import TITLE_PROMPT
+from rag.services.generation_service.prompts import TITLE_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +14,7 @@ TITLE_MESSAGE_EXCERPT = 1000
 TITLE_TIMEOUT_SECONDS = 10
 
 
-class CompletionService:
-    """Small, single-shot LLM completions that stand outside any chat turn."""
-
+class GenerationService:
     def __init__(self, llm: Runnable):
         self._llm = llm
 

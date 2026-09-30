@@ -25,12 +25,12 @@ from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.events import SourcesReady, ToolCall
 from rag.domain.models import Chunk
-from rag.services.agent_service.service import GenerationService
 from rag.services.auth_service.service import AuthService
-from rag.services.completion_service.service import CompletionService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
@@ -100,8 +100,8 @@ def client() -> Generator[TestClient]:
     completion = StubCompletion(title="Greeting")
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        generation_service=cast(GenerationService, generation),
-        completion_service=cast(CompletionService, completion),
+        rag_service=cast(RagService, generation),
+        generation_service=cast(GenerationService, completion),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -111,8 +111,8 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=FakeConversationRepository(),
-            generation=generation,
-            completion=completion,
+            rag_service=generation,
+            generation_service=completion,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

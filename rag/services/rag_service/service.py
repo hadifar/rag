@@ -8,17 +8,17 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from rag.domain.events import StreamEvent
 from rag.domain.models import HistoryMessage
 from rag.domain.ports import SearchPort
-from rag.services.agent_service.graph import build_graph
-from rag.services.agent_service.streaming import stream_events
-from rag.services.agent_service.tools import build_search_tool
-from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.graph import build_graph
+from rag.services.rag_service.streaming import stream_events
+from rag.services.rag_service.tools import build_search_tool
+from rag.services.rag_service.turn import to_history
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
     return {}
 
 
-class GenerationService:
+class RagService:
     def __init__(
         self,
         llm: BaseChatModel,

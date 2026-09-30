@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
-from rag.services.agent_service.turn import (
+from rag.services.rag_service.turn import (
     current_turn,
     is_final_answer,
     turn_tool_messages,

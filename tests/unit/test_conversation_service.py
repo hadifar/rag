@@ -22,7 +22,7 @@ def _service(
     generation = generation or StubGeneration()
     completion = completion or StubCompletion()
     service = ConversationService(
-        repository=repository, generation=generation, completion=completion
+        repository=repository, rag_service=generation, generation_service=completion
     )
     return service, repository, generation, completion
 

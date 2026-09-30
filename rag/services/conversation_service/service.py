@@ -18,12 +18,12 @@ class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        generation: GenerationPort,
-        completion: CompletionPort,
+        rag_service: GenerationPort,
+        generation_service: CompletionPort,
     ):
         self._repository = repository
-        self._generation = generation
-        self._completion = completion
+        self._generation = rag_service
+        self._generatioin_service = generation_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -53,7 +53,7 @@ class ConversationService:
         Keeps the current title if the LLM fails.
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        title = await self._completion.generate_title(message)
+        title = await self._generatioin_service.generate_title(message)
         if title is None:
             return conversation
         await self._repository.set_title(conversation_id, title)
