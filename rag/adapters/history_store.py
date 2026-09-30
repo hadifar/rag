@@ -2,7 +2,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from rag.domain.models import HistoryMessage
-from rag.services.rag_service.turn import to_history
+from rag.services.agent_service.turn import to_history
 
 
 class CheckpointHistoryStore:

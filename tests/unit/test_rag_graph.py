@@ -23,11 +23,11 @@ from pydantic import Field
 
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.services.generation_service.service import GenerationService
-from rag.services.rag_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.rag_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.rag_service.service import RagService
-from rag.services.rag_service.turn import to_history
+from rag.services.agent_service.agents.rag_agent import RagAgent
+from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.service import AgentService
+from rag.services.agent_service.turn import to_history
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -137,16 +137,14 @@ def _answer(text: str) -> AIMessage:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        self.rag = RagService(
-            retrieval_service=_StubRetrievalService(),
-            generation_service=GenerationService(model),
-            checkpointer=InMemorySaver(),
-        )
-        self.graph: CompiledStateGraph = self.rag._graph
-        self.config: RunnableConfig = self.rag.get_config("t1")
+        agents = AgentService(model, InMemorySaver())
+        search_tool = agents.create_tool(_StubRetrievalService())
+        self.agent: RagAgent = agents.create_rag_agent([search_tool])
+        self.graph: CompiledStateGraph = self.agent._graph
+        self.config: RunnableConfig = self.agent.get_config("t1")
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.rag.stream_chat(text, "t1")]
+        return [event async for event in self.agent.stream(text, "t1")]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]

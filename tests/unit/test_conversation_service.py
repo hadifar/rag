@@ -16,7 +16,7 @@ def _service(
 ) -> tuple[ConversationService, FakeConversationRepository, StubGeneration]:
     repository = FakeConversationRepository()
     generation = generation or StubGeneration()
-    service = ConversationService(repository=repository, generation_service=generation)
+    service = ConversationService(repository=repository, agent_service=generation)
     return service, repository, generation
 
 

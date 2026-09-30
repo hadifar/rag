@@ -1,9 +1,8 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -17,6 +16,7 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
+from rag.domain.ports import ChatAgentPort, SearchPort, ToolPort
 
 
 class FakeEmbeddings:
@@ -240,7 +240,7 @@ class FakeConversationRepository:
 
 
 class StubGeneration:
-    """GenerationPort that answers every prompt with `reply`, or raises `error`, and
+    """AgentServicePort for single-shot generation only: answers every prompt with `reply`, or raises `error`, and
     records the prompts.
     """
 
@@ -261,26 +261,11 @@ class StubGeneration:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    async def stream(self, prompt: str) -> AsyncIterator[str]:
-        yield await self.generate(prompt)
+    def create_tool(self, knowledge_base: SearchPort) -> ToolPort:
+        raise NotImplementedError("the stub builds no tools")
 
-    def create_agent(
-        self,
-        tools: list[Any],
-        system_prompt: str,
-        middleware: list[Any],
-        checkpointer: Any,
-    ) -> Any:
+    def create_rag_agent(self, tools: list[ToolPort]) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
-
-    def stream_events[E](
-        self,
-        graph: Any,
-        messages: list[Any],
-        config: Any,
-        parse: Callable[[Mapping[str, Any]], E | None],
-    ) -> AsyncIterator[E]:
-        raise NotImplementedError("the stub has no graph to stream")
 
 
 class StubRag:

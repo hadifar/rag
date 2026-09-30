@@ -27,9 +27,9 @@ from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.events import ToolCall
 from rag.domain.models import Chunk
+from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.rag_service.service import RagService
@@ -104,7 +104,7 @@ def client() -> Generator[TestClient]:
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        generation_service=cast(GenerationService, generation),
+        agent_service=cast(AgentService, generation),
         rag_service=cast(RagService, rag),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
@@ -115,7 +115,7 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            generation_service=generation,
+            agent_service=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

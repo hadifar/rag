@@ -15,8 +15,8 @@ from rag.domain.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.rag_service.guards.topical import Classify
-from rag.services.rag_service.turn import (
+from rag.services.agent_service.guards.topical import Classify
+from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
     turn_tool_messages,

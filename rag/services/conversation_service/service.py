@@ -18,7 +18,7 @@ from rag.domain.errors import (
     InvalidCursorError,
 )
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import ConversationRepositoryPort, GenerationPort
+from rag.domain.ports import AgentServicePort, ConversationRepositoryPort
 from rag.domain.prompts import TITLE_PROMPT
 from rag.domain.resilience import or_default
 
@@ -43,10 +43,10 @@ class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        generation_service: GenerationPort,
+        agent_service: AgentServicePort,
     ):
         self._repository = repository
-        self._generation = generation_service
+        self._agent_service = agent_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -71,7 +71,7 @@ class ConversationService:
         conversation = await self.get_owned(user_id, conversation_id)
         prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
         reply = await or_default(
-            self._generation.generate_structured(prompt, TitleOutput), None
+            self._agent_service.generate_structured(prompt, TitleOutput), None
         )
         title = reply.title if reply is not None else _fallback_title(message)
         await self._repository.set_title(conversation_id, title)

@@ -113,6 +113,17 @@ source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli", "rag.api"]
 
 [[tool.importlinter.contracts]]
+name = "LangChain is used only by the agent service; others call it through AgentServicePort"
+type = "forbidden"
+source_modules = ["rag.services"]
+forbidden_modules = ["langchain_core", "langchain", "langgraph"]
+ignore_imports = [
+    "rag.services.agent_service.** -> langchain_core",
+    "rag.services.agent_service.** -> langchain",
+    "rag.services.agent_service.** -> langgraph",
+]
+
+[[tool.importlinter.contracts]]
 name = "repository reaches only the domain"
 type = "forbidden"
 source_modules = ["rag.repository"]

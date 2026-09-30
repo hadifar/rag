@@ -16,9 +16,9 @@ from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
+from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.generation_service.service import GenerationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.rag_service.service import RagService
@@ -28,7 +28,7 @@ from rag.services.retrieval_service.service import RetrievalService
 @dataclass
 class Container:
     retrieval_service: RetrievalService
-    generation_service: GenerationService
+    agent_service: AgentService
     rag_service: RagService
     ingestion_service: IngestionService
     auth_service: AuthService
@@ -48,13 +48,14 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
         retrieval_service = RetrievalService(vector_store=vector_store)
 
-        generation_service = GenerationService(llm=build_llm(settings))
-
-        rag_service = RagService(
-            retrieval_service=retrieval_service,
-            generation_service=generation_service,
+        agent_service = AgentService(
+            llm=build_llm(settings),
             checkpointer=checkpointer,
             trace_config=trace_config,
+        )
+
+        rag_service = RagService(
+            retrieval_service=retrieval_service, agent_service=agent_service
         )
 
         ingestion_service = IngestionService(
@@ -79,12 +80,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
             repository=ConversationRepository(
                 db_pool, CheckpointHistoryStore(checkpointer)
             ),
-            generation_service=generation_service,
+            agent_service=agent_service,
         )
 
         yield Container(
             retrieval_service,
-            generation_service,
+            agent_service,
             rag_service,
             ingestion_service,
             auth_service,

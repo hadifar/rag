@@ -1,10 +1,11 @@
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
 from typing import Any, Protocol
 
 from pydantic import BaseModel
 
+from rag.domain.events import StreamEvent
 from rag.domain.models import (
     Chunk,
     Conversation,
@@ -149,10 +150,24 @@ class HistoryStorePort(Protocol):
         ...
 
 
-class GenerationPort(Protocol):
-    """The LLM: plain text generation, and building and streaming agents on it, so
-    nothing else ever holds the model. Tools, middleware, graph and config are typed
-    loosely: the domain stays free of LangChain.
+class ToolPort(Protocol):
+    """A tool an agent may call. Opaque outside the agent service, which builds it."""
+
+    @property
+    def name(self) -> str: ...
+
+
+class ChatAgentPort(Protocol):
+    def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
+        """Answers `message` in the thread, saving the turn to it: the answer's events
+        as they happen, then the turn's sources if it searched.
+        """
+        ...
+
+
+class AgentServicePort(Protocol):
+    """The LLM: single-shot generation, and the tools and agents built on it, so
+    nothing else ever holds the model or touches LangChain.
     """
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
@@ -169,28 +184,12 @@ class GenerationPort(Protocol):
         """
         ...
 
-    def stream(self, prompt: str) -> AsyncIterator[str]:
-        """The completion's text, token by token."""
+    def create_tool(self, knowledge_base: SearchPort) -> ToolPort:
+        """search_kb: the agent's search of `knowledge_base`."""
         ...
 
-    def create_agent(
-        self,
-        tools: list[Any],
-        system_prompt: str,
-        middleware: list[Any],
-        checkpointer: Any,
-    ) -> Any:
-        """A tool-calling agent graph on the model, saving its threads to `checkpointer`."""
-        ...
-
-    def stream_events[E](
-        self,
-        graph: Any,
-        messages: list[Any],
-        config: Any,
-        parse: Callable[[Mapping[str, Any]], E | None],
-    ) -> AsyncIterator[E]:
-        """Runs `graph` and yields what `parse` makes of each raw event (None skips)."""
+    def create_rag_agent(self, tools: list[ToolPort]) -> ChatAgentPort:
+        """The guarded chat agent, answering with `tools` (from `create_tool`)."""
         ...
 
 
