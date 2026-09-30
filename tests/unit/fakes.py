@@ -1,8 +1,9 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
@@ -254,6 +255,19 @@ class StubGeneration:
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
         yield await self.generate(prompt)
+
+    @property
+    def chat_model(self) -> Any:
+        raise NotImplementedError("the stub has no chat model")
+
+    def stream_events[E](
+        self,
+        graph: Any,
+        messages: list[Any],
+        config: Any,
+        parse: Callable[[Mapping[str, Any]], E | None],
+    ) -> AsyncIterator[E]:
+        raise NotImplementedError("the stub has no graph to stream")
 
 
 class StubRag:

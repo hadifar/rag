@@ -6,7 +6,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from rag.domain.events import SourcesReady, StreamEvent
-from rag.domain.ports import ModelPort, SearchPort
+from rag.domain.ports import GenerationPort, SearchPort
 from rag.services.rag_service.graph import build_graph
 from rag.services.rag_service.streaming import parse_event
 from rag.services.rag_service.tools import build_search_tool
@@ -26,7 +26,7 @@ class RagService:
     def __init__(
         self,
         retrieval_service: SearchPort,
-        generation_service: ModelPort,
+        generation_service: GenerationPort,
         checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
     ):
