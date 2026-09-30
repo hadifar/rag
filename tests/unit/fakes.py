@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
@@ -15,6 +16,27 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
+
+
+class FakeEmbeddings:
+    """Deterministic EmbeddingsPort: same text -> same vector, instant, no network.
+
+    Vectors are NOT semantically meaningful — only use where a test needs *a*
+    vector to satisfy storage, not one that reflects real similarity.
+    """
+
+    DIMENSIONS = 1536
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    def _vector(self, text: str) -> list[float]:
+        seed = hashlib.sha256(text.encode()).digest()
+        raw = (seed * (self.DIMENSIONS // len(seed) + 1))[: self.DIMENSIONS]
+        return [(b / 127.5) - 1 for b in raw]
 
 
 class FakeUserRepository:

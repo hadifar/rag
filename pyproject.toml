@@ -83,6 +83,7 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["integration: hits real Postgres/LLM"]
 testpaths = ["tests"]
 
 [dependency-groups]

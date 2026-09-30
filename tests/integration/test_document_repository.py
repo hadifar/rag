@@ -1,5 +1,8 @@
-"""Hybrid retrieval against real Postgres (pgvector + full-text) and real embeddings,
-over the fixture knowledge base seeded by conftest's `seeded_kb`.
+"""Hybrid retrieval and storage correctness against real Postgres (pgvector +
+full-text), over the fixture knowledge base. Tests that assert on embedding
+semantics/ranking use `seeded_kb` (real embeddings); storage/SQL-plumbing tests
+use `fake_kb` (deterministic, no network) since they don't care about vector
+quality.
 """
 
 from pathlib import Path
@@ -40,9 +43,9 @@ async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> N
 
 
 async def test_get_document_returns_the_whole_document(
-    seeded_kb: DocumentRepository,
+    fake_kb: DocumentRepository,
 ) -> None:
-    document = await seeded_kb.aget_document("it-plans-and-pricing.md")
+    document = await fake_kb.aget_document("it-plans-and-pricing.md")
 
     assert document is not None
     assert (
@@ -50,15 +53,15 @@ async def test_get_document_returns_the_whole_document(
         < document.text.index("## Starter")
         < document.text.index("## Zephyr")
     )
-    assert await seeded_kb.aget_document("it-does-not-exist.md") is None
+    assert await fake_kb.aget_document("it-does-not-exist.md") is None
 
 
 async def test_reingesting_unchanged_documents_embeds_nothing(
-    seeded_kb: DocumentRepository,
+    fake_kb: DocumentRepository,
     db_pool: AsyncConnectionPool[AsyncConnection],
     tmp_path: Path,
 ) -> None:
-    service = ingestion_service(seeded_kb, db_pool, tmp_path)
+    service = ingestion_service(fake_kb, db_pool, tmp_path)
     report = await service.ingest(load_directory(FIXTURE_KB), remove_missing=False)
 
     assert (report.added, report.updated, report.chunks) == (0, 0, 0)
@@ -66,7 +69,7 @@ async def test_reingesting_unchanged_documents_embeds_nothing(
 
 
 async def test_replacing_a_document_drops_its_old_chunks(
-    seeded_kb: DocumentRepository,
+    fake_kb: DocumentRepository,
 ) -> None:
     source_id = "it-plans-and-pricing.md"
     chunk = Chunk(
@@ -75,25 +78,25 @@ async def test_replacing_a_document_drops_its_old_chunks(
         metadata={"source_id": source_id, "chunk_index": 0},
     )
 
-    await seeded_kb.areplace_documents(
+    await fake_kb.areplace_documents(
         [IndexedDocument(source_id, "new-hash", [chunk])], removed=[]
     )
 
-    document = await seeded_kb.aget_document(source_id)
+    document = await fake_kb.aget_document(source_id)
     assert document is not None and document.text == "# Replaced"
-    assert (await seeded_kb.alist_content_hashes())[source_id] == "new-hash"
+    assert (await fake_kb.alist_content_hashes())[source_id] == "new-hash"
 
 
 async def test_removing_a_document_deletes_it_and_its_chunks(
-    seeded_kb: DocumentRepository,
+    fake_kb: DocumentRepository,
 ) -> None:
-    await seeded_kb.areplace_documents([], removed=["it-office-plants.md"])
+    await fake_kb.areplace_documents([], removed=["it-office-plants.md"])
 
-    assert await seeded_kb.aget_document("it-office-plants.md") is None
-    assert "it-office-plants.md" not in await seeded_kb.alist_content_hashes()
+    assert await fake_kb.aget_document("it-office-plants.md") is None
+    assert "it-office-plants.md" not in await fake_kb.alist_content_hashes()
 
 
 async def test_ping_succeeds_when_the_table_exists(
-    seeded_kb: DocumentRepository,
+    fake_kb: DocumentRepository,
 ) -> None:
-    await seeded_kb.aping()
+    await fake_kb.aping()
