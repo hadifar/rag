@@ -23,6 +23,7 @@ from pydantic import Field
 
 from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
+from rag.domain.prompts import PLANNING_INSTRUCTIONS
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
@@ -276,6 +277,7 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert off_topic_call["tools"] == []
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
+    assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
 

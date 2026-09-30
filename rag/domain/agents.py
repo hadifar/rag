@@ -29,13 +29,22 @@ Check = OffTopicCheck | GroundednessCheck
 
 
 @dataclass(frozen=True)
+class Planning:
+    """Lets the agent split a multi-part question into steps and work through them
+    before answering. The plan is its private scratchpad, never part of the answer.
+    """
+
+    instructions: str  # when to plan and how, for this agent's kind of work
+
+
+@dataclass(frozen=True)
 class ToolAgentSpec:
     """The standard tool-calling agent: the model calls `tools` until it answers."""
 
     system_prompt: str
     tools: list[ToolPort]
     checks: list[Check] = field(default_factory=list[Check])  # run in this order
-    todo_list: bool = False  # give it a write_todos tool to plan multi-step questions
+    planning: Planning | None = None
 
 
 # Every kind of agent the agent service can build; a custom graph adds its spec here.

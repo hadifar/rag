@@ -6,6 +6,7 @@ from langchain.agents.middleware import (
     ModelRetryMiddleware,
     TodoListMiddleware,
 )
+from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -37,12 +38,15 @@ def build_tool_agent(
     checkpointer: BaseCheckpointSaver,
 ) -> CompiledStateGraph:
     # The checks come first: the outermost middleware, so an off-topic turn's "no
-    # tools" also covers write_todos.
+    # tools" also covers planning's write_todos.
     middleware: list[AgentMiddleware[Any, Any]] = [
         *(_guard(check, classify) for check in spec.checks)
     ]
-    if spec.todo_list:
-        middleware.append(TodoListMiddleware())
+    if spec.planning is not None:
+        # The instructions come with the tool, so the model is never told to plan
+        # with a tool it doesn't have.
+        instructions = f"{WRITE_TODOS_SYSTEM_PROMPT}\n\n{spec.planning.instructions}"
+        middleware.append(TodoListMiddleware(system_prompt=instructions))
     middleware.append(
         ModelRetryMiddleware(
             max_retries=LLM_RETRY_ATTEMPTS - 1, on_failure=_fallback_message

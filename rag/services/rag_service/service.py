@@ -1,10 +1,15 @@
 from collections.abc import AsyncIterator
 
-from rag.domain.agents import GroundednessCheck, OffTopicCheck, ToolAgentSpec
+from rag.domain.agents import (
+    GroundednessCheck,
+    OffTopicCheck,
+    Planning,
+    ToolAgentSpec,
+)
 from rag.domain.constants import MAX_REVISIONS
 from rag.domain.events import StreamEvent
 from rag.domain.ports import AgentServicePort, SearchPort
-from rag.domain.prompts import SYSTEM_PROMPT
+from rag.domain.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
 
 
 class RagService:
@@ -14,14 +19,13 @@ class RagService:
     """
 
     def __init__(self, retrieval_service: SearchPort, agent_service: AgentServicePort):
-        self._agent = agent_service.create_agent(
-            ToolAgentSpec(
-                system_prompt=SYSTEM_PROMPT,
-                tools=[agent_service.create_tool(retrieval_service)],
-                checks=[OffTopicCheck(), GroundednessCheck(MAX_REVISIONS)],
-                todo_list=True,
-            )
+        agent_spec = ToolAgentSpec(
+            system_prompt=RAG_SYSTEM_PROMPT,
+            tools=[agent_service.create_tool(retrieval_service)],
+            checks=[OffTopicCheck(), GroundednessCheck(MAX_REVISIONS)],
+            planning=Planning(PLANNING_INSTRUCTIONS),
         )
+        self._agent = agent_service.create_agent(agent_spec)
 
     async def stream_chat(
         self, message: str, thread_id: str
