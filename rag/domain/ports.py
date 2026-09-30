@@ -1,11 +1,11 @@
 import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, ToolPort
+from rag.domain.agents import AgentSpec, Tool, ToolPort
 from rag.domain.events import StreamEvent
 from rag.domain.models import (
     Chunk,
@@ -34,7 +34,6 @@ class VectorStorePort(Protocol):
         ...
 
 
-@runtime_checkable  # so the agent service can tell which tool to build from it
 class SearchPort(Protocol):
     """Finds knowledge-base passages for a query: the best first, with their scores."""
 
@@ -152,10 +151,6 @@ class HistoryStorePort(Protocol):
         ...
 
 
-# Every port the agent service can make a tool from; a new kind of tool adds its port.
-ToolSource = SearchPort
-
-
 class ChatAgentPort(Protocol):
     def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
         """Answers `message` in the thread, saving the turn to it: the answer's events
@@ -183,8 +178,8 @@ class AgentServicePort(Protocol):
         """
         ...
 
-    def create_tools(self, sources: list[ToolSource]) -> list[ToolPort]:
-        """One tool per source, in order: a SearchPort becomes search_kb."""
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
+        """Each tool, ready for an agent; raises ValueError if two share a name."""
         ...
 
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:

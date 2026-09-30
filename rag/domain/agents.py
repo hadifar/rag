@@ -1,5 +1,23 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    content: str  # what the model reads
+    # What the content came from (e.g. knowledge-base source ids), sent to the user as
+    # the turn's references; None for a tool that cites nothing.
+    references: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class Tool:
+    """A tool for an agent, free of any framework: the agent service wraps it."""
+
+    name: str  # what the model calls it; unique among an agent's tools
+    description: str  # what the model is told it does
+    run: Callable[[str], Awaitable[ToolResult]]  # the model's query in
 
 
 class ToolPort(Protocol):

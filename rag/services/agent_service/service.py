@@ -6,14 +6,13 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, ToolAgentSpec, ToolPort
+from rag.domain.agents import AgentSpec, Tool, ToolAgentSpec, ToolPort
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.ports import SearchPort, ToolSource
 from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.domain.resilience import or_default
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
-from rag.services.agent_service.tools import build_search_tool
+from rag.services.agent_service.tools import to_langchain_tool
 
 
 def _no_trace(name: str | None = None) -> RunnableConfig:
@@ -51,16 +50,14 @@ class AgentService:
         )
         return cast(T, await llm.ainvoke(prompt))
 
-    def create_tools(self, sources: list[ToolSource]) -> list[ToolPort]:
-        """One tool per source, in order: a SearchPort becomes search_kb. A new kind
-        of tool adds its port to ToolSource, a builder in tools.py, and a case here.
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
+        """Each tool, ready for an agent; raises ValueError if two share a name, which
+        LangChain would otherwise only trip over once the agent runs.
         """
-        return [self._create_tool(source) for source in sources]
-
-    def _create_tool(self, source: ToolSource) -> ToolPort:
-        match source:
-            case SearchPort():
-                return build_search_tool(source)
+        names = [tool.name for tool in tools]
+        if duplicates := sorted({name for name in names if names.count(name) > 1}):
+            raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
+        return [to_langchain_tool(tool) for tool in tools]
 
     def create_agent(self, spec: AgentSpec) -> Agent:
         """A chat agent built as `spec` describes. A new kind of agent adds its spec

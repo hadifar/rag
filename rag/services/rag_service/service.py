@@ -10,6 +10,7 @@ from rag.domain.constants import MAX_REVISIONS
 from rag.domain.events import StreamEvent
 from rag.domain.ports import AgentServicePort, SearchPort
 from rag.domain.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
+from rag.services.rag_service.tools import search_tool
 
 
 class RagService:
@@ -19,12 +20,16 @@ class RagService:
     """
 
     def __init__(self, retrieval_service: SearchPort, agent_service: AgentServicePort):
+
+        tools = agent_service.create_tools([search_tool(retrieval_service)])
+
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
-            tools=agent_service.create_tools([retrieval_service]),
+            tools=tools,
             checks=[OffTopicCheck(), GroundednessCheck(MAX_REVISIONS)],
             planning=Planning(PLANNING_INSTRUCTIONS),
         )
+
         self._agent = agent_service.create_agent(agent_spec)
 
     async def stream_chat(

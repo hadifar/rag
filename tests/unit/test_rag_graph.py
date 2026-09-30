@@ -30,6 +30,7 @@ from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import AgentService
 from rag.services.agent_service.turn import to_history
 from rag.services.rag_service.service import RagService
+from rag.services.rag_service.tools import search_tool
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -337,3 +338,11 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
     # A thread the checkpointer doesn't have (e.g. a conversation whose messages were
     # never saved) reads back as no messages; that used to crash with a zip() ValueError.
     assert to_history([]) == []
+
+
+def test_tools_with_the_same_name_are_rejected_up_front() -> None:
+    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver())
+    docs = search_tool(_StubRetrievalService())
+
+    with pytest.raises(ValueError, match="search_kb"):
+        agents.create_tools([docs, docs])

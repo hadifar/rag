@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, ToolPort
+from rag.domain.agents import AgentSpec, Tool, ToolPort
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import (
@@ -17,7 +17,7 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
-from rag.domain.ports import ChatAgentPort, ToolSource
+from rag.domain.ports import ChatAgentPort
 
 
 class FakeEmbeddings:
@@ -262,7 +262,7 @@ class StubGeneration:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    def create_tools(self, sources: list[ToolSource]) -> list[ToolPort]:
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
         raise NotImplementedError("the stub builds no tools")
 
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
