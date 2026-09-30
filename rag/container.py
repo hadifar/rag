@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from rag.adapters.archive_store import open_archive_store
+from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
 from rag.adapters.history_store import CheckpointHistoryStore
+from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.llm_client import build_embeddings, build_llm
 from rag.adapters.observability import open_trace_config
 from rag.config import Settings
@@ -64,8 +66,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         auth_service = AuthService(
             user_repository=UserRepository(db_pool),
-            jwt_secret=settings.AUTH.JWT_SECRET.get_secret_value(),
-            jwt_algorithm=settings.AUTH.JWT_ALGORITHM,
+            pass_hasher=Argon2PasswordHasher(),
+            token_codec=JwtTokenCodec(
+                settings.AUTH.JWT_SECRET.get_secret_value(),
+                settings.AUTH.JWT_ALGORITHM,
+            ),
             access_ttl=timedelta(minutes=settings.AUTH.ACCESS_TOKEN_EXPIRE_MINUTES),
             refresh_ttl=timedelta(days=settings.AUTH.REFRESH_TOKEN_EXPIRE_DAYS),
         )

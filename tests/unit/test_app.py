@@ -13,6 +13,8 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from rag.adapters.argon2 import Argon2PasswordHasher
+from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.api.deps import get_current_user
 from rag.app import create_app
 from rag.config import (
@@ -76,8 +78,8 @@ def _stub_settings() -> Settings:
 def _build_auth_service() -> AuthService:
     return AuthService(
         user_repository=FakeUserRepository(),
-        jwt_secret="test-secret-that-is-long-enough-32b",
-        jwt_algorithm="HS256",
+        pass_hasher=Argon2PasswordHasher(),
+        token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
         refresh_ttl=timedelta(days=7),
     )

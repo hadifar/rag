@@ -192,3 +192,17 @@ class GenerationPort(Protocol):
     ) -> AsyncIterator[E]:
         """Runs `graph` and yields what `parse` makes of each raw event (None skips)."""
         ...
+
+
+class PasswordHasherPort(Protocol):
+    async def hash(self, password: str) -> str: ...
+
+    async def verify(self, hashed_password: str, password: str) -> bool: ...
+
+
+class TokenCodecPort(Protocol):
+    def encode(self, claims: Mapping[str, Any]) -> str: ...
+
+    def decode(self, token: str) -> dict[str, Any]:
+        """Raises InvalidTokenError if the token is expired, malformed, or badly signed."""
+        ...

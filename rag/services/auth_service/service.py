@@ -1,12 +1,7 @@
-import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-
-import jwt
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
 
 from rag.domain.errors import (
     AdminRequiredError,
@@ -16,7 +11,7 @@ from rag.domain.errors import (
     UserNotFoundError,
 )
 from rag.domain.models import User
-from rag.domain.ports import UserRepositoryPort
+from rag.domain.ports import PasswordHasherPort, TokenCodecPort, UserRepositoryPort
 
 
 class _TokenType(StrEnum):
@@ -35,29 +30,24 @@ class AuthenticatedIdentity:
 
 
 class AuthService:
-    """Password hashing runs in a thread: argon2 is slow on purpose, and on the event
-    loop it would stall every other request, including open chat streams.
-    """
-
     def __init__(
         self,
         user_repository: UserRepositoryPort,
-        jwt_secret: str,
-        jwt_algorithm: str,
+        pass_hasher: PasswordHasherPort,
+        token_codec: TokenCodecPort,
         access_ttl: timedelta,
         refresh_ttl: timedelta,
     ):
         self._user_repository = user_repository
-        self._jwt_secret = jwt_secret
-        self._jwt_algorithm = jwt_algorithm
+        self._token_codec = token_codec
         self._access_ttl = access_ttl
         self._refresh_ttl = refresh_ttl
-        self._hasher = PasswordHasher()
+        self._pass_hasher = pass_hasher
 
     async def create_user(
         self, email: str, password: str, *, is_admin: bool = False
     ) -> User:
-        hashed_password = await asyncio.to_thread(self._hasher.hash, password)
+        hashed_password = await self._pass_hasher.hash(password)
         return await self._user_repository.create(
             _normalize_email(email), hashed_password, is_admin=is_admin
         )
@@ -78,10 +68,12 @@ class AuthService:
         user = await self._user_repository.get_by_email(_normalize_email(email))
         if user is None:
             raise InvalidCredentialsError()
-        try:
-            await asyncio.to_thread(self._hasher.verify, user.hashed_password, password)
-        except VerifyMismatchError as exc:
-            raise InvalidCredentialsError() from exc
+
+        if not await self._pass_hasher.verify(
+            user.hashed_password,
+            password,
+        ):
+            raise InvalidCredentialsError()
         return user
 
     async def get_user(self, user_id: uuid.UUID) -> User:
@@ -120,17 +112,10 @@ class AuthService:
             "type": token_type.value,
             "exp": datetime.now(UTC) + ttl,
         }
-        return jwt.encode(payload, self._jwt_secret, algorithm=self._jwt_algorithm)
+        return self._token_codec.encode(payload)
 
     def _decode(self, token: str, expected_type: _TokenType) -> uuid.UUID:
-        try:
-            payload = jwt.decode(
-                token, self._jwt_secret, algorithms=[self._jwt_algorithm]
-            )
-        except jwt.ExpiredSignatureError as exc:
-            raise InvalidTokenError("expired") from exc
-        except jwt.InvalidTokenError as exc:
-            raise InvalidTokenError("malformed") from exc
+        payload = self._token_codec.decode(token)
 
         if payload.get("type") != expected_type.value:
             raise InvalidTokenError(f"expected a {expected_type.value} token")
