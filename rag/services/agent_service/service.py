@@ -3,15 +3,16 @@ from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
+from rag.domain.agents import AgentSpec, ToolAgentSpec, ToolPort
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.ports import SearchPort, ToolPort
+from rag.domain.ports import SearchPort
 from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.domain.resilience import or_default
-from rag.services.agent_service.agents.rag_agent import RagAgent, build_graph
+from rag.services.agent_service.agent import Agent
+from rag.services.agent_service.graphs.tool_agent import build_tool_agent
 from rag.services.agent_service.tools import build_search_tool
 
 
@@ -44,9 +45,7 @@ class AgentService:
     async def generate_structured[T: BaseModel](
         self, prompt: str, schema: type[T], *, attempts: int = 1
     ) -> T:
-        """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
-        instance of it; raises if all `attempts` fail or the reply is rejected.
-        """
+        """One-shot completion enforced to fit `schema` (a Pydantic model class)"""
         llm = self._llm.with_structured_output(schema).with_retry(
             stop_after_attempt=attempts
         )
@@ -56,15 +55,16 @@ class AgentService:
         """search_kb: the agent's search of `knowledge_base`."""
         return build_search_tool(knowledge_base)
 
-    def create_rag_agent(self, tools: list[ToolPort]) -> RagAgent:
-        """The guarded chat agent, answering with `tools` (from `create_tool`)."""
-        graph = build_graph(
-            self._llm,
-            self._classify,
-            cast(list[BaseTool], tools),  # only this service builds them
-            self._checkpointer,
-        )
-        return RagAgent(graph, self._trace_config)
+    def create_agent(self, spec: AgentSpec) -> Agent:
+        """A chat agent built as `spec` describes. A new kind of agent adds its spec
+        to AgentSpec, a graph builder in graphs/, and a case here.
+        """
+        match spec:
+            case ToolAgentSpec():
+                graph = build_tool_agent(
+                    self._llm, spec, self._classify, self._checkpointer
+                )
+        return Agent(graph, self._trace_config)
 
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the

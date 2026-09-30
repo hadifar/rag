@@ -6,8 +6,9 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
+from rag.domain.agents import AgentSpec, ToolPort
 from rag.domain.errors import IngestionInProgressError
-from rag.domain.events import SourcesReady, StreamEvent, TextDelta
+from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import (
     Conversation,
     HistoryMessage,
@@ -16,7 +17,7 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
-from rag.domain.ports import ChatAgentPort, SearchPort, ToolPort
+from rag.domain.ports import ChatAgentPort, SearchPort
 
 
 class FakeEmbeddings:
@@ -264,7 +265,7 @@ class StubGeneration:
     def create_tool(self, knowledge_base: SearchPort) -> ToolPort:
         raise NotImplementedError("the stub builds no tools")
 
-    def create_rag_agent(self, tools: list[ToolPort]) -> ChatAgentPort:
+    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
 
 
@@ -297,4 +298,4 @@ class StubRag:
         for event in self.extra_events:
             yield event
         if self.sources is not None:
-            yield SourcesReady(sources=self.sources)
+            yield ReferencesReady(references=self.sources)

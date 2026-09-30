@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
-from rag.domain.events import SourcesReady, StreamEvent, TextDelta, ToolCall
+from rag.domain.events import ReferencesReady, StreamEvent, TextDelta, ToolCall
 
 # The message stream's events: each is one SSE `data:` line of JSON, told apart by `type`.
 
@@ -52,5 +52,5 @@ def _payload(event: StreamEvent) -> TextEvent | ToolEvent | SourcesEvent:
             return TextEvent(text=text)
         case ToolCall(name=name, status=status, query=query, output=output):
             return ToolEvent(name=name, status=status, query=query, output=output)
-        case SourcesReady(sources=sources):
-            return SourcesEvent(sources=sources)
+        case ReferencesReady(references=references):
+            return SourcesEvent(sources=references)

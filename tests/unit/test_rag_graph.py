@@ -21,13 +21,14 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
-from rag.domain.events import SourcesReady, StreamEvent, TextDelta
+from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.services.agent_service.agents.rag_agent import RagAgent
+from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import AgentService
 from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.service import RagService
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -138,13 +139,14 @@ def _answer(text: str) -> AIMessage:
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
         agents = AgentService(model, InMemorySaver())
-        search_tool = agents.create_tool(_StubRetrievalService())
-        self.agent: RagAgent = agents.create_rag_agent([search_tool])
-        self.graph: CompiledStateGraph = self.agent._graph
-        self.config: RunnableConfig = self.agent.get_config("t1")
+        self.rag = RagService(_StubRetrievalService(), agents)
+        agent = self.rag._agent
+        assert isinstance(agent, Agent)
+        self.graph: CompiledStateGraph = agent._graph
+        self.config: RunnableConfig = agent.get_config("t1")
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.agent.stream(text, "t1")]
+        return [event async for event in self.rag.stream_chat(text, "t1")]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -152,7 +154,7 @@ class _Chat:
 
 def _sources(events: list[StreamEvent]) -> list[str]:
     return [
-        source for e in events if isinstance(e, SourcesReady) for source in e.sources
+        ref for e in events if isinstance(e, ReferencesReady) for ref in e.references
     ]
 
 
@@ -189,8 +191,8 @@ async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
 
     events = await _Chat(model).send("first")
 
-    assert [e for e in events if isinstance(e, SourcesReady)] == [
-        SourcesReady(sources=[])
+    assert [e for e in events if isinstance(e, ReferencesReady)] == [
+        ReferencesReady(references=[])
     ]
 
 
@@ -199,7 +201,7 @@ async def test_a_turn_without_a_search_sends_no_sources() -> None:
 
     events = await _Chat(model).send("hello")
 
-    assert not any(isinstance(e, SourcesReady) for e in events)
+    assert not any(isinstance(e, ReferencesReady) for e in events)
 
 
 async def test_ungrounded_answer_is_revised_again_in_a_later_turn() -> None:

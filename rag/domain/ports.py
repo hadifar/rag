@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
+from rag.domain.agents import AgentSpec, ToolPort
 from rag.domain.events import StreamEvent
 from rag.domain.models import (
     Chunk,
@@ -150,13 +151,6 @@ class HistoryStorePort(Protocol):
         ...
 
 
-class ToolPort(Protocol):
-    """A tool an agent may call. Opaque outside the agent service, which builds it."""
-
-    @property
-    def name(self) -> str: ...
-
-
 class ChatAgentPort(Protocol):
     def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
         """Answers `message` in the thread, saving the turn to it: the answer's events
@@ -188,8 +182,8 @@ class AgentServicePort(Protocol):
         """search_kb: the agent's search of `knowledge_base`."""
         ...
 
-    def create_rag_agent(self, tools: list[ToolPort]) -> ChatAgentPort:
-        """The guarded chat agent, answering with `tools` (from `create_tool`)."""
+    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
+        """A chat agent built as `spec` describes."""
         ...
 
 
