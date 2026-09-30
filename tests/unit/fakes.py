@@ -17,7 +17,7 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
-from rag.domain.ports import ChatAgentPort, SearchPort
+from rag.domain.ports import ChatAgentPort, ToolSource
 
 
 class FakeEmbeddings:
@@ -262,7 +262,7 @@ class StubGeneration:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    def create_tool(self, knowledge_base: SearchPort) -> ToolPort:
+    def create_tools(self, sources: list[ToolSource]) -> list[ToolPort]:
         raise NotImplementedError("the stub builds no tools")
 
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:

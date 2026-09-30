@@ -21,7 +21,7 @@ class RagService:
     def __init__(self, retrieval_service: SearchPort, agent_service: AgentServicePort):
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
-            tools=[agent_service.create_tool(retrieval_service)],
+            tools=agent_service.create_tools([retrieval_service]),
             checks=[OffTopicCheck(), GroundednessCheck(MAX_REVISIONS)],
             planning=Planning(PLANNING_INSTRUCTIONS),
         )

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from rag.domain.agents import AgentSpec, ToolAgentSpec, ToolPort
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.ports import SearchPort
+from rag.domain.ports import SearchPort, ToolSource
 from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.domain.resilience import or_default
 from rag.services.agent_service.agent import Agent
@@ -51,9 +51,16 @@ class AgentService:
         )
         return cast(T, await llm.ainvoke(prompt))
 
-    def create_tool(self, knowledge_base: SearchPort) -> ToolPort:
-        """search_kb: the agent's search of `knowledge_base`."""
-        return build_search_tool(knowledge_base)
+    def create_tools(self, sources: list[ToolSource]) -> list[ToolPort]:
+        """One tool per source, in order: a SearchPort becomes search_kb. A new kind
+        of tool adds its port to ToolSource, a builder in tools.py, and a case here.
+        """
+        return [self._create_tool(source) for source in sources]
+
+    def _create_tool(self, source: ToolSource) -> ToolPort:
+        match source:
+            case SearchPort():
+                return build_search_tool(source)
 
     def create_agent(self, spec: AgentSpec) -> Agent:
         """A chat agent built as `spec` describes. A new kind of agent adds its spec
