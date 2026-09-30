@@ -202,17 +202,6 @@ async def test_prune_deletes_only_threads_without_a_conversation() -> None:
     assert str(kept) in repository.threads
 
 
-async def test_generated_title_is_the_first_line_without_quotes_or_trailing_period() -> (
-    None
-):
-    service, _, _ = _service(StubGeneration('"Password reset."\nextra line'))
-    conversation_id = (await service.create(ALICE)).id
-
-    renamed = await service.generate_title(ALICE, conversation_id, "question")
-
-    assert renamed.title == "Password reset"
-
-
 async def test_blank_generated_title_falls_back_to_the_message() -> None:
     service, repository, _ = _service(StubGeneration("  \n "))
     conversation_id = (await service.create(ALICE)).id

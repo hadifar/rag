@@ -3,7 +3,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.events import SourcesReady, StreamEvent, TextDelta
@@ -247,14 +247,27 @@ class StubGeneration:
         self.error = error
         self.prompts: list[str] = []
 
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        schema: type[Any] | None = None,
+        *,
+        attempts: int = 1,
+        fallback: Any = ...,
+    ) -> Any:
         self.prompts.append(prompt)
-        if self.error is not None:
-            raise self.error
-        return self.reply
+        try:
+            if self.error is not None:
+                raise self.error
+            # The reply, as the one field of a structured answer or as plain text.
+            return self.reply if schema is None else schema(title=self.reply)
+        except Exception:
+            if fallback is ...:
+                raise
+            return fallback
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
-        yield await self.generate(prompt)
+        yield cast(str, await self.generate(prompt))
 
     def create_agent(
         self,

@@ -1,24 +1,41 @@
-import asyncio
 import base64
 import binascii
 import json
-import logging
 import uuid
 from dataclasses import replace
 from datetime import datetime
+
+from pydantic import BaseModel, Field, field_validator
 
 from rag.domain.constants import (
     FALLBACK_TITLE_LENGTH,
     MAX_TITLE_LENGTH,
     TITLE_MESSAGE_EXCERPT,
-    TITLE_TIMEOUT_SECONDS,
 )
-from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
+from rag.domain.errors import (
+    BlankTitleError,
+    ConversationNotFoundError,
+    InvalidCursorError,
+)
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import ConversationRepositoryPort, GenerationPort
 from rag.domain.prompts import TITLE_PROMPT
 
-logger = logging.getLogger(__name__)
+
+class TitleOutput(BaseModel):
+    """The LLM's title, tidied on the way in: trimmed and capped in length, and a blank
+    one is rejected (`BlankTitleError`), so a `TitleOutput` always holds a usable title.
+    """
+
+    title: str = Field(description="At most 6 words, no quotes and no trailing period.")
+
+    @field_validator("title")
+    @classmethod
+    def _tidy(cls, title: str) -> str:
+        title = title.strip()[:MAX_TITLE_LENGTH]
+        if not title:
+            raise BlankTitleError
+        return title
 
 
 class ConversationService:
@@ -51,24 +68,11 @@ class ConversationService:
         the user's empty draft (see `create`).
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        title = await self._llm_title(message) or _fallback_title(message)
+        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
+        reply = await self._generation.generate(prompt, TitleOutput, fallback=None)
+        title = reply.title if reply is not None else _fallback_title(message)
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
-
-    async def _llm_title(self, message: str) -> str | None:
-        """An LLM-written title, or None to keep the fallback. Never raises: a failed
-        title must not fail the turn the user already got an answer for.
-        """
-        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
-        try:
-            async with asyncio.timeout(TITLE_TIMEOUT_SECONDS):
-                raw = await self._generation.generate(prompt)
-        except Exception:
-            logger.warning(
-                "Title generation failed; keeping the fallback", exc_info=True
-            )
-            return None
-        return _clean_title(raw)
 
     async def list_for_user(
         self, user_id: uuid.UUID, limit: int, cursor: str | None
@@ -120,12 +124,6 @@ def _fallback_title(message: str) -> str:
     if len(title) <= FALLBACK_TITLE_LENGTH:
         return title
     return title[: FALLBACK_TITLE_LENGTH - 1].rstrip() + "…"
-
-
-def _clean_title(raw: str) -> str | None:
-    first_line = next(iter(raw.strip().splitlines()), "")
-    title = first_line.strip().strip("\"'`").strip().rstrip(".")
-    return title[:MAX_TITLE_LENGTH] or None
 
 
 def _encode_cursor(conversation: Conversation) -> str:

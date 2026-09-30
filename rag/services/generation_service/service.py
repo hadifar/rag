@@ -1,5 +1,6 @@
+import logging
 from collections.abc import AsyncIterator, Callable, Mapping
-from typing import Any
+from typing import Any, cast, overload
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
@@ -9,6 +10,9 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class GenerationService:
@@ -17,11 +21,66 @@ class GenerationService:
     def __init__(self, llm: BaseChatModel):
         self._llm = llm
 
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
-        """One-shot completion, tried up to `attempts` times; raises if all fail."""
-        llm = self._llm.with_retry(stop_after_attempt=attempts)
-        reply = await llm.ainvoke(prompt)
-        return reply.text
+    @overload
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str: ...
+    @overload
+    async def generate[F](
+        self,
+        prompt: str,
+        *,
+        attempts: int = 1,
+        fallback: F,
+    ) -> str | F: ...
+    @overload
+    async def generate[T: BaseModel](
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+    ) -> T: ...
+    @overload
+    async def generate[T: BaseModel, F](
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        fallback: F,
+    ) -> T | F: ...
+    async def generate(
+        self,
+        prompt: str,
+        schema: type[BaseModel] | None = None,
+        *,
+        attempts: int = 1,
+        fallback: Any = ...,
+    ) -> Any:
+        """One-shot completion, tried up to `attempts` times. With a `schema` (a Pydantic
+        model class) the reply is enforced to fit it and comes back as an instance;
+        without one, as plain text. If it fails (LLM error, a reply the schema rejects)
+        it raises, unless a `fallback` is given: then it logs and returns that instead.
+        To bound the time, wrap the call in `asyncio.timeout`; that too then raises.
+        """
+        try:
+            return await self._complete(prompt, schema, attempts)
+        except Exception:
+            if fallback is ...:
+                raise
+            logger.warning("LLM call failed; using the fallback", exc_info=True)
+            return fallback
+
+    async def _complete(
+        self, prompt: str, schema: type[BaseModel] | None, attempts: int
+    ) -> str | BaseModel:
+        if schema is None:
+            reply = await self._llm.with_retry(stop_after_attempt=attempts).ainvoke(
+                prompt
+            )
+            return reply.text
+        structured = self._llm.with_structured_output(schema)
+        reply = await structured.with_retry(stop_after_attempt=attempts).ainvoke(prompt)
+        return cast(BaseModel, reply)
 
     def create_agent(
         self,

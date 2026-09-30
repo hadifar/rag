@@ -12,8 +12,6 @@ FALLBACK_TITLE_LENGTH = (
 MAX_TITLE_LENGTH = 80  # cap on an LLM-written title
 # Only the start of the message is needed to title it; caps the title call's cost.
 TITLE_MESSAGE_EXCERPT = 1000
-# The client waits on this for the sidebar title; don't hold it on a slow LLM.
-TITLE_TIMEOUT_SECONDS = 10
 
 # Retrieval
 SEARCH_TOP_K = 3  # passages the knowledge-base search returns
