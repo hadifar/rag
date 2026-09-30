@@ -22,7 +22,7 @@ class GenerationService:
         return reply.text
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
-        """The completion's text, token by token."""
+
         async for chunk in self._llm.astream(prompt):
             if chunk.text:
                 yield chunk.text
