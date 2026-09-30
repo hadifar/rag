@@ -13,6 +13,7 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
+from rag.domain.constants import LLM_RETRY_ATTEMPTS, MAX_REVISIONS
 from rag.domain.prompts import (
     FALLBACK_MESSAGE,
     SYSTEM_PROMPT,
@@ -30,7 +31,7 @@ def _fallback_response(_input: object) -> AIMessage:
 
 
 def with_resilience(llm: Runnable) -> Runnable:
-    return llm.with_retry(stop_after_attempt=3).with_fallbacks(
+    return llm.with_retry(stop_after_attempt=LLM_RETRY_ATTEMPTS).with_fallbacks(
         [RunnableLambda(_fallback_response)]
     )
 
@@ -43,9 +44,11 @@ def build_graph(
 
     middleware: list[AgentMiddleware[Any, Any]] = [
         TopicalGuard(classifier),
-        GroundednessGuard(classifier, max_revisions=1),
+        GroundednessGuard(classifier, max_revisions=MAX_REVISIONS),
         TodoListMiddleware(),
-        ModelRetryMiddleware(max_retries=2, on_failure=_fallback_message),
+        ModelRetryMiddleware(
+            max_retries=LLM_RETRY_ATTEMPTS - 1, on_failure=_fallback_message
+        ),
     ]
     return create_agent(
         llm,

@@ -7,19 +7,18 @@ import uuid
 from dataclasses import replace
 from datetime import datetime
 
+from rag.domain.constants import (
+    FALLBACK_TITLE_LENGTH,
+    MAX_TITLE_LENGTH,
+    TITLE_MESSAGE_EXCERPT,
+    TITLE_TIMEOUT_SECONDS,
+)
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import ConversationRepositoryPort, GenerationPort
 from rag.domain.prompts import TITLE_PROMPT
 
 logger = logging.getLogger(__name__)
-
-FALLBACK_TITLE_LENGTH = 60
-MAX_TITLE_LENGTH = 80
-# Only the start of the message is needed to title it; caps the title call's cost.
-TITLE_MESSAGE_EXCERPT = 1000
-# The client waits on this for the sidebar title; don't hold it on a slow LLM.
-TITLE_TIMEOUT_SECONDS = 10
 
 
 class ConversationService:

@@ -1,8 +1,14 @@
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
+from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
+
+from rag.domain.constants import DEFAULT_PAGE_SIZE, MAX_MESSAGE_LENGTH, MAX_PAGE_SIZE
+
+PageLimit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
+DEFAULT_PAGE_LIMIT = DEFAULT_PAGE_SIZE
 
 
 class ConversationResponse(BaseModel):
@@ -30,4 +36,4 @@ class HistoryMessageResponse(BaseModel):
 
 
 class MessageRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=8192)
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)

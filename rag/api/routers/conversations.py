@@ -1,7 +1,6 @@
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from rag.api.deps import (
     AuthenticatedUserDep,
@@ -9,10 +8,12 @@ from rag.api.deps import (
     get_current_user,
 )
 from rag.api.schema.conversations import (
+    DEFAULT_PAGE_LIMIT,
     ConversationPageResponse,
     ConversationResponse,
     HistoryMessageResponse,
     MessageRequest,
+    PageLimit,
 )
 
 router = APIRouter(
@@ -35,7 +36,7 @@ async def create_conversation(
 async def list_conversations(
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+    limit: PageLimit = DEFAULT_PAGE_LIMIT,
     cursor: str | None = None,
 ) -> ConversationPageResponse:
     page = await conversation_service.list_for_user(current_user.id, limit, cursor)
