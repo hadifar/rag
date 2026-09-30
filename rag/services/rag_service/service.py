@@ -33,7 +33,7 @@ class RagService:
         tools = [build_search_tool(retrieval_service)]
         self._generation = generation_service
         self._graph: CompiledStateGraph = build_graph(
-            generation_service.chat_model, tools, checkpointer
+            generation_service, tools, checkpointer
         )
         self._trace_config = trace_config
 

@@ -148,21 +148,27 @@ class HistoryStorePort(Protocol):
 
 
 class GenerationPort(Protocol):
-    """The LLM: plain text generation, and the chat model itself for flows built on it.
-    Graph, messages and config are typed loosely: the domain stays free of LangChain.
+    """The LLM: plain text generation, and building and streaming agents on it, so
+    nothing else ever holds the model. Tools, middleware, graph and config are typed
+    loosely: the domain stays free of LangChain.
     """
 
-    async def generate(self, prompt: str) -> str:
-        """One-shot completion; raises if the LLM call fails."""
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+        """One-shot completion, tried up to `attempts` times; raises if all fail."""
         ...
 
     def stream(self, prompt: str) -> AsyncIterator[str]:
         """The completion's text, token by token."""
         ...
 
-    @property
-    def chat_model(self) -> Any:
-        """The `BaseChatModel`, for callers that build their own chat flow on it."""
+    def create_agent(
+        self,
+        tools: list[Any],
+        system_prompt: str,
+        middleware: list[Any],
+        checkpointer: Any,
+    ) -> Any:
+        """A tool-calling agent graph on the model, saving its threads to `checkpointer`."""
         ...
 
     def stream_events[E](

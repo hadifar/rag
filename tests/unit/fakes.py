@@ -247,7 +247,7 @@ class StubGeneration:
         self.error = error
         self.prompts: list[str] = []
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error
@@ -256,9 +256,14 @@ class StubGeneration:
     async def stream(self, prompt: str) -> AsyncIterator[str]:
         yield await self.generate(prompt)
 
-    @property
-    def chat_model(self) -> Any:
-        raise NotImplementedError("the stub has no chat model")
+    def create_agent(
+        self,
+        tools: list[Any],
+        system_prompt: str,
+        middleware: list[Any],
+        checkpointer: Any,
+    ) -> Any:
+        raise NotImplementedError("the stub builds no agent")
 
     def stream_events[E](
         self,

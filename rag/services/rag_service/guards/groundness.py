@@ -9,13 +9,13 @@ from langchain.agents.middleware import (
     hook_config,
 )
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
 from rag.domain.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
+from rag.services.rag_service.guards.topical import Classify
 from rag.services.rag_service.turn import (
     current_turn,
     is_final_answer,
@@ -29,7 +29,7 @@ def _collect_context(messages: Sequence[BaseMessage]) -> str:
     )
 
 
-async def is_grounded(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
+async def is_grounded(verify: Classify, messages: Sequence[BaseMessage]) -> bool:
     context = _collect_context(messages)
     answer = messages[-1]
 
@@ -37,10 +37,10 @@ async def is_grounded(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
         return True
 
-    verdict = await llm.ainvoke(
+    verdict = await verify(
         VERIFIER_PROMPT.format(context=context, answer=answer.content)
     )
-    return "UNGROUNDED" not in str(verdict.content).upper()
+    return "UNGROUNDED" not in verdict.upper()
 
 
 def _turn_answers(messages: Sequence[BaseMessage]) -> list[AIMessage]:
@@ -58,7 +58,7 @@ class GroundednessGuard(AgentMiddleware):
     between turns.
     """
 
-    def __init__(self, verifier: Runnable, max_revisions: int):
+    def __init__(self, verifier: Classify, max_revisions: int):
         super().__init__()
         self._verifier = verifier
         self._max_revisions = max_revisions

@@ -9,13 +9,14 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
 from rag.domain.prompts import (
     GUARDRAIL_PROMPT,
     OFF_TOPIC_INSTRUCTION,
 )
+
+Classify = Callable[[str], Awaitable[str]]  # a prompt in, the LLM's reply text out
 
 
 def _latest_human_message(messages: Sequence[BaseMessage]) -> str:
@@ -25,13 +26,13 @@ def _latest_human_message(messages: Sequence[BaseMessage]) -> str:
     return ""
 
 
-async def is_relevant(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
+async def is_relevant(classify: Classify, messages: Sequence[BaseMessage]) -> bool:
     message = _latest_human_message(messages)
     if not message:
         return True
 
-    verdict = await llm.ainvoke(GUARDRAIL_PROMPT.format(message=message))
-    return "IRRELEVANT" not in str(verdict.content).upper()
+    verdict = await classify(GUARDRAIL_PROMPT.format(message=message))
+    return "IRRELEVANT" not in verdict.upper()
 
 
 class TopicalState(AgentState):
@@ -46,7 +47,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
 
     state_schema = TopicalState
 
-    def __init__(self, classifier: Runnable):
+    def __init__(self, classifier: Classify):
         super().__init__()
         self._classifier = classifier
 

@@ -1,9 +1,13 @@
 from collections.abc import AsyncIterator, Callable, Mapping
 from typing import Any
 
+from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 
@@ -13,17 +17,27 @@ class GenerationService:
     def __init__(self, llm: BaseChatModel):
         self._llm = llm
 
-    @property
-    def chat_model(self) -> BaseChatModel:
-        """The model itself, for callers that build their own chat flow on it (tools,
-        agents) rather than plain text generation.
-        """
-        return self._llm
-
-    async def generate(self, prompt: str) -> str:
-        """One-shot completion; raises if the LLM call fails."""
-        reply = await self._llm.ainvoke(prompt)
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+        """One-shot completion, tried up to `attempts` times; raises if all fail."""
+        llm = self._llm.with_retry(stop_after_attempt=attempts)
+        reply = await llm.ainvoke(prompt)
         return reply.text
+
+    def create_agent(
+        self,
+        tools: list[BaseTool],
+        system_prompt: str,
+        middleware: list[AgentMiddleware[Any, Any]],
+        checkpointer: BaseCheckpointSaver,
+    ) -> CompiledStateGraph:
+        """A tool-calling agent graph on the model, saving its threads to `checkpointer`."""
+        return create_agent(
+            self._llm,
+            tools,
+            system_prompt=system_prompt,
+            middleware=middleware,
+            checkpointer=checkpointer,
+        )
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
 
