@@ -1,3 +1,38 @@
+## v0.11.0 (2026-10-01)
+
+### Feat
+
+- **frontend**: show a welcome placeholder on an empty new chat
+- **infra**: apply migrations automatically on docker compose up
+- **frontend**: confirm chat deletion in a modal instead of window.confirm
+
+### Fix
+
+- **frontend**: stop dropping the last streamed text update
+- title generation runs immediately after first message
+- reduce unit-test time
+
+### Refactor
+
+- **agent**: require trace_config instead of a silent no-op default
+- tool creation via agent
+- create agent service (langchain) and rag service (thin layer)
+- Planning spec replaces todo_list; planning prompt travels with its tool
+- general agent creation via AgentSpec
+- agent_service is the only LangChain user
+- port for external libs
+- generation service; not override everything
+- add structured output for title generation
+- generation service doesnt expose chat directly
+- drop ModelPort
+- consolidate const value in domain/constant.py
+- router kb to retrieval
+- implement touch functionality for conversations and update related methods and types
+- enhance ports and services with new streaming capabilities and improved type hints
+- remove redundant docstring from stream method
+- drop or refactor unused fiels & functions
+- rename packages
+
 ## v0.10.1 (2026-09-29)
 
 ### Refactor
