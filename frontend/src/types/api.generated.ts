@@ -453,6 +453,19 @@ export interface components {
             text: string;
         };
         /**
+         * ReasoningEvent
+         * @description A piece of the model's reasoning summary, in order. Live only: not in history.
+         */
+        ReasoningEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reasoning";
+            /** Text */
+            text: string;
+        };
+        /**
          * ReferencesEvent
          * @description The turn's deduplicated references, once it's done. Only sent if the turn searched.
          */
@@ -479,7 +492,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["ReferencesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.

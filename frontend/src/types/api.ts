@@ -11,6 +11,7 @@ export type UserResponse = Schemas['UserResponse'];
 
 // agent.py
 export type TextEvent = Schemas['TextEvent'];
+export type ReasoningEvent = Schemas['ReasoningEvent'];
 export type ToolEvent = Schemas['ToolEvent'];
 export type ReferencesEvent = Schemas['ReferencesEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];

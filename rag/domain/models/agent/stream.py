@@ -9,6 +9,13 @@ class TextDelta:
 
 
 @dataclass
+class ReasoningDelta:
+    """A piece of the model's reasoning summary, streamed live but never saved."""
+
+    text: str
+
+
+@dataclass
 class ToolCall:
     name: str
     status: Literal["pending", "done"]
@@ -25,4 +32,4 @@ class ReferencesReady:
     references: list[str]
 
 
-StreamEvent = TextDelta | ToolCall | ReferencesReady
+StreamEvent = TextDelta | ReasoningDelta | ToolCall | ReferencesReady

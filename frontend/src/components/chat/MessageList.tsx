@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import type { ChatMessage } from '../../types';
 import { TextBubble } from './TextBubble';
+import { ReasoningBubble } from './ReasoningBubble';
 import { ToolBubble } from './ToolBubble';
 import { ReferencesBubble } from './ReferencesBubble';
 import { TypingIndicator } from './TypingIndicator';
@@ -25,6 +26,9 @@ const MessageBubble = memo(function MessageBubble({
 
     case 'text':
       return <TextBubble {...message.content} position={message.position} />;
+
+    case 'reasoning':
+      return <ReasoningBubble {...message.content} />;
 
     case 'tool':
       return <ToolBubble {...message.content} />;

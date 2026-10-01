@@ -36,6 +36,37 @@ describe('createBubbleHandler', () => {
     });
   });
 
+  it('grows one reasoning bubble, and ends it when the answer starts', () => {
+    const { append, update, handle } = setup();
+
+    handle({ type: 'reasoning', text: 'Weigh' });
+    handle({ type: 'reasoning', text: 'ing' });
+    handle({ type: 'text', text: 'Answer' });
+
+    expect(append).toHaveBeenNthCalledWith(1, {
+      type: 'reasoning',
+      content: { text: 'Weigh', streaming: true },
+    });
+    expect(update).toHaveBeenCalledWith('m1', {
+      type: 'reasoning',
+      content: { text: 'Weighing', streaming: false },
+    });
+    expect(append).toHaveBeenNthCalledWith(2, assistantText('Answer'));
+  });
+
+  it('starts a new reasoning bubble for reasoning that follows a tool call', () => {
+    const { append, handle } = setup();
+
+    handle({ type: 'reasoning', text: 'First' });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'pricing' });
+    handle({ type: 'reasoning', text: 'Second' });
+
+    expect(append).toHaveBeenNthCalledWith(3, {
+      type: 'reasoning',
+      content: { text: 'Second', streaming: true },
+    });
+  });
+
   it('still shows a references bubble when the search found nothing', () => {
     const { append, handle } = setup();
 

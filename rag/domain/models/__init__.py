@@ -17,6 +17,7 @@ from rag.domain.models.agent.middleware import (
     TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
+    ReasoningDelta,
     ReferencesReady,
     StreamEvent,
     TextDelta,
@@ -55,6 +56,7 @@ __all__ = [
     "Preference",
     "PreferenceMiddleware",
     "RawDocument",
+    "ReasoningDelta",
     "ReferencesReady",
     "StreamEvent",
     "TextDelta",

@@ -41,13 +41,13 @@ async def is_grounded(
     context = _collect_context(messages, unverified_tools)
     answer = messages[-1]
 
-    if not context or not isinstance(answer, AIMessage) or not answer.content:
+    # .text, not .content: under the Responses API content is a list of blocks,
+    # reasoning included, and only the answer's text is to be verified.
+    if not context or not isinstance(answer, AIMessage) or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
         return True
 
-    verdict = await verify(
-        VERIFIER_PROMPT.format(context=context, answer=answer.content)
-    )
+    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer.text))
     return "UNGROUNDED" not in verdict.upper()
 
 

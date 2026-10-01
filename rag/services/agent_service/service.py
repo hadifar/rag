@@ -58,8 +58,7 @@ class Agent:
             context=ChatContext(user_id=user_id),
             version="v2",
         ):
-            event = parse_event(raw_event)
-            if event is not None:
+            for event in parse_event(raw_event):
                 yield event
 
         final_state = await self._graph.aget_state(config)
