@@ -25,7 +25,7 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.models import Chunk, ToolCall
+from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Chunk, ToolCall
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -584,3 +584,67 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
+
+
+def test_preferences_are_added_listed_and_deleted_per_user(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    other = _login(client, _OTHER_EMAIL)
+    added = client.post(
+        "/api/settings/preferences",
+        headers=auth_headers,
+        json={"text": "Answer in Dutch"},
+    )
+    assert added.status_code == 200
+    preference = added.json()
+
+    # The same text again, in other case, is the same preference.
+    again = client.post(
+        "/api/settings/preferences",
+        headers=auth_headers,
+        json={"text": "answer in dutch"},
+    )
+    assert again.json() == preference
+    assert client.get("/api/settings/preferences", headers=auth_headers).json() == [
+        preference
+    ]
+    assert client.get("/api/settings/preferences", headers=other).json() == []
+
+    url = f"/api/settings/preferences/{preference['id']}"
+    assert client.delete(url, headers=other).status_code == 404
+    assert client.delete(url, headers=auth_headers).status_code == 204
+    assert client.get("/api/settings/preferences", headers=auth_headers).json() == []
+    assert client.delete(url, headers=auth_headers).status_code == 404
+
+
+@pytest.mark.parametrize("text", ["", "x" * (MAX_PREFERENCE_LENGTH + 1)])
+def test_an_empty_or_too_long_preference_is_rejected(
+    client: TestClient, auth_headers: dict[str, str], text: str
+) -> None:
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": text}
+    )
+    assert response.status_code == 422
+
+
+def test_a_blank_preference_is_rejected(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": "  "}
+    )
+    assert response.status_code == 400
+
+
+def test_a_preference_past_the_cap_is_409(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    for i in range(MAX_PREFERENCES):
+        client.post(
+            "/api/settings/preferences", headers=auth_headers, json={"text": f"p{i}"}
+        )
+
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": "one too many"}
+    )
+    assert response.status_code == 409

@@ -4,7 +4,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, HistoryMessage, StreamEvent
+from rag.domain.models import AgentSpec, HistoryMessage, Preference, StreamEvent
 
 
 class ChatAgentPort(Protocol):
@@ -48,3 +48,18 @@ class AgentServicePort(Protocol):
         ...
 
     async def delete_history(self, thread_id: str) -> None: ...
+
+    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
+        """What the user wants of every answer, oldest first."""
+        ...
+
+    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
+        """The saved preference, or the same one if the user already has it. Raises
+        InvalidPreferenceError if it's blank or too long, TooManyPreferencesError if
+        the user has the most allowed.
+        """
+        ...
+
+    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
+        """Raises PreferenceNotFoundError if the user has no preference with that id."""
+        ...

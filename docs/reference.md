@@ -293,6 +293,13 @@ there, so the response status comes from the exception class itself.
 - `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
   404 if unknown.
 - `GET /api/ingestions/latest` — the most recent run, or `null`.
+- `GET /api/settings/preferences` — the caller's preferences for every answer, `[{id, text}]`, oldest
+  first. The chat agent reads them on every turn, and saves or forgets one when asked to in a
+  conversation.
+- `POST /api/settings/preferences` — `{text}` (1–200 characters, 422 otherwise) → `{id, text}`; the same
+  text again (ignoring case) returns the preference already saved. 400 if only whitespace, 409
+  past 20 per user.
+- `DELETE /api/settings/preferences/{id}` — 204, or 404 for a missing or someone else's preference.
 - `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).

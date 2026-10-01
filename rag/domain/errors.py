@@ -162,6 +162,17 @@ class InvalidPreferenceError(AppError):
         super().__init__(f"Invalid preference: {reason}")
 
 
+class PreferenceNotFoundError(AppError):
+    """Raised when a user has no preference with the given id (another user's
+    included, so ids can't be probed).
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, preference_id: str):
+        super().__init__(f"No preference found for id={preference_id!r}")
+
+
 class TooManyPreferencesError(AppError):
     """Raised when a user who already has the most preferences allowed adds another."""
 

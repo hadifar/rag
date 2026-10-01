@@ -52,6 +52,12 @@ class ChunkerPort(Protocol):
 
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 
+- A new route joins the existing router for its area (`auth`, `conversations`, `ingestions`,
+  `retrieval`, `settings`, `health`), even if it calls a service that router didn't use yet
+  (e.g. a user's preferences are `/api/settings/preferences`, on `AgentService`). A router's
+  file is named after its prefix. A new router means a new area of the API: decide it on its
+  own, never as a side effect of a feature. The one exception is `rag.py`: it shares
+  `/api/conversations` to stream a turn, which `RagService` runs, not `ConversationService`.
 - Module-level `router = APIRouter(prefix="/api/x", tags=["x"])` in `rag/api/routers/`, each
   endpoint a plain `@router.get`/`post` function. A gate every route shares goes on the router
   itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
