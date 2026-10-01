@@ -21,6 +21,8 @@ from rag.domain.models.agent.stream import (
     ReferencesReady,
     StreamEvent,
     TextDelta,
+    Todo,
+    TodosUpdated,
     ToolCall,
 )
 from rag.domain.models.auth import User
@@ -60,7 +62,9 @@ __all__ = [
     "ReferencesReady",
     "StreamEvent",
     "TextDelta",
+    "Todo",
     "TodolistMiddleware",
+    "TodosUpdated",
     "Tool",
     "ToolAgentSpec",
     "ToolCall",

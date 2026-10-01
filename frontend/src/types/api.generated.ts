@@ -492,7 +492,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["ReferencesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
@@ -505,6 +505,29 @@ export interface components {
             type: "text";
             /** Text */
             text: string;
+        };
+        /** TodoItem */
+        TodoItem: {
+            /** Content */
+            content: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "completed";
+        };
+        /**
+         * TodosEvent
+         * @description The agent's whole plan, each time it rewrites it. Live only: not in history.
+         */
+        TodosEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "todos";
+            /** Todos */
+            todos: components["schemas"]["TodoItem"][];
         };
         /** TokenResponse */
         TokenResponse: {

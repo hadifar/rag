@@ -107,4 +107,30 @@ describe('createBubbleHandler', () => {
       content: { name: 'search', output: 'result b', status: 'done' },
     });
   });
+
+  it('rewrites one plan bubble in place each time the plan changes', () => {
+    const { append, update, handle } = setup();
+    const first = [{ content: 'Find the note', status: 'in_progress' as const }];
+    const second = [{ content: 'Find the note', status: 'completed' as const }];
+
+    handle({ type: 'todos', todos: first });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'note' });
+    handle({ type: 'todos', todos: second });
+
+    expect(append).toHaveBeenNthCalledWith(1, { type: 'todos', content: { todos: first } });
+    expect(update).toHaveBeenCalledExactlyOnceWith('m1', {
+      type: 'todos',
+      content: { todos: second },
+    });
+  });
+
+  it('starts a new assistant bubble for text that follows the plan', () => {
+    const { append, handle } = setup();
+
+    handle({ type: 'text', text: 'Let me plan.' });
+    handle({ type: 'todos', todos: [{ content: 'Find the note', status: 'pending' }] });
+    handle({ type: 'text', text: 'Here is the answer.' });
+
+    expect(append).toHaveBeenNthCalledWith(3, assistantText('Here is the answer.'));
+  });
 });

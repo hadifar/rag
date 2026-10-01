@@ -3,6 +3,7 @@ import type { ChatMessage } from '../../types';
 import { TextBubble } from './TextBubble';
 import { ReasoningBubble } from './ReasoningBubble';
 import { ToolBubble } from './ToolBubble';
+import { TodosBubble } from './TodosBubble';
 import { ReferencesBubble } from './ReferencesBubble';
 import { TypingIndicator } from './TypingIndicator';
 
@@ -32,6 +33,9 @@ const MessageBubble = memo(function MessageBubble({
 
     case 'tool':
       return <ToolBubble {...message.content} />;
+
+    case 'todos':
+      return <TodosBubble {...message.content} />;
 
     case 'references':
       return <ReferencesBubble {...message.content} onOpen={onOpenReference} />;

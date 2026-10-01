@@ -3,13 +3,23 @@ from typing import Any
 
 from langchain_core.messages import AIMessageChunk, ToolMessage
 
-from rag.domain.models import ReasoningDelta, StreamEvent, TextDelta, ToolCall
+from rag.domain.models import (
+    ReasoningDelta,
+    StreamEvent,
+    TextDelta,
+    TodosUpdated,
+    ToolCall,
+)
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same
 # graph and would otherwise leak into the text stream too, since astream_events
 # captures every chat model call in the run, not just this one.
 _USER_FACING_NODE = "model"
+
+# TodoListMiddleware's planning tool. Its call is the plan, not a search, so it's sent
+# as the plan itself; it returns a Command whose state update holds the new todos.
+_PLANNING_TOOL = "write_todos"
 
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
@@ -21,25 +31,37 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
             return []
         return _chunk_events(raw_event["data"]["chunk"])
 
-    if kind == "on_tool_start":
+    if kind in ("on_tool_start", "on_tool_end"):
+        return _tool_events(raw_event)
+
+    return []
+
+
+def _tool_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
+    """A search is shown `pending` with its query, then `done` with its output; the
+    planning tool only once it's done, as the plan its state update holds.
+    """
+    started = raw_event["event"] == "on_tool_start"
+    data = raw_event["data"]
+
+    if raw_event["name"] == _PLANNING_TOOL:
+        return [] if started else [TodosUpdated(todos=data["output"].update["todos"])]
+
+    if started:
         return [
             ToolCall(
                 name=raw_event["name"],
                 status="pending",
-                query=raw_event["data"].get("input", {}).get("query", ""),
+                query=data.get("input", {}).get("query", ""),
             )
         ]
-
-    if kind == "on_tool_end":
-        return [
-            ToolCall(
-                name=raw_event["name"],
-                status="done",
-                output=_tool_output_text(raw_event["data"].get("output", "")),
-            )
-        ]
-
-    return []
+    return [
+        ToolCall(
+            name=raw_event["name"],
+            status="done",
+            output=_tool_output_text(data.get("output", "")),
+        )
+    ]
 
 
 def _chunk_events(chunk: AIMessageChunk) -> list[StreamEvent]:

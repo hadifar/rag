@@ -14,7 +14,8 @@ function reasoning(text: string, streaming: boolean): ChatMessageInput {
 /**
  * Turns one answer's stream into bubbles: text deltas grow a single assistant bubble,
  * reasoning deltas a single reasoning bubble (until the model answers or calls a tool),
- * a tool's bubble is filled in when it's `done`, and references get their own.
+ * a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten in place
+ * each time the agent updates it, and references get their own.
  * Create one per answer.
  */
 export function createBubbleHandler(append: AppendMessage, update: UpdateMessage) {
@@ -26,6 +27,7 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
   // order they started. True for the common case (one call, or calls that don't race);
   // genuinely concurrent calls need a call id from the backend to track precisely.
   const pendingToolMsgIds: string[] = [];
+  let todosMsgId: string | null = null;
 
   return (event: StreamEventResponse) => {
     if (event.type === 'reasoning') {
@@ -67,6 +69,18 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
           if (toolMsgId !== undefined) {
             update(toolMsgId, { type, content });
           }
+        }
+        break;
+      }
+      case 'todos': {
+        const { type, ...content } = event;
+        if (todosMsgId === null) {
+          todosMsgId = append({ type, content });
+          // Like a tool call: later text goes below the plan, not into a bubble above it.
+          assistantMsgId = null;
+          assistantMsgText = '';
+        } else {
+          update(todosMsgId, { type, content });
         }
         break;
       }

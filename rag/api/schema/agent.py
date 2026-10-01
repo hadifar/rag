@@ -7,6 +7,7 @@ from rag.domain.models import (
     ReferencesReady,
     StreamEvent,
     TextDelta,
+    TodosUpdated,
     ToolCall,
 )
 
@@ -37,6 +38,18 @@ class ToolEvent(BaseModel):
     output: str | None = None
 
 
+class TodoItem(BaseModel):
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
+
+
+class TodosEvent(BaseModel):
+    """The agent's whole plan, each time it rewrites it. Live only: not in history."""
+
+    type: Literal["todos"] = "todos"
+    todos: list[TodoItem]
+
+
 class ReferencesEvent(BaseModel):
     """The turn's deduplicated references, once it's done. Only sent if the turn searched."""
 
@@ -47,7 +60,7 @@ class ReferencesEvent(BaseModel):
 class StreamEventResponse(
     RootModel[
         Annotated[
-            TextEvent | ReasoningEvent | ToolEvent | ReferencesEvent,
+            TextEvent | ReasoningEvent | ToolEvent | TodosEvent | ReferencesEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -63,13 +76,24 @@ def to_stream_event(event: StreamEvent) -> StreamEventResponse:
 
 def _payload(
     event: StreamEvent,
-) -> TextEvent | ReasoningEvent | ToolEvent | ReferencesEvent:
+) -> TextEvent | ReasoningEvent | ToolEvent | TodosEvent | ReferencesEvent:
     match event:
         case TextDelta(text=text):
             return TextEvent(text=text)
         case ReasoningDelta(text=text):
             return ReasoningEvent(text=text)
-        case ToolCall(name=name, status=status, query=query, output=output):
-            return ToolEvent(name=name, status=status, query=query, output=output)
         case ReferencesReady(references=references):
             return ReferencesEvent(references=references)
+        case ToolCall() | TodosUpdated():
+            return _tool_payload(event)
+
+
+def _tool_payload(event: ToolCall | TodosUpdated) -> ToolEvent | TodosEvent:
+    """A tool's call: a search's progress, or the plan the planning tool wrote."""
+    match event:
+        case ToolCall(name=name, status=status, query=query, output=output):
+            return ToolEvent(name=name, status=status, query=query, output=output)
+        case TodosUpdated(todos=todos):
+            return TodosEvent(
+                todos=[TodoItem(content=t.content, status=t.status) for t in todos]
+            )

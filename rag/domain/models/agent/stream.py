@@ -24,6 +24,19 @@ class ToolCall:
 
 
 @dataclass
+class Todo:
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
+
+
+@dataclass
+class TodosUpdated:
+    """The agent's whole plan, sent each time it rewrites it; streamed live but never saved."""
+
+    todos: list[Todo]
+
+
+@dataclass
 class ReferencesReady:
     """What the turn's tools cited (e.g. knowledge-base source ids), deduplicated; sent
     once the turn is done, and only if a tool that cites anything ran.
@@ -32,4 +45,4 @@ class ReferencesReady:
     references: list[str]
 
 
-StreamEvent = TextDelta | ReasoningDelta | ToolCall | ReferencesReady
+StreamEvent = TextDelta | ReasoningDelta | ToolCall | TodosUpdated | ReferencesReady

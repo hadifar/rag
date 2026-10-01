@@ -13,6 +13,8 @@ export type UserResponse = Schemas['UserResponse'];
 export type TextEvent = Schemas['TextEvent'];
 export type ReasoningEvent = Schemas['ReasoningEvent'];
 export type ToolEvent = Schemas['ToolEvent'];
+export type TodoItem = Schemas['TodoItem'];
+export type TodosEvent = Schemas['TodosEvent'];
 export type ReferencesEvent = Schemas['ReferencesEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];
 
