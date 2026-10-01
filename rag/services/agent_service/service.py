@@ -29,6 +29,10 @@ from rag.shared.resilience import or_default
 
 # TODO: error hanlding -> Something went wrong: Unexpected end of JSON input
 
+# Graph steps a turn may take before LangGraph stops it (its default is 25). Each tool
+# round trip plus the guards' and retry middleware's nodes cost several steps.
+RECURSION_LIMIT = 75
+
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its
@@ -45,7 +49,11 @@ class Agent:
         self._trace_config = trace_config
 
     def _config(self, thread_id: str) -> RunnableConfig:
-        return {"configurable": {"thread_id": thread_id}, **self._trace_config("chat")}
+        return {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": RECURSION_LIMIT,
+            **self._trace_config("chat"),
+        }
 
     async def stream(
         self, message: str, thread_id: str, user_id: uuid.UUID
