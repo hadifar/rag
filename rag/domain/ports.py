@@ -1,8 +1,11 @@
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
+from pydantic import BaseModel
+
+from rag.domain.agents import AgentSpec, Tool, ToolPort
 from rag.domain.events import StreamEvent
 from rag.domain.models import (
     Chunk,
@@ -125,25 +128,74 @@ class ConversationRepositoryPort(Protocol):
         """Every conversation's id, whoever owns it."""
         ...
 
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
+        ...
 
-class GenerationPort(Protocol):
-    """Runs chat turns and owns their message history, keyed by thread id."""
-
-    def stream_chat(
-        self, message: str, thread_id: str
-    ) -> AsyncIterator[StreamEvent]: ...
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]: ...
     async def delete_history(self, thread_id: str) -> None: ...
     async def list_thread_ids(self) -> set[str]:
         """Every thread that has stored messages."""
         ...
 
 
-class CompletionPort(Protocol):
-    """Small, single-shot LLM completions that stand outside any chat turn."""
+class HistoryStorePort(Protocol):
+    """The chat messages stored per thread, which the chat agent writes as it answers."""
 
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        """A title for a conversation opening with this exchange, or None if one
-        couldn't be generated. Never raises.
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
+        ...
+
+    async def delete_history(self, thread_id: str) -> None: ...
+    async def list_thread_ids(self) -> set[str]:
+        """Every thread that has stored messages."""
+        ...
+
+
+class ChatAgentPort(Protocol):
+    def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
+        """Answers `message` in the thread, saving the turn to it: the answer's events
+        as they happen, then the turn's sources if it searched.
         """
+        ...
+
+
+class AgentServicePort(Protocol):
+    """The LLM: single-shot generation, and the tools and agents built on it, so
+    nothing else ever holds the model or touches LangChain.
+    """
+
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
+        """One-shot completion as plain text, tried up to `attempts` times; raises if
+        all fail. To bound the time, wrap the call in `asyncio.timeout`.
+        """
+        ...
+
+    async def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T], *, attempts: int = 1
+    ) -> T:
+        """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
+        instance of it; raises if all `attempts` fail or the reply is rejected.
+        """
+        ...
+
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
+        """Each tool, ready for an agent; raises ValueError if two share a name."""
+        ...
+
+    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
+        """A chat agent built as `spec` describes."""
+        ...
+
+
+class PasswordHasherPort(Protocol):
+    async def hash(self, password: str) -> str: ...
+
+    async def verify(self, hashed_password: str, password: str) -> bool: ...
+
+
+class TokenCodecPort(Protocol):
+    def encode(self, claims: Mapping[str, Any]) -> str: ...
+
+    def decode(self, token: str) -> dict[str, Any]:
+        """Raises InvalidTokenError if the token is expired, malformed, or badly signed."""
         ...

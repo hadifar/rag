@@ -1,18 +1,23 @@
-import { request, requestJson } from './client';
+import { jsonPostInit, request, requestJson } from './client';
 import type {
   ConversationPageResponse,
   ConversationResponse,
   HistoryMessageResponse,
 } from '../types';
 
-/** The user's empty conversation (new, or the one they already have); its first message names it. */
+/** The user's empty conversation (new, or the one they already have); `generateTitle` names it. */
 export function createConversation(signal?: AbortSignal): Promise<ConversationResponse> {
   return requestJson('conversations', { method: 'POST', signal });
 }
 
-/** Renames the conversation with an LLM-written title; call once its first answer is in. */
-export function generateTitle(id: string): Promise<ConversationResponse> {
-  return requestJson(`conversations/${encodeURIComponent(id)}/title`, { method: 'POST' });
+/** Marks the conversation as just used, so the server lists it first; sent with each follow-up message. */
+export async function touchConversation(id: string, signal?: AbortSignal): Promise<void> {
+  await request(`conversations/${encodeURIComponent(id)}/touch`, { method: 'POST', signal });
+}
+
+/** Names the conversation from its first message (LLM-written, or cut from it if that fails); needs no answer. */
+export function generateTitle(id: string, message: string): Promise<ConversationResponse> {
+  return requestJson(`conversations/${encodeURIComponent(id)}/title`, jsonPostInit({ message }));
 }
 
 export function listConversations(

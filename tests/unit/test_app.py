@@ -13,6 +13,8 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from rag.adapters.argon2 import Argon2PasswordHasher
+from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.api.deps import get_current_user
 from rag.app import create_app
 from rag.config import (
@@ -23,14 +25,14 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import SourcesReady, ToolCall
+from rag.domain.events import ToolCall
 from rag.domain.models import Chunk
-from rag.services.agent_service.service import GenerationService
+from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
-from rag.services.completion_service.service import CompletionService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
@@ -38,8 +40,8 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakeUserRepository,
-    StubCompletion,
     StubGeneration,
+    StubRag,
 )
 
 _TEST_EMAIL = "test@example.com"
@@ -76,8 +78,8 @@ def _stub_settings() -> Settings:
 def _build_auth_service() -> AuthService:
     return AuthService(
         user_repository=FakeUserRepository(),
-        jwt_secret="test-secret-that-is-long-enough-32b",
-        jwt_algorithm="HS256",
+        pass_hasher=Argon2PasswordHasher(),
+        token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
         refresh_ttl=timedelta(days=7),
     )
@@ -90,18 +92,20 @@ def client() -> Generator[TestClient]:
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
-    generation = StubGeneration(
+    conversation_repository = FakeConversationRepository()
+    generation = StubGeneration("Greeting")
+    rag = StubRag(
+        conversation_repository.threads,
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
-            SourcesReady(sources=["doc-a", "doc-b"]),
         ],
+        sources=["doc-a", "doc-b"],
     )
-    completion = StubCompletion(title="Greeting")
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        generation_service=cast(GenerationService, generation),
-        completion_service=cast(CompletionService, completion),
+        agent_service=cast(AgentService, generation),
+        rag_service=cast(RagService, rag),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -110,9 +114,8 @@ def client() -> Generator[TestClient]:
         ),
         auth_service=auth_service,
         conversation_service=ConversationService(
-            repository=FakeConversationRepository(),
-            generation=generation,
-            completion=completion,
+            repository=conversation_repository,
+            agent_service=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())
@@ -154,7 +157,7 @@ def test_settings_endpoint_returns_config(
     body = response.json()
     assert body["model"] == "gpt-4o-mini"
     assert body["temperature"] == 0.2
-    assert body["top_k"] == 4
+    assert body["top_k"] == 3
 
 
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:
@@ -162,23 +165,23 @@ def test_settings_endpoint_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_kb_endpoint_returns_document(
+def test_retrieval_endpoint_returns_document(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    response = client.get("/api/kb/some-doc", headers=auth_headers)
+    response = client.get("/api/retrieval/some-doc", headers=auth_headers)
     assert response.status_code == 200
     assert response.text == "content for some-doc"
 
 
-def test_kb_endpoint_404_when_document_missing(
+def test_retrieval_endpoint_404_when_document_missing(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    response = client.get("/api/kb/missing", headers=auth_headers)
+    response = client.get("/api/retrieval/missing", headers=auth_headers)
     assert response.status_code == 404
 
 
-def test_kb_endpoint_requires_auth(client: TestClient) -> None:
-    response = client.get("/api/kb/some-doc")
+def test_retrieval_endpoint_requires_auth(client: TestClient) -> None:
+    response = client.get("/api/retrieval/some-doc")
     assert response.status_code == 401
 
 
@@ -276,7 +279,14 @@ def _send(
 def _start_conversation(
     client: TestClient, headers: dict[str, str], message: str = "hi"
 ) -> str:
+    """What the UI does for a first message: create, name it, then stream the answer."""
     conversation_id = _create_conversation(client, headers)
+    response = client.post(
+        f"/api/conversations/{conversation_id}/title",
+        json={"message": message},
+        headers=headers,
+    )
+    assert response.status_code == 200
     _send(client, headers, conversation_id, message)
     return conversation_id
 
@@ -354,7 +364,9 @@ def test_generate_title_renames_the_conversation(
     conversation_id = _start_conversation(client, auth_headers)
 
     response = client.post(
-        f"/api/conversations/{conversation_id}/title", headers=auth_headers
+        f"/api/conversations/{conversation_id}/title",
+        json={"message": "hi"},
+        headers=auth_headers,
     )
 
     assert response.status_code == 200
@@ -393,8 +405,21 @@ def test_conversations_list_is_newest_first_and_paginated(
     ).json()
 
     assert [c["id"] for c in page1["items"] + page2["items"]] == [second, first]
-    assert page1["items"][0]["title"] == "second"  # named from its first message
+    assert page1["items"][0]["title"] == "Greeting"  # named from its first message
     assert page2["next_cursor"] is None
+
+
+def test_touch_moves_a_conversation_to_the_top_of_the_list(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    first = _start_conversation(client, auth_headers, "first")
+    second = _start_conversation(client, auth_headers, "second")
+
+    response = client.post(f"/api/conversations/{first}/touch", headers=auth_headers)
+
+    assert response.status_code == 204
+    listed = client.get("/api/conversations", headers=auth_headers).json()
+    assert [c["id"] for c in listed["items"]] == [first, second]
 
 
 @pytest.mark.parametrize(
@@ -440,6 +465,12 @@ def test_conversations_of_another_user_are_invisible(
         == 404
     )
     assert (
+        client.post(
+            f"/api/conversations/{others}/touch", headers=auth_headers
+        ).status_code
+        == 404
+    )
+    assert (
         client.delete(f"/api/conversations/{others}", headers=auth_headers).status_code
         == 404
     )
@@ -453,6 +484,7 @@ def test_conversations_of_another_user_are_invisible(
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
+        ("POST", f"/api/conversations/{uuid.uuid4()}/touch"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )

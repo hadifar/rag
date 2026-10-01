@@ -1,12 +1,14 @@
+import hashlib
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
-from langchain_core.messages import AIMessage
+from pydantic import BaseModel
 
+from rag.domain.agents import AgentSpec, Tool, ToolPort
 from rag.domain.errors import IngestionInProgressError
-from rag.domain.events import StreamEvent, TextDelta
+from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import (
     Conversation,
     HistoryMessage,
@@ -15,6 +17,28 @@ from rag.domain.models import (
     IngestionRun,
     User,
 )
+from rag.domain.ports import ChatAgentPort
+
+
+class FakeEmbeddings:
+    """Deterministic EmbeddingsPort: same text -> same vector, instant, no network.
+
+    Vectors are NOT semantically meaningful — only use where a test needs *a*
+    vector to satisfy storage, not one that reflects real similarity.
+    """
+
+    DIMENSIONS = 1536
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    def _vector(self, text: str) -> list[float]:
+        seed = hashlib.sha256(text.encode()).digest()
+        raw = (seed * (self.DIMENSIONS // len(seed) + 1))[: self.DIMENSIONS]
+        return [(b / 127.5) - 1 for b in raw]
 
 
 class FakeUserRepository:
@@ -144,6 +168,10 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
+        # Stored chat messages by thread id: what a real generation service writes
+        # (through the checkpointer) and this repository reads back.
+        self.threads: dict[str, list[HistoryMessage]] = {}
+        self.deleted_threads: list[str] = []
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -201,31 +229,6 @@ class FakeConversationRepository:
     async def all_ids(self) -> set[uuid.UUID]:
         return set(self.rows)
 
-
-class StubGeneration:
-    """GenerationPort that echoes the message and records threads it was asked to
-    delete.
-    """
-
-    def __init__(self, extra_events: list[StreamEvent] | None = None):
-        self.extra_events = extra_events or []
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
-
-    async def stream_chat(
-        self, message: str, thread_id: str
-    ) -> AsyncIterator[StreamEvent]:
-        reply = f"echo: {message}"
-        self.threads.setdefault(thread_id, []).extend(
-            [
-                HistoryMessage(role="user", text=message),
-                HistoryMessage(role="assistant", text=reply),
-            ]
-        )
-        yield TextDelta(text=reply)
-        for event in self.extra_events:
-            yield event
-
     async def get_history(self, thread_id: str) -> list[HistoryMessage]:
         return self.threads.get(thread_id, [])
 
@@ -237,26 +240,62 @@ class StubGeneration:
         return set(self.threads)
 
 
-class StubCompletion:
-    """CompletionPort that answers title requests with `title` and records them."""
+class StubGeneration:
+    """AgentServicePort for single-shot generation only: answers every prompt with `reply`, or raises `error`, and
+    records the prompts.
+    """
 
-    def __init__(self, title: str | None = "Generated title"):
-        self.title = title
-        self.title_requests: list[tuple[str, str]] = []
-
-    async def generate_title(self, question: str, answer: str) -> str | None:
-        self.title_requests.append((question, answer))
-        return self.title
-
-
-class FakeTitleModel:
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
 
-    async def ainvoke(self, prompt: str) -> AIMessage:
+    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error
-        return AIMessage(content=self.reply)
+        return self.reply
+
+    async def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T], *, attempts: int = 1
+    ) -> T:
+        # The reply, as the one field of the structured answer.
+        return schema.model_validate({"title": await self.generate(prompt)})
+
+    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
+        raise NotImplementedError("the stub builds no tools")
+
+    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
+        raise NotImplementedError("the stub builds no agent")
+
+
+class StubRag:
+    """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
+    the fake repository's, so it shows up in its history) with `sources` on the answer.
+    """
+
+    def __init__(
+        self,
+        threads: dict[str, list[HistoryMessage]],
+        extra_events: list[StreamEvent] | None = None,
+        sources: list[str] | None = None,
+    ):
+        self.threads = threads
+        self.extra_events = extra_events or []
+        self.sources = sources
+
+    async def stream_chat(
+        self, message: str, thread_id: str
+    ) -> AsyncIterator[StreamEvent]:
+        reply = f"echo: {message}"
+        self.threads.setdefault(thread_id, []).extend(
+            [
+                HistoryMessage(role="user", text=message),
+                HistoryMessage(role="assistant", text=reply, sources=self.sources),
+            ]
+        )
+        yield TextDelta(text=reply)
+        for event in self.extra_events:
+            yield event
+        if self.sources is not None:
+            yield ReferencesReady(references=self.sources)

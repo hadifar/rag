@@ -98,4 +98,4 @@
 - The knowledge-base Storage Account keeps a public endpoint (Entra ID/RBAC only, shared keys off): a private endpoint would also need the backend Web App VNet-integrated for outbound traffic, which only the frontend is today
 - `AzureBlobArchiveStore` has no automated test (Azurite doesn't accept `DefaultAzureCredential`); its first real exercise is an upload on a deployed backend
 - The Postgres server behind `DATABASE_URL` isn't provisioned by the Bicep template — still undecided whether that's Azure Database for PostgreSQL or something else
-- No deploy step runs `alembic upgrade head` against whatever Postgres ends up provisioned — nothing automates it today (`infra/docker/Dockerfile.backend` now ships `alembic.ini`/`migrations/` so it *can* run inside the container, but something still has to invoke it once per deploy)
+- No Azure deploy step runs `alembic upgrade head` against whatever Postgres ends up provisioned (Docker Compose does, via its one-off `migrate` service; the Azure equivalent would be a job running the same image with the same `alembic upgrade head` entrypoint, once per deploy)

@@ -9,22 +9,14 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
-GUARDRAIL_PROMPT = (
-    "You are a scope classifier for a support assistant that only answers questions about "
-    "the AtlasFlow product (workflows, integrations, billing, security, API, etc.). Given "
-    "the user's latest message, reply with exactly one word: RELEVANT if it's a question "
-    "about AtlasFlow or its product/support domain, or IRRELEVANT if it's unrelated "
-    "(small talk, general knowledge, other products, etc.).\n\nMESSAGE:\n{message}"
+from rag.domain.prompts import (
+    GUARDRAIL_PROMPT,
+    OFF_TOPIC_INSTRUCTION,
 )
 
-OFF_TOPIC_INSTRUCTION = (
-    "The user's question is unrelated to AtlasFlow. Politely explain that you can only "
-    "help with AtlasFlow questions, and ask them to rephrase around AtlasFlow's product, "
-    "features, or support topics. Do not attempt to answer the question itself."
-)
+Classify = Callable[[str], Awaitable[str]]  # a prompt in, the LLM's reply text out
 
 
 def _latest_human_message(messages: Sequence[BaseMessage]) -> str:
@@ -34,13 +26,13 @@ def _latest_human_message(messages: Sequence[BaseMessage]) -> str:
     return ""
 
 
-async def is_relevant(llm: Runnable, messages: Sequence[BaseMessage]) -> bool:
+async def is_relevant(classify: Classify, messages: Sequence[BaseMessage]) -> bool:
     message = _latest_human_message(messages)
     if not message:
         return True
 
-    verdict = await llm.ainvoke(GUARDRAIL_PROMPT.format(message=message))
-    return "IRRELEVANT" not in str(verdict.content).upper()
+    verdict = await classify(GUARDRAIL_PROMPT.format(message=message))
+    return "IRRELEVANT" not in verdict.upper()
 
 
 class TopicalState(AgentState):
@@ -55,7 +47,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
 
     state_schema = TopicalState
 
-    def __init__(self, classifier: Runnable):
+    def __init__(self, classifier: Classify):
         super().__init__()
         self._classifier = classifier
 

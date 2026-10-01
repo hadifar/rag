@@ -83,6 +83,7 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["integration: hits real Postgres/LLM"]
 testpaths = ["tests"]
 
 [dependency-groups]
@@ -110,6 +111,23 @@ name = "services do not import adapters, entrypoints, or the api layer directly"
 type = "forbidden"
 source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli", "rag.api"]
+
+[[tool.importlinter.contracts]]
+name = "LangChain is used only by the agent service (and adapters); others call it through AgentServicePort"
+type = "forbidden"
+source_modules = ["rag.services", "rag.api", "rag.app", "rag.cli"]
+forbidden_modules = [
+    "langchain_core", "langchain", "langchain_openai", "langchain_protocol",
+    "langgraph", "langgraph_sdk", "langsmith",
+]
+# Direct imports only: the api and entrypoints reach LangChain through the agent
+# service and the container's adapters, which is how it's meant to be.
+allow_indirect_imports = "true"
+ignore_imports = [
+    "rag.services.agent_service.** -> langchain_core",
+    "rag.services.agent_service.** -> langchain",
+    "rag.services.agent_service.** -> langgraph",
+]
 
 [[tool.importlinter.contracts]]
 name = "repository reaches only the domain"

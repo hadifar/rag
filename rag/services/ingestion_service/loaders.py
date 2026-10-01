@@ -4,12 +4,11 @@ import zlib
 from collections import Counter
 from pathlib import Path, PurePath, PurePosixPath
 
+from rag.domain.constants import MAX_ARCHIVE_MEMBERS, MAX_UNCOMPRESSED_BYTES
 from rag.domain.errors import InvalidArchiveError
 from rag.domain.models import RawDocument
 
 # Zip-bomb guards: a small upload can declare, or inflate to, far more than it looks.
-MAX_ARCHIVE_MEMBERS = 1000
-MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 
 
 def load_path(path: Path) -> list[RawDocument]:
