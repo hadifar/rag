@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable
 from typing import cast
 
@@ -5,9 +6,12 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.store.base import BaseStore
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, HistoryMessage, ToolAgentSpec
+from rag.domain.errors import PreferenceNotFoundError
+from rag.domain.models import AgentSpec, HistoryMessage, Preference, ToolAgentSpec
+from rag.services.agent_service import preferences
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
@@ -24,11 +28,13 @@ class AgentService:
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
+        store: BaseStore,
         trace_config: Callable[[str | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
         self._checkpointer = checkpointer
+        self._store = store
         self._trace_config = trace_config
         self._retry_attempts = retry_attempts
 
@@ -60,6 +66,7 @@ class AgentService:
                     spec,
                     self._classify,
                     self._checkpointer,
+                    self._store,
                     self._retry_attempts,
                 )
         return Agent(graph, self._trace_config)
@@ -76,6 +83,21 @@ class AgentService:
 
     async def delete_history(self, thread_id: str) -> None:
         await self._checkpointer.adelete_thread(thread_id)
+
+    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
+        """What the user wants of every answer, oldest first."""
+        return await preferences.list_preferences(self._store, user_id)
+
+    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
+        """The saved preference, or the same one if the user already has it. Raises
+        InvalidPreferenceError or TooManyPreferencesError.
+        """
+        return await preferences.save_preference(self._store, user_id, text)
+
+    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
+        """Raises PreferenceNotFoundError if the user has no preference with that id."""
+        if not await preferences.delete_preference(self._store, user_id, preference_id):
+            raise PreferenceNotFoundError(preference_id)
 
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the

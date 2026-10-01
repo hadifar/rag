@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncIterator
 
 from rag.domain.models import (
@@ -29,12 +30,13 @@ class RagService:
             tools=[search_tool(retrieval_service)],
             checks=[OffTopicCheck(), GroundednessCheck(max_revisions)],
             planning=Planning(PLANNING_INSTRUCTIONS),
+            remember_preferences=True,
         )
 
         self._agent = agent_service.create_agent(agent_spec)
 
     async def stream_chat(
-        self, message: str, thread_id: str
+        self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
-        async for event in self._agent.stream(message, thread_id):
+        async for event in self._agent.stream(message, thread_id, user_id):
             yield event

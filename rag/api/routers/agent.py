@@ -10,8 +10,8 @@ from rag.api.deps import (
     RagServiceDep,
     get_current_user,
 )
-from rag.api.schema.conversations import MessageRequest
-from rag.api.schema.rag import StreamEventResponse, to_stream_event
+from rag.api.schema.agent import StreamEventResponse, to_stream_event
+from rag.api.schema.conversation import MessageRequest
 
 router = APIRouter(
     prefix="/api/conversations",
@@ -39,10 +39,11 @@ async def _require_owned_conversation(
 async def send_message(
     conversation_id: uuid.UUID,
     message_request: MessageRequest,
+    current_user: AuthenticatedUserDep,
     rag_service: RagServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
     async for event in rag_service.stream_chat(
-        message_request.message, str(conversation_id)
+        message_request.message, str(conversation_id), current_user.id
     ):
         yield to_stream_event(event)

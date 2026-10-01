@@ -43,7 +43,7 @@ rag/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
 │   ├── llm_client.py
-│   ├── checkpointer.py
+│   ├── langgraph_persistence.py      # LangGraph's checkpointer + store, on one pool
 │   ├── observability.py
 │   ├── archive_store.py              # uploaded knowledge-base zips: local disk or Azure Blob (KB_STORAGE)
 │   └── db.py                         # the app's Postgres pool (users, conversations, documents)
@@ -86,7 +86,7 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard and preferences middleware), tool calls, streaming, tracing; reads/deletes a thread's history; each user's preferences (LangGraph store) | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer, store |
 | `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
 | `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -149,15 +149,16 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   from that message.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
-  answer and sources; tool calls aren't replayed).
+  answer and references; tool calls aren't replayed).
 
-The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
-context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` over a
-connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from the
-repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
+The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
+context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
+`AsyncPostgresStore` (what outlives a thread, e.g. a user's preferences; no semantic index) sharing
+one connection pool of their own on the app's `DATABASE_URL` (required). It's a separate pool from
+the repositories' because LangGraph needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
-so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+so a Postgres restart doesn't need a backend restart; the saver's and the store's `setup()` run
+on connect (idempotent schema migrations). Its tables live in their own `langgraph` Postgres schema (the pool
 connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
 across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
@@ -205,11 +206,11 @@ answer) through the same graph, and `astream_events` would otherwise leak those 
 text stream too. Two consumers read the normalized stream:
 - FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
   `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
-  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
-  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
+  `query`, then `done` with its `output`) and `references`. The shapes are Pydantic models
+  (`TextEvent`/`ToolEvent`/`ReferencesEvent`), so they're in the OpenAPI schema and the frontend's
   generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
+  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `ReferencesBubble`
   (which links to `/api/retrieval/{filename}`).
 
 ## Observability
@@ -279,7 +280,7 @@ there, so the response status comes from the exception class itself.
   LLM-written title for that first message and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
-- `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
+- `GET /api/conversations/{id}/messages` — `[{role, text, references}]`, or 404.
 - `DELETE /api/conversations/{id}` — deletes its messages, then the conversation; 204, or 404.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — queries the `chunks` table (fails if Postgres is unreachable or
@@ -292,6 +293,13 @@ there, so the response status comes from the exception class itself.
 - `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
   404 if unknown.
 - `GET /api/ingestions/latest` — the most recent run, or `null`.
+- `GET /api/settings/preferences` — the caller's preferences for every answer, `[{id, text}]`, oldest
+  first. The chat agent reads them on every turn, and saves or forgets one when asked to in a
+  conversation.
+- `POST /api/settings/preferences` — `{text}` (1–200 characters, 422 otherwise) → `{id, text}`; the same
+  text again (ignoring case) returns the preference already saved. 400 if only whitespace, 409
+  past 20 per user.
+- `DELETE /api/settings/preferences/{id}` — 204, or 404 for a missing or someone else's preference.
 - `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).

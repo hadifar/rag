@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
+from rag.domain.models import MAX_PREFERENCE_LENGTH
 
 
 class SettingsResponse(BaseModel):
@@ -16,3 +17,14 @@ class SettingsResponse(BaseModel):
             case AzureOpenAILLMConfig() as llm:
                 model = llm.DEPLOYMENT
         return cls(model=model, temperature=llm.TEMPERATURE, top_k=settings.RAG.TOP_K)
+
+
+class PreferenceRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_PREFERENCE_LENGTH)
+
+
+class PreferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    text: str

@@ -2,22 +2,22 @@ import { memo, useEffect, useRef } from 'react';
 import type { ChatMessage } from '../../types';
 import { TextBubble } from './TextBubble';
 import { ToolBubble } from './ToolBubble';
-import { SourcesBubble } from './SourcesBubble';
+import { ReferencesBubble } from './ReferencesBubble';
 import { TypingIndicator } from './TypingIndicator';
 
 type MessageListProps = {
   messages: ChatMessage[];
-  onOpenSource: (name: string) => void;
+  onOpenReference: (name: string) => void;
 };
 
 // Memoized: while an answer streams, only the bubble whose message changed re-renders
 // (and re-parses its markdown), not every earlier one.
 const MessageBubble = memo(function MessageBubble({
   message,
-  onOpenSource,
+  onOpenReference,
 }: {
   message: ChatMessage;
-  onOpenSource: (name: string) => void;
+  onOpenReference: (name: string) => void;
 }) {
   switch (message.type) {
     case 'typing':
@@ -29,8 +29,8 @@ const MessageBubble = memo(function MessageBubble({
     case 'tool':
       return <ToolBubble {...message.content} />;
 
-    case 'sources':
-      return <SourcesBubble {...message.content} onOpen={onOpenSource} />;
+    case 'references':
+      return <ReferencesBubble {...message.content} onOpen={onOpenReference} />;
 
     default:
       // A new bubble type fails to compile here until it's handled (see chatStream.ts).
@@ -38,7 +38,7 @@ const MessageBubble = memo(function MessageBubble({
   }
 });
 
-export function MessageList({ messages, onOpenSource }: MessageListProps) {
+export function MessageList({ messages, onOpenReference }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function MessageList({ messages, onOpenSource }: MessageListProps) {
           key={message.id}
           className={`flex ${message.type === 'text' && message.position === 'right' ? 'justify-end' : 'justify-start'}`}
         >
-          <MessageBubble message={message} onOpenSource={onOpenSource} />
+          <MessageBubble message={message} onOpenReference={onOpenReference} />
         </div>
       ))}
       <div ref={bottomRef} />

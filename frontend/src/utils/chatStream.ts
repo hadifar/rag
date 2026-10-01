@@ -9,7 +9,7 @@ export function assistantText(text: string): ChatMessageInput {
 
 /**
  * Turns one answer's stream into bubbles: text deltas grow a single assistant bubble,
- * a tool's bubble is filled in when it's `done`, and sources get their own.
+ * a tool's bubble is filled in when it's `done`, and references get their own.
  * Create one per answer.
  */
 export function createBubbleHandler(append: AppendMessage, update: UpdateMessage) {
@@ -46,9 +46,9 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
         }
         break;
       }
-      case 'sources':
+      case 'references':
         // Sent only when the answer searched; an empty list still gets its bubble.
-        append({ type: 'sources', content: { sources: event.sources } });
+        append({ type: 'references', content: { references: event.references } });
         break;
       default:
         // A new backend event type fails to compile here until it's handled.

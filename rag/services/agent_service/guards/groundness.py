@@ -23,14 +23,22 @@ from rag.services.agent_service.turn import (
 )
 
 
-def _collect_context(messages: Sequence[BaseMessage]) -> str:
+def _collect_context(
+    messages: Sequence[BaseMessage], unverified_tools: frozenset[str]
+) -> str:
     return "\n\n".join(
-        str(m.content) for m in turn_tool_messages(messages) if m.content
+        str(m.content)
+        for m in turn_tool_messages(messages)
+        if m.content and m.name not in unverified_tools
     )
 
 
-async def is_grounded(verify: Classify, messages: Sequence[BaseMessage]) -> bool:
-    context = _collect_context(messages)
+async def is_grounded(
+    verify: Classify,
+    messages: Sequence[BaseMessage],
+    unverified_tools: frozenset[str] = frozenset(),
+) -> bool:
+    context = _collect_context(messages, unverified_tools)
     answer = messages[-1]
 
     if not context or not isinstance(answer, AIMessage) or not answer.content:
@@ -53,15 +61,23 @@ def _turn_answers(messages: Sequence[BaseMessage]) -> list[AIMessage]:
 class GroundednessGuard(AgentMiddleware):
     """Checks each final answer against this turn's retrieved context; if it isn't
     supported, sends the model back to revise, up to `max_revisions` times per turn.
+    The results of `unverified_tools` (ones about the user, not the product, e.g.
+    saving a preference) aren't context to check against.
     The revision instruction is added to that model call only, never saved to the
     thread. Revisions are counted from this turn's messages, so no state carries over
     between turns.
     """
 
-    def __init__(self, verifier: Classify, max_revisions: int):
+    def __init__(
+        self,
+        verifier: Classify,
+        max_revisions: int,
+        unverified_tools: frozenset[str] = frozenset(),
+    ):
         super().__init__()
         self._verifier = verifier
         self._max_revisions = max_revisions
+        self._unverified_tools = unverified_tools
 
     @hook_config(can_jump_to=["model"])
     async def aafter_model(
@@ -75,7 +91,7 @@ class GroundednessGuard(AgentMiddleware):
         # on the LLM re-answering the same question indefinitely.
         if revisions >= self._max_revisions:
             return None
-        if await is_grounded(self._verifier, state["messages"]):
+        if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
             return None
         return {"jump_to": "model"}
 

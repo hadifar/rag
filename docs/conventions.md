@@ -52,6 +52,13 @@ class ChunkerPort(Protocol):
 
 ## Adding a new API route: thin router, `Annotated` deps, domain errors
 
+- A new route joins the existing router for its area (`auth`, `conversation`, `ingestion`,
+  `retrieval`, `setting`, `health`), even if it calls a service that router didn't use yet
+  (e.g. a user's preferences are `/api/settings/preferences`, on `AgentService`). A router's
+  file, and its schema module, is named after its area in the singular (`setting.py` serves
+  `/api/settings`). A new router means a new area of the API: decide it on its own, never as a
+  side effect of a feature. The one exception is `agent.py`: it shares `/api/conversations` to
+  stream a turn, which `RagService` runs, not `ConversationService`.
 - Module-level `router = APIRouter(prefix="/api/x", tags=["x"])` in `rag/api/routers/`, each
   endpoint a plain `@router.get`/`post` function. A gate every route shares goes on the router
   itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
@@ -94,7 +101,7 @@ Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSO
 its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
 1. a dataclass in `rag/domain/models/agent.py`, added to the `StreamEvent` union and to
    the re-exports in `rag/domain/models/__init__.py`;
-2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/conversations.py`, added to
+2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
 3. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`
    (`frontend/src/utils/chatStream.ts`) — whose `satisfies never` default fails to compile until

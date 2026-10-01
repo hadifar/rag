@@ -4,9 +4,10 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 
-from rag.domain.errors import IngestionInProgressError
+from rag.domain.errors import IngestionInProgressError, PreferenceNotFoundError
 from rag.domain.models import (
     AgentSpec,
     Conversation,
@@ -14,12 +15,14 @@ from rag.domain.models import (
     IndexedDocument,
     IngestionReport,
     IngestionRun,
+    Preference,
     ReferencesReady,
     StreamEvent,
     TextDelta,
     User,
 )
 from rag.domain.ports import ChatAgentPort
+from rag.services.agent_service import preferences
 
 
 class FakeEmbeddings:
@@ -228,7 +231,8 @@ class FakeConversationRepository:
 class StubGeneration:
     """AgentServicePort without agents: answers every prompt with `reply`, or raises
     `error`, and records the prompts. Its saved threads are `threads`, which a test
-    (or `StubRag`) fills in as an agent would.
+    (or `StubRag`) fills in as an agent would. Preferences are the real ones, kept in an
+    in-memory store.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
@@ -237,6 +241,7 @@ class StubGeneration:
         self.prompts: list[str] = []
         self.threads: dict[str, list[HistoryMessage]] = {}
         self.deleted_threads: list[str] = []
+        self.store = InMemoryStore()
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -260,34 +265,46 @@ class StubGeneration:
         self.deleted_threads.append(thread_id)
         self.threads.pop(thread_id, None)
 
+    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
+        return await preferences.list_preferences(self.store, user_id)
+
+    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
+        return await preferences.save_preference(self.store, user_id, text)
+
+    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
+        if not await preferences.delete_preference(self.store, user_id, preference_id):
+            raise PreferenceNotFoundError(preference_id)
+
 
 class StubRag:
     """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the `StubGeneration`'s, so it shows up in its history) with `sources` on the answer.
+    the `StubGeneration`'s, so it shows up in its history) with `references` on the answer.
     """
 
     def __init__(
         self,
         threads: dict[str, list[HistoryMessage]],
         extra_events: list[StreamEvent] | None = None,
-        sources: list[str] | None = None,
+        references: list[str] | None = None,
     ):
         self.threads = threads
         self.extra_events = extra_events or []
-        self.sources = sources
+        self.references = references
 
     async def stream_chat(
-        self, message: str, thread_id: str
+        self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
         reply = f"echo: {message}"
         self.threads.setdefault(thread_id, []).extend(
             [
                 HistoryMessage(role="user", text=message),
-                HistoryMessage(role="assistant", text=reply, sources=self.sources),
+                HistoryMessage(
+                    role="assistant", text=reply, references=self.references
+                ),
             ]
         )
         yield TextDelta(text=reply)
         for event in self.extra_events:
             yield event
-        if self.sources is not None:
-            yield ReferencesReady(references=self.sources)
+        if self.references is not None:
+            yield ReferencesReady(references=self.references)

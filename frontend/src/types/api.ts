@@ -9,21 +9,25 @@ export type LoginRequest = Schemas['LoginRequest'];
 export type TokenResponse = Schemas['TokenResponse'];
 export type UserResponse = Schemas['UserResponse'];
 
-// conversations.py
+// agent.py
+export type TextEvent = Schemas['TextEvent'];
+export type ToolEvent = Schemas['ToolEvent'];
+export type ReferencesEvent = Schemas['ReferencesEvent'];
+export type StreamEventResponse = Schemas['StreamEventResponse'];
+
+// conversation.py
 export type ConversationResponse = Schemas['ConversationResponse'];
 export type ConversationPageResponse = Schemas['ConversationPageResponse'];
 export type HistoryMessageResponse = Schemas['HistoryMessageResponse'];
 export type MessageRequest = Schemas['MessageRequest'];
-export type TextEvent = Schemas['TextEvent'];
-export type ToolEvent = Schemas['ToolEvent'];
-export type SourcesEvent = Schemas['SourcesEvent'];
-export type StreamEventResponse = Schemas['StreamEventResponse'];
 
 // health.py
 export type HealthResponse = Schemas['HealthResponse'];
 
-// ingestions.py
+// ingestion.py
 export type IngestionRunResponse = Schemas['IngestionRunResponse'];
 
-// settings.py
+// setting.py
 export type SettingsResponse = Schemas['SettingsResponse'];
+export type PreferenceRequest = Schemas['PreferenceRequest'];
+export type PreferenceResponse = Schemas['PreferenceResponse'];

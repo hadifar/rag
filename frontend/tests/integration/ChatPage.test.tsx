@@ -40,7 +40,7 @@ async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
 }
 
 describe('ChatPage', () => {
-  it('streams an answer with its sources into a new chat', async () => {
+  it('streams an answer with its references into a new chat', async () => {
     let sent: MessageRequest | undefined;
     server.use(
       http.post('/api/conversations', () =>
@@ -54,7 +54,7 @@ describe('ChatPage', () => {
           { type: 'tool', name: 'search_kb', status: 'done', output: '2 chunks' },
           { type: 'text', text: 'We offer ' },
           { type: 'text', text: 'three plans.' },
-          { type: 'sources', sources: ['02-plans-and-pricing.md'] },
+          { type: 'references', references: ['02-plans-and-pricing.md'] },
         ]);
       }),
       http.post('/api/conversations/:id/title', () =>
@@ -94,8 +94,8 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'How long is data kept?', sources: null },
-          { role: 'assistant', text: 'Ninety days.', sources: ['11-data-retention-policy.md'] },
+          { role: 'user', text: 'How long is data kept?', references: null },
+          { role: 'assistant', text: 'Ninety days.', references: ['11-data-retention-policy.md'] },
         ]),
       ),
     );
@@ -110,10 +110,10 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'hi', sources: null },
-          { role: 'assistant', text: 'Hello!', sources: null },
-          { role: 'user', text: 'Who won the cup?', sources: null },
-          { role: 'assistant', text: "I don't know.", sources: [] },
+          { role: 'user', text: 'hi', references: null },
+          { role: 'assistant', text: 'Hello!', references: null },
+          { role: 'user', text: 'Who won the cup?', references: null },
+          { role: 'assistant', text: "I don't know.", references: [] },
         ]),
       ),
     );

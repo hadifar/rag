@@ -5,9 +5,9 @@ from datetime import timedelta
 
 from rag.adapters.archive_store import open_archive_store
 from rag.adapters.argon2 import Argon2PasswordHasher
-from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
 from rag.adapters.jwt_codec import JwtTokenCodec
+from rag.adapters.langgraph_persistence import open_langgraph
 from rag.adapters.llm_client import build_embeddings, build_llm
 from rag.adapters.observability import open_trace_config
 from rag.config import Settings
@@ -39,7 +39,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
     """Opens connections and tears it down on exit."""
 
     async with (
-        open_checkpointer(settings) as checkpointer,
+        open_langgraph(settings) as langgraph,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
@@ -51,7 +51,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
 
         agent_service = AgentService(
             llm=build_llm(settings),
-            checkpointer=checkpointer,
+            checkpointer=langgraph.checkpointer,
+            store=langgraph.store,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )

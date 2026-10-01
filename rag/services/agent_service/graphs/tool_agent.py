@@ -11,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from rag.domain.models import (
     Check,
@@ -21,6 +22,11 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.guards.groundness import GroundednessGuard
 from rag.services.agent_service.guards.topical import Classify, TopicalGuard
+from rag.services.agent_service.preferences import (
+    PREFERENCE_TOOL_NAMES,
+    ChatContext,
+    PreferencesMiddleware,
+)
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 
 
@@ -45,23 +51,33 @@ def _to_langchain_tool(tool: Tool) -> BaseTool:
     )
 
 
-def _to_langchain_tools(tools: list[Tool]) -> list[BaseTool]:
-    """Raises ValueError if two tools share a name, which LangChain would otherwise
-    only trip over once the agent runs.
+def _to_langchain_tools(
+    tools: list[Tool], reserved: frozenset[str] = frozenset()
+) -> list[BaseTool]:
+    """Raises ValueError if two tools share a name, or one takes a `reserved` name (a
+    middleware's tool), which LangChain would otherwise only trip over once the agent
+    runs.
     """
-    names = [tool.name for tool in tools]
+    names = [tool.name for tool in tools] + sorted(reserved)
     if duplicates := sorted({name for name in names if names.count(name) > 1}):
         raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
 
     return [_to_langchain_tool(tool) for tool in tools]
 
 
-def _guard(check: Check, classify: Classify) -> AgentMiddleware[Any, Any]:
+def _guard(
+    check: Check, classify: Classify, user_tools: frozenset[str]
+) -> AgentMiddleware[Any, Any]:
+    """`user_tools` act on the user, not the product: the model keeps them off-topic,
+    and their results aren't what an answer is checked against.
+    """
     match check:
         case OffTopicCheck():
-            return TopicalGuard(classify)
+            return TopicalGuard(classify, kept_tools=user_tools)
         case GroundednessCheck(max_revisions=max_revisions):
-            return GroundednessGuard(classify, max_revisions=max_revisions)
+            return GroundednessGuard(
+                classify, max_revisions=max_revisions, unverified_tools=user_tools
+            )
 
 
 def build_tool_agent(
@@ -69,15 +85,19 @@ def build_tool_agent(
     spec: ToolAgentSpec,
     classify: Classify,
     checkpointer: BaseCheckpointSaver,
+    store: BaseStore,
     retry_attempts: int,
 ) -> CompiledStateGraph:
-    tools = _to_langchain_tools(spec.tools)
+    user_tools = PREFERENCE_TOOL_NAMES if spec.remember_preferences else frozenset()
+    tools = _to_langchain_tools(spec.tools, reserved=user_tools)
 
     # The checks come first: the outermost middleware, so an off-topic turn's "no
     # tools" also covers planning's write_todos.
     middleware: list[AgentMiddleware[Any, Any]] = [
-        *(_guard(check, classify) for check in spec.checks)
+        *(_guard(check, classify, user_tools) for check in spec.checks)
     ]
+    if spec.remember_preferences:
+        middleware.append(PreferencesMiddleware())
     if spec.planning is not None:
         # The instructions come with the tool, so the model is never told to plan
         # with a tool it doesn't have.
@@ -94,4 +114,6 @@ def build_tool_agent(
         system_prompt=spec.system_prompt,
         middleware=middleware,
         checkpointer=checkpointer,
+        store=store,
+        context_schema=ChatContext,
     )

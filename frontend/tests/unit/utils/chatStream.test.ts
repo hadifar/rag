@@ -36,12 +36,12 @@ describe('createBubbleHandler', () => {
     });
   });
 
-  it('still shows a sources bubble when the search found nothing', () => {
+  it('still shows a references bubble when the search found nothing', () => {
     const { append, handle } = setup();
 
-    handle({ type: 'sources', sources: [] });
+    handle({ type: 'references', references: [] });
 
-    expect(append).toHaveBeenCalledExactlyOnceWith({ type: 'sources', content: { sources: [] } });
+    expect(append).toHaveBeenCalledExactlyOnceWith({ type: 'references', content: { references: [] } });
   });
 
   it('starts a new assistant bubble for text that follows a tool call', () => {
