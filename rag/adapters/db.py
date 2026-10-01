@@ -10,7 +10,7 @@ from rag.config import Settings
 @asynccontextmanager
 async def open_db_pool(
     settings: Settings,
-) -> AsyncGenerator[AsyncConnectionPool[AsyncConnection]]:
+) -> AsyncGenerator[AsyncConnectionPool[AsyncConnection], None]:
     """Opens the app's connection pool (users, conversations, documents) for the
     caller's scope and tears it down on exit.
     """

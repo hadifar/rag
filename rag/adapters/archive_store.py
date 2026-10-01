@@ -64,7 +64,9 @@ class AzureBlobArchiveStore:
 
 
 @asynccontextmanager
-async def open_archive_store(settings: Settings) -> AsyncGenerator[ArchiveStorePort]:
+async def open_archive_store(
+    settings: Settings,
+) -> AsyncGenerator[ArchiveStorePort, None]:
     match settings.KB_STORAGE:
         case LocalKbStorageConfig() as config:
             yield LocalArchiveStore(config.DIR)

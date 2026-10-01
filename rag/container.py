@@ -35,7 +35,7 @@ class Container:
 
 
 @asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container]:
+async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:
     """Opens connections and tears it down on exit."""
 
     async with (

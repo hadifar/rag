@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _build_lifespan(container: Container | None, settings: Settings):
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if container is not None:
             app.state.container = container
             yield
