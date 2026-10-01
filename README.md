@@ -15,9 +15,8 @@ git clone https://github.com/hadifar/rag.git
 cd rag
 bash scripts/setup.sh
 # fill in .env (see .example.env), then:
-docker compose up --build
+docker compose up --build   # applies database migrations before the backend starts
 # once it's up, create a login (no public signup — see docs/setup.md):
-docker compose exec backend alembic upgrade head
 docker compose exec backend rag create-user you@example.com --admin
 ```
 Then sign in at http://localhost:3000 and load the knowledge base: upload `data/data.zip` under
