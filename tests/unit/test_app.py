@@ -25,8 +25,7 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import ToolCall
-from rag.domain.models import Chunk
+from rag.domain.models import Chunk, ToolCall
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService

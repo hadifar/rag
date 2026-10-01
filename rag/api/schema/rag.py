@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
-from rag.domain.events import ReferencesReady, StreamEvent, TextDelta, ToolCall
+from rag.domain.models import ReferencesReady, StreamEvent, TextDelta, ToolCall
 
 # The message stream's events: each is one SSE `data:` line of JSON, told apart by `type`.
 

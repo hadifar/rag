@@ -3,16 +3,15 @@ from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, Tool, ToolAgentSpec, ToolPort
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.resilience import or_default
+from rag.domain.models import AgentSpec, ToolAgentSpec
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
+from rag.shared.resilience import or_default
 
 
 class AgentService:
@@ -46,19 +45,10 @@ class AgentService:
         )
         return cast(T, await llm.ainvoke(prompt))
 
-    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
-        """Each tool, ready for an agent; raises ValueError if two share a name, which
-        LangChain would otherwise only trip over once the agent runs.
-        """
-        names = [tool.name for tool in tools]
-        if duplicates := sorted({name for name in names if names.count(name) > 1}):
-            raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
-
-        return [to_langchain_tool(tool) for tool in tools]
-
     def create_agent(self, spec: AgentSpec) -> Agent:
-        """A chat agent built as `spec` describes. A new kind of agent adds its spec
-        to AgentSpec, a graph builder in graphs/, and a case here.
+        """A chat agent built as `spec` describes; raises ValueError if two of its
+        tools share a name. A new kind of agent adds its spec to AgentSpec, a graph
+        builder in graphs/, and a case here.
         """
         match spec:
             case ToolAgentSpec():
@@ -74,20 +64,3 @@ class AgentService:
         return await or_default(
             self.generate(prompt, attempts=LLM_RETRY_ATTEMPTS), FALLBACK_MESSAGE
         )
-
-
-def to_langchain_tool(tool: Tool) -> BaseTool:
-    """The model reads the result's content; its references ride along as the
-    ToolMessage's artifact, where the turn's references are collected from.
-    """
-
-    async def run(query: str) -> tuple[str, list[str] | None]:
-        result = await tool.run(query)
-        return result.content, result.references
-
-    return StructuredTool.from_function(
-        coroutine=run,
-        name=tool.name,
-        description=tool.description,
-        response_format="content_and_artifact",
-    )

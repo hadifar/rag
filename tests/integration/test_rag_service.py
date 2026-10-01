@@ -1,7 +1,7 @@
 import uuid
 
 from rag.container import build_container
-from rag.domain.events import TextDelta, ToolCall
+from rag.domain.models import TextDelta, ToolCall
 
 
 async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:

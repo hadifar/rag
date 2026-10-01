@@ -3,7 +3,7 @@ from typing import Any
 
 from langchain_core.messages import ToolMessage
 
-from rag.domain.events import StreamEvent, TextDelta, ToolCall
+from rag.domain.models import StreamEvent, TextDelta, ToolCall
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same

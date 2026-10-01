@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -18,13 +18,6 @@ class Tool:
     name: str  # what the model calls it; unique among an agent's tools
     description: str  # what the model is told it does
     run: Callable[[str], Awaitable[ToolResult]]  # the model's query in
-
-
-class ToolPort(Protocol):
-    """A tool an agent may call. Opaque outside the agent service, which builds it."""
-
-    @property
-    def name(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -60,10 +53,35 @@ class ToolAgentSpec:
     """The standard tool-calling agent: the model calls `tools` until it answers."""
 
     system_prompt: str
-    tools: list[ToolPort]
+    tools: list[Tool]
     checks: list[Check] = field(default_factory=list[Check])  # run in this order
     planning: Planning | None = None
 
 
 # Every kind of agent the agent service can build; a custom graph adds its spec here.
 AgentSpec = ToolAgentSpec
+
+
+@dataclass
+class TextDelta:
+    text: str
+
+
+@dataclass
+class ToolCall:
+    name: str
+    status: Literal["pending", "done"]
+    query: str | None = None
+    output: str | None = None
+
+
+@dataclass
+class ReferencesReady:
+    """What the turn's tools cited (e.g. knowledge-base source ids), deduplicated; sent
+    once the turn is done, and only if a tool that cites anything ran.
+    """
+
+    references: list[str]
+
+
+StreamEvent = TextDelta | ToolCall | ReferencesReady

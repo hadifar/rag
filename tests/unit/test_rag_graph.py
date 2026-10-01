@@ -21,8 +21,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
-from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
-from rag.domain.models import Chunk
+from rag.domain.models import (
+    Chunk,
+    ReferencesReady,
+    StreamEvent,
+    TextDelta,
+    ToolAgentSpec,
+)
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
@@ -349,4 +354,4 @@ def test_tools_with_the_same_name_are_rejected_up_front() -> None:
     docs = search_tool(_StubRetrievalService())
 
     with pytest.raises(ValueError, match="search_kb"):
-        agents.create_tools([docs, docs])
+        agents.create_agent(ToolAgentSpec(system_prompt="", tools=[docs, docs]))

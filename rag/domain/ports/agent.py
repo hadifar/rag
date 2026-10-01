@@ -3,8 +3,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, Tool, ToolPort
-from rag.domain.events import StreamEvent
+from rag.domain.models import AgentSpec, StreamEvent
 
 
 class ChatAgentPort(Protocol):
@@ -34,10 +33,8 @@ class AgentServicePort(Protocol):
         """
         ...
 
-    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
-        """Each tool, ready for an agent; raises ValueError if two share a name."""
-        ...
-
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
-        """A chat agent built as `spec` describes."""
+        """A chat agent built as `spec` describes; raises ValueError if two of its
+        tools share a name.
+        """
         ...

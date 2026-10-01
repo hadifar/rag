@@ -92,7 +92,8 @@ class ChunkerPort(Protocol):
 
 Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSON, told apart by
 its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
-1. a dataclass in `rag/domain/events.py`, added to the `StreamEvent` union;
+1. a dataclass in `rag/domain/models/agent.py`, added to the `StreamEvent` union and to
+   the re-exports in `rag/domain/models/__init__.py`;
 2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/conversations.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
 3. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`

@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.domain.events import ReferencesReady, StreamEvent
+from rag.domain.models import ReferencesReady, StreamEvent
 from rag.services.agent_service.streaming import parse_event
 from rag.services.agent_service.turn import turn_references
 

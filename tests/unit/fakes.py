@@ -6,15 +6,17 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, Tool, ToolPort
 from rag.domain.errors import IngestionInProgressError
-from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import (
+    AgentSpec,
     Conversation,
     HistoryMessage,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
+    ReferencesReady,
+    StreamEvent,
+    TextDelta,
     User,
 )
 from rag.domain.ports import ChatAgentPort
@@ -261,9 +263,6 @@ class StubGeneration:
     ) -> T:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
-
-    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
-        raise NotImplementedError("the stub builds no tools")
 
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
