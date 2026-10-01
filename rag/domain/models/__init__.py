@@ -27,9 +27,11 @@ from rag.domain.models.agent.stream import (
 )
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
+    AssistantMessage,
     Conversation,
     ConversationPage,
     HistoryMessage,
+    UserMessage,
 )
 from rag.domain.models.ingestion import (
     IndexedDocument,
@@ -44,6 +46,7 @@ __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
+    "AssistantMessage",
     "Chunk",
     "Conversation",
     "ConversationPage",
@@ -70,4 +73,5 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "User",
+    "UserMessage",
 ]

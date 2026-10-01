@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from rag.domain.errors import IngestionInProgressError, PreferenceNotFoundError
 from rag.domain.models import (
     AgentSpec,
+    AssistantMessage,
     Conversation,
     HistoryMessage,
     IndexedDocument,
@@ -20,6 +21,7 @@ from rag.domain.models import (
     StreamEvent,
     TextDelta,
     User,
+    UserMessage,
 )
 from rag.domain.ports import ChatAgentPort
 from rag.services.agent_service.middleware import preferences
@@ -307,17 +309,14 @@ class StubRag:
     async def stream_chat(
         self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
-        reply = f"echo: {message}"
-        self.threads.setdefault(thread_id, []).extend(
-            [
-                HistoryMessage(role="user", text=message),
-                HistoryMessage(
-                    role="assistant", text=reply, references=self.references
-                ),
-            ]
-        )
-        yield TextDelta(text=reply)
-        for event in self.extra_events:
-            yield event
+        events: list[StreamEvent] = [
+            TextDelta(text=f"echo: {message}"),
+            *self.extra_events,
+        ]
         if self.references is not None:
-            yield ReferencesReady(references=self.references)
+            events.append(ReferencesReady(references=self.references))
+        self.threads.setdefault(thread_id, []).extend(
+            [UserMessage(text=message), AssistantMessage(events=events)]
+        )
+        for event in events:
+            yield event

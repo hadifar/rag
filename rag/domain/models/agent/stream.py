@@ -10,7 +10,7 @@ class TextDelta:
 
 @dataclass
 class ReasoningDelta:
-    """A piece of the model's reasoning summary, streamed live but never saved."""
+    """A piece of the model's reasoning summary."""
 
     text: str
 
@@ -31,7 +31,7 @@ class Todo:
 
 @dataclass
 class TodosUpdated:
-    """The agent's whole plan, sent each time it rewrites it; streamed live but never saved."""
+    """The agent's whole plan, sent each time it rewrites it."""
 
     todos: list[Todo]
 

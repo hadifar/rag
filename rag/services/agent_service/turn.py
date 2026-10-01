@@ -4,7 +4,13 @@ from typing import TypeGuard
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
-from rag.domain.models import HistoryMessage
+from rag.domain.models import (
+    AssistantMessage,
+    HistoryMessage,
+    ReferencesReady,
+    UserMessage,
+)
+from rag.services.agent_service.streaming import replay
 
 # Guards inject their instructions per model call instead of saving them to the
 # thread, so every HumanMessage in state is the user's and marks the start of a turn.
@@ -34,22 +40,21 @@ def turn_references(messages: Sequence[BaseMessage]) -> list[str] | None:
 
 
 def to_history(messages: Sequence[BaseMessage]) -> list[HistoryMessage]:
-    """The thread as the user saw it: each question, then that turn's final answer
-    with its references. Tool calls are left out, and if the answer was revised only
-    the revision is kept.
+    """The thread as the user saw it: each question, then the events its answer
+    streamed (reasoning, searches, the plan, the answer) and its references. If the
+    answer was revised, the rejected drafts are left out.
     """
     history: list[HistoryMessage] = []
     for turn in _split_turns(messages):
-        history.append(HistoryMessage(role="user", text=turn[0].text))
-        answers = [m for m in turn if is_final_answer(m) and m.text]
-        if answers:
-            history.append(
-                HistoryMessage(
-                    role="assistant",
-                    text=answers[-1].text,
-                    references=_references(turn),
-                )
-            )
+        history.append(UserMessage(text=turn[0].text))
+        answers = [m for m in turn if is_final_answer(m)]
+        rejected = {id(m) for m in answers[:-1]}
+        events = replay([m for m in turn[1:] if id(m) not in rejected])
+        references = _references(turn)
+        if references is not None:
+            events.append(ReferencesReady(references=references))
+        if events:
+            history.append(AssistantMessage(events=events))
     return history
 
 

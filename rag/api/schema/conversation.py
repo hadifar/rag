@@ -3,7 +3,10 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+from rag.api.schema.agent import StreamEventResponse, to_stream_event
+from rag.domain.models import AssistantMessage, HistoryMessage, UserMessage
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 
@@ -29,12 +32,37 @@ class ConversationPageResponse(BaseModel):
     next_cursor: str | None
 
 
-class HistoryMessageResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    role: Literal["user", "assistant"]
+class UserMessageResponse(BaseModel):
+    role: Literal["user"] = "user"
     text: str
-    references: list[str] | None
+
+
+class AssistantMessageResponse(BaseModel):
+    """A past answer as the events its stream sent, in order; replayed like the live stream."""
+
+    role: Literal["assistant"] = "assistant"
+    events: list[StreamEventResponse]
+
+
+class HistoryMessageResponse(
+    RootModel[
+        Annotated[
+            UserMessageResponse | AssistantMessageResponse,
+            Field(discriminator="role"),
+        ]
+    ]
+):
+    """One message of a saved conversation, told apart by `role`."""
+
+
+def to_history_message(message: HistoryMessage) -> HistoryMessageResponse:
+    match message:
+        case UserMessage(text=text):
+            return HistoryMessageResponse(UserMessageResponse(text=text))
+        case AssistantMessage(events=events):
+            return HistoryMessageResponse(
+                AssistantMessageResponse(events=[to_stream_event(e) for e in events])
+            )
 
 
 class MessageRequest(BaseModel):

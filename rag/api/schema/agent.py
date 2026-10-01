@@ -22,7 +22,7 @@ class TextEvent(BaseModel):
 
 
 class ReasoningEvent(BaseModel):
-    """A piece of the model's reasoning summary, in order. Live only: not in history."""
+    """A piece of the model's reasoning summary, in order."""
 
     type: Literal["reasoning"] = "reasoning"
     text: str
@@ -44,7 +44,7 @@ class TodoItem(BaseModel):
 
 
 class TodosEvent(BaseModel):
-    """The agent's whole plan, each time it rewrites it. Live only: not in history."""
+    """The agent's whole plan, each time it rewrites it."""
 
     type: Literal["todos"] = "todos"
     todos: list[TodoItem]

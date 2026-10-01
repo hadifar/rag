@@ -21,6 +21,8 @@ export type StreamEventResponse = Schemas['StreamEventResponse'];
 // conversation.py
 export type ConversationResponse = Schemas['ConversationResponse'];
 export type ConversationPageResponse = Schemas['ConversationPageResponse'];
+export type UserMessageResponse = Schemas['UserMessageResponse'];
+export type AssistantMessageResponse = Schemas['AssistantMessageResponse'];
 export type HistoryMessageResponse = Schemas['HistoryMessageResponse'];
 export type MessageRequest = Schemas['MessageRequest'];
 

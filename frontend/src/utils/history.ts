@@ -1,15 +1,23 @@
 import type { ChatMessageInput, HistoryMessageResponse } from '../types';
+import { createBubbleHandler } from './chatStream';
 
-/** A saved conversation as the bubbles the live chat would have shown for it. */
+/**
+ * A saved conversation as the bubbles the live chat showed for it: each answer's events
+ * are replayed through the same handler the stream uses.
+ */
 export function historyToMessages(history: HistoryMessageResponse[]): ChatMessageInput[] {
-  return history.flatMap((message): ChatMessageInput[] => {
+  const messages: ChatMessageInput[] = [];
+  const append = (msg: ChatMessageInput) => String(messages.push(msg) - 1);
+  const update = (id: string, msg: ChatMessageInput) => {
+    messages[Number(id)] = msg;
+  };
+
+  for (const message of history) {
     if (message.role === 'user') {
-      return [{ type: 'text', content: { text: message.text }, position: 'right' }];
+      messages.push({ type: 'text', content: { text: message.text }, position: 'right' });
+    } else {
+      message.events.forEach(createBubbleHandler(append, update));
     }
-    const answer: ChatMessageInput = { type: 'text', content: { text: message.text } };
-    // null: the answer didn't search; [] searched and found nothing (still shown).
-    return message.references !== null
-      ? [answer, { type: 'references', content: { references: message.references } }]
-      : [answer];
-  });
+  }
+  return messages;
 }

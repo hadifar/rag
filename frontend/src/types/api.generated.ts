@@ -344,6 +344,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AssistantMessageResponse
+         * @description A past answer as the events its stream sent, in order; replayed like the live stream.
+         */
+        AssistantMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "assistant";
+            /** Events */
+            events: components["schemas"]["StreamEventResponse"][];
+        };
         /** Body_upload_knowledge_base_api_ingestions_post */
         Body_upload_knowledge_base_api_ingestions_post: {
             /** File */
@@ -386,18 +399,11 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** HistoryMessageResponse */
-        HistoryMessageResponse: {
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant";
-            /** Text */
-            text: string;
-            /** References */
-            references: string[] | null;
-        };
+        /**
+         * HistoryMessageResponse
+         * @description One message of a saved conversation, told apart by `role`.
+         */
+        HistoryMessageResponse: components["schemas"]["UserMessageResponse"] | components["schemas"]["AssistantMessageResponse"];
         /** IngestionRunResponse */
         IngestionRunResponse: {
             /**
@@ -454,7 +460,7 @@ export interface components {
         };
         /**
          * ReasoningEvent
-         * @description A piece of the model's reasoning summary, in order. Live only: not in history.
+         * @description A piece of the model's reasoning summary, in order.
          */
         ReasoningEvent: {
             /**
@@ -518,7 +524,7 @@ export interface components {
         };
         /**
          * TodosEvent
-         * @description The agent's whole plan, each time it rewrites it. Live only: not in history.
+         * @description The agent's whole plan, each time it rewrites it.
          */
         TodosEvent: {
             /**
@@ -560,6 +566,16 @@ export interface components {
             query?: string | null;
             /** Output */
             output?: string | null;
+        };
+        /** UserMessageResponse */
+        UserMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "user";
+            /** Text */
+            text: string;
         };
         /** UserResponse */
         UserResponse: {

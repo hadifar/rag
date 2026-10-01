@@ -14,6 +14,7 @@ from rag.api.schema.conversation import (
     HistoryMessageResponse,
     MessageRequest,
     PageLimit,
+    to_history_message,
 )
 
 router = APIRouter(
@@ -50,7 +51,7 @@ async def get_messages(
     conversation_service: ConversationServiceDep,
 ) -> list[HistoryMessageResponse]:
     history = await conversation_service.history(current_user.id, conversation_id)
-    return [HistoryMessageResponse.model_validate(m) for m in history]
+    return [to_history_message(m) for m in history]
 
 
 @router.post("/{conversation_id}/touch", status_code=204)

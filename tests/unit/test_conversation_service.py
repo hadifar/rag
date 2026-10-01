@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
-from rag.domain.models import Conversation
+from rag.domain.models import AssistantMessage, Conversation, TextDelta, UserMessage
 from rag.services.conversation_service.service import ConversationService
 from tests.unit.fakes import FakeConversationRepository, StubGeneration, StubRag
 
@@ -182,9 +182,9 @@ async def test_history_returns_the_threads_messages() -> None:
 
     history = await service.history(ALICE, conversation_id)
 
-    assert [(m.role, m.text) for m in history] == [
-        ("user", "hi"),
-        ("assistant", "echo: hi"),
+    assert history == [
+        UserMessage(text="hi"),
+        AssistantMessage(events=[TextDelta(text="echo: hi")]),
     ]
 
 
