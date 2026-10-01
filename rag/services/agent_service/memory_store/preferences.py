@@ -18,6 +18,7 @@ from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Preference
 from rag.services.agent_service.prompts import PREFERENCES_INSTRUCTION
 
 
+# TODO: must move to somewhere else
 @dataclass(frozen=True)
 class ChatContext:
     """What a chat turn runs for, set by the caller, never by the model."""

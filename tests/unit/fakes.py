@@ -22,7 +22,7 @@ from rag.domain.models import (
     User,
 )
 from rag.domain.ports import ChatAgentPort
-from rag.services.agent_service import preferences
+from rag.services.agent_service.memory_store import preferences
 
 
 class FakeEmbeddings:

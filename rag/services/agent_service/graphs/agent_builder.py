@@ -22,7 +22,7 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.guards.groundness import GroundednessGuard
 from rag.services.agent_service.guards.topical import Classify, TopicalGuard
-from rag.services.agent_service.preferences import (
+from rag.services.agent_service.memory_store.preferences import (
     PREFERENCE_TOOL_NAMES,
     ChatContext,
     PreferencesMiddleware,

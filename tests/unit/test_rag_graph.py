@@ -31,15 +31,14 @@ from rag.domain.models import (
     ToolAgentSpec,
     ToolCall,
 )
-from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.preferences import (
+from rag.services.agent_service.memory_store.preferences import (
     PREFERENCE_TOOL_NAMES,
     list_preferences,
     save_preference,
 )
-from rag.services.agent_service.service import AgentService
+from rag.services.agent_service.service import Agent, AgentService
 from rag.services.agent_service.turn import to_history
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
