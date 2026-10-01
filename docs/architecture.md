@@ -52,7 +52,7 @@ graph TD
     adapters[adapters]
     repository[repository]
 
-    api --> services
+    api --> | only via deps.py | services
     services --> domain
     services -.->|only via ports| adapters
     services -.->|only via ports| repository
@@ -73,6 +73,11 @@ diagram allows, since `domain` itself stays pure in the other direction.
 ## Frontend layering
 
 ```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
 graph TD
     pages[pages]
     components[components]
@@ -91,8 +96,8 @@ graph TD
     hooks --> api
     context --> api
     hooks --> utils
-    api --> types
     utils --> types
+    api --> types
     api --> backend
     schema -.-> types
 ```
@@ -144,9 +149,7 @@ graph TD;
 	__start__ --> TopicalGuard\2ebefore_agent;
 	model --> TodoListMiddleware\2eafter_model;
 	tools -.-> model;
-	classDef default fill:#f2f0ff,line-height:1.2
-	classDef first fill-opacity:0
-	classDef last fill:#bfb6fc
+
 ```
 
 Nodes are the steps that change the graph's state:

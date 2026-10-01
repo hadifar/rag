@@ -30,7 +30,7 @@ function StatusIcon({ status }: Pick<TodoItem, 'status'>) {
 
 export function TodosBubble({ todos }: TodosContent) {
   return (
-    <div className="w-full max-w-[480px] text-sm">
+    <div className="w-full max-w-[480px] px-3 text-sm">
       <div className="mb-1.5 font-medium text-slate-700">📋 Plan</div>
       <ul aria-label="Plan" className="rounded-lg border border-slate-200 bg-white">
         {todos.map(({ content, status }, index) => (
