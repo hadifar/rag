@@ -24,6 +24,11 @@
 - The topical guardrail is advisory, not a gate: an off-topic classification only adds a "please decline" instruction and removes the tools for that turn (`TopicalGuard`) — the model can still be talked out of following the instruction. There is no code path that actually blocks a request.
 - The guardrail classifies only the latest human message in isolation (`_latest_human_message`) — a multi-turn conversation that gradually drifts off-topic or builds up a jailbreak across turns isn't caught, since only the most recent turn is scored.
 - The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `RAG__MAX_REVISIONS` (default 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
+- Saved preferences go into the system prompt in the user's own words, so a user can put
+  instructions there that the prompt only asks the model to rank below its own; it reaches
+  only that user's chats, but it outlives the conversation it was said in.
+- The model decides whether a message states a preference worth saving; it may miss one, or
+  save one the user only implied, which they then have to ask it to forget.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
 
 ## Conversation & session state
@@ -34,7 +39,7 @@
   conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
   but a conversation used on another device meanwhile won't show up until a reload.
 - Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
-  threads, which live in separate tables with no user link — a full user deletion (GDPR) still
+  threads or their preferences in the store, which live in separate tables with no user link — a full user deletion (GDPR) still
   has to delete each conversation's thread first.
 - A thread whose conversation row was removed outside the app (e.g. a user deleted in SQL) is
   unreachable and stays in the checkpoint tables; nothing cleans these up.

@@ -27,11 +27,18 @@ from rag.domain.models import (
     ReferencesReady,
     StreamEvent,
     TextDelta,
+    Tool,
     ToolAgentSpec,
+    ToolCall,
 )
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.preferences import (
+    PREFERENCE_TOOL_NAMES,
+    list_preferences,
+    save_preference,
+)
 from rag.services.agent_service.service import AgentService
 from rag.services.agent_service.turn import to_history
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
@@ -148,10 +155,14 @@ def _no_tracing(name: str | None) -> RunnableConfig:
     return {}
 
 
+_USER = uuid.uuid4()
+
+
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
+        self.store = InMemoryStore()
         agents = AgentService(
-            model, InMemorySaver(), InMemoryStore(), _no_tracing, retry_attempts=3
+            model, InMemorySaver(), self.store, _no_tracing, retry_attempts=3
         )
         self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
@@ -160,7 +171,7 @@ class _Chat:
         self.config: RunnableConfig = agent.get_config("t1")
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.rag.stream_chat(text, "t1")]
+        return [event async for event in self.rag.stream_chat(text, "t1", _USER)]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -287,9 +298,12 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
 
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
     assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
-    assert off_topic_call["tools"] == []
+    # Off-topic, the model keeps only the tools about the user, not the product.
+    assert sorted(off_topic_call["tools"]) == sorted(PREFERENCE_TOOL_NAMES)
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
-    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
+    assert sorted(on_topic_call["tools"]) == sorted(
+        ["search_kb", "write_todos", *PREFERENCE_TOOL_NAMES]
+    )
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
@@ -364,3 +378,106 @@ def test_tools_with_the_same_name_are_rejected_up_front() -> None:
 
     with pytest.raises(ValueError, match="search_kb"):
         agents.create_agent(ToolAgentSpec(system_prompt="", tools=[docs, docs]))
+
+
+def _call(name: str, **args: str) -> AIMessage:
+    return AIMessage(
+        content="", tool_calls=[{"name": name, "args": args, "id": str(uuid.uuid4())}]
+    )
+
+
+async def test_saved_preferences_are_in_every_model_calls_prompt_not_the_thread() -> (
+    None
+):
+    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("Het kost 10.")])
+    chat = _Chat(model)
+    await save_preference(chat.store, _USER, "Answer in Dutch")
+
+    await chat.send("How much?")
+
+    assert all("Answer in Dutch" in c["messages"][0].text for c in model.agent_calls)
+    assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
+
+
+async def test_a_preference_saved_in_one_turn_applies_from_the_next_call_on() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _call("save_user_preference", text="Keep answers short"),
+            _answer("Noted."),
+            _search("pricing"),
+            _answer("10."),
+        ]
+    )
+    chat = _Chat(model)
+
+    events = await chat.send("Please always keep answers short")
+    await chat.send("How much?")
+
+    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+        "Keep answers short"
+    ]
+    assert "Keep answers short" not in model.agent_calls[0]["messages"][0].text
+    assert "Keep answers short" in model.agent_calls[1]["messages"][0].text
+    # Saving a preference is no search: the turn cites nothing and isn't verified.
+    assert not any(isinstance(e, ReferencesReady) for e in events)
+    assert len(model.verifier_calls) == 1  # only the pricing answer
+
+
+async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _call("save_user_preference", text="Answer in Dutch"),
+            _answer("Opgeslagen."),
+        ],
+        off_topic_messages={"Always answer in Dutch"},
+    )
+    chat = _Chat(model)
+
+    await chat.send("Always answer in Dutch")
+
+    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+        "Answer in Dutch"
+    ]
+
+
+async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
+    model = _ScriptedChatModel(answers=[])
+    chat = _Chat(model)
+    mine = await save_preference(chat.store, _USER, "Answer in Dutch")
+    theirs = await save_preference(chat.store, uuid.uuid4(), "Answer in French")
+    model.answers.extend(
+        [
+            _call("forget_user_preference", preference_id=theirs.id),
+            _call("forget_user_preference", preference_id=mine.id),
+            _answer("Done."),
+        ]
+    )
+
+    events = await chat.send("Forget my preferences")
+
+    outputs = [e.output for e in events if isinstance(e, ToolCall) and e.output]
+    assert outputs == [
+        f"No saved preference has the id {theirs.id}.",
+        f"Forgot preference {mine.id}.",
+    ]
+    assert await list_preferences(chat.store, _USER) == []
+
+
+def test_a_tool_cant_take_a_preference_tools_name() -> None:
+    agents = AgentService(
+        _ScriptedChatModel(answers=[]),
+        InMemorySaver(),
+        InMemoryStore(),
+        _no_tracing,
+        retry_attempts=3,
+    )
+    clash = Tool(
+        name="save_user_preference",
+        description="",
+        run=search_tool(_StubRetrievalService()).run,
+    )
+
+    with pytest.raises(ValueError, match="save_user_preference"):
+        agents.create_agent(
+            ToolAgentSpec(system_prompt="", tools=[clash], remember_preferences=True)
+        )

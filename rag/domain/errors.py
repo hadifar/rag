@@ -151,3 +151,23 @@ class BlankTitleError(AppError):
 
     def __init__(self):
         super().__init__("The LLM returned a blank conversation title")
+
+
+class InvalidPreferenceError(AppError):
+    """Raised when a preference is blank or too long."""
+
+    status_code: ClassVar[int] = 400
+
+    def __init__(self, reason: str):
+        super().__init__(f"Invalid preference: {reason}")
+
+
+class TooManyPreferencesError(AppError):
+    """Raised when a user who already has the most preferences allowed adds another."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, max_preferences: int):
+        super().__init__(
+            f"You can keep at most {max_preferences} preferences; remove one first"
+        )

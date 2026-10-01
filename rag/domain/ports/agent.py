@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncIterator
 from typing import Protocol
 
@@ -7,9 +8,12 @@ from rag.domain.models import AgentSpec, HistoryMessage, StreamEvent
 
 
 class ChatAgentPort(Protocol):
-    def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
-        """Answers `message` in the thread, saving the turn to it: the answer's events
-        as they happen, then the turn's sources if it searched.
+    def stream(
+        self, message: str, thread_id: str, user_id: uuid.UUID
+    ) -> AsyncIterator[StreamEvent]:
+        """Answers `message` in the thread for `user_id` (whose preferences apply),
+        saving the turn to it: the answer's events as they happen, then the turn's
+        sources if it searched.
         """
         ...
 

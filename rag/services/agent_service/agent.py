@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncIterator, Callable
 
 from langchain_core.messages import HumanMessage
@@ -5,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
 
 from rag.domain.models import ReferencesReady, StreamEvent
+from rag.services.agent_service.preferences import ChatContext
 from rag.services.agent_service.streaming import parse_event
 from rag.services.agent_service.turn import turn_references
 
@@ -26,11 +28,16 @@ class Agent:
     def get_config(self, thread_id: str) -> RunnableConfig:
         return {"configurable": {"thread_id": thread_id}, **self._trace_config("chat")}
 
-    async def stream(self, message: str, thread_id: str) -> AsyncIterator[StreamEvent]:
+    async def stream(
+        self, message: str, thread_id: str, user_id: uuid.UUID
+    ) -> AsyncIterator[StreamEvent]:
         config = self.get_config(thread_id)
 
         async for raw_event in self._graph.astream_events(
-            {"messages": [HumanMessage(content=message)]}, config=config, version="v2"
+            {"messages": [HumanMessage(content=message)]},
+            config=config,
+            context=ChatContext(user_id=user_id),
+            version="v2",
         ):
             event = parse_event(raw_event)
             if event is not None:

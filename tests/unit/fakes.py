@@ -277,7 +277,7 @@ class StubRag:
         self.sources = sources
 
     async def stream_chat(
-        self, message: str, thread_id: str
+        self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
         reply = f"echo: {message}"
         self.threads.setdefault(thread_id, []).extend(

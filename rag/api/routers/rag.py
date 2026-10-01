@@ -39,10 +39,11 @@ async def _require_owned_conversation(
 async def send_message(
     conversation_id: uuid.UUID,
     message_request: MessageRequest,
+    current_user: AuthenticatedUserDep,
     rag_service: RagServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
     async for event in rag_service.stream_chat(
-        message_request.message, str(conversation_id)
+        message_request.message, str(conversation_id), current_user.id
     ):
         yield to_stream_event(event)

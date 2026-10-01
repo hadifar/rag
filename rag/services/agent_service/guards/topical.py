@@ -9,6 +9,7 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 
 from rag.services.agent_service.prompts import (
@@ -35,21 +36,27 @@ async def is_relevant(classify: Classify, messages: Sequence[BaseMessage]) -> bo
     return "IRRELEVANT" not in verdict.upper()
 
 
+def _name(tool: BaseTool | dict[str, Any]) -> str | None:
+    return tool.get("name") if isinstance(tool, dict) else tool.name
+
+
 class TopicalState(AgentState):
     off_topic: NotRequired[Annotated[bool, PrivateStateAttr]]
 
 
 class TopicalGuard(AgentMiddleware[TopicalState]):
     """Classifies each user message once per turn; for an off-topic one, the model is
-    told to decline and gets no tools. The instruction is added to that model call
+    told to decline and gets no tools but `kept_tools` (ones about the user, not the
+    product, e.g. saving a preference). The instruction is added to that model call
     only, never saved to the thread, so it can't leak into later turns.
     """
 
     state_schema = TopicalState
 
-    def __init__(self, classifier: Classify):
+    def __init__(self, classifier: Classify, kept_tools: frozenset[str] = frozenset()):
         super().__init__()
         self._classifier = classifier
+        self._kept_tools = kept_tools
 
     async def abefore_agent(
         self, state: TopicalState, runtime: Runtime
@@ -68,6 +75,6 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
                 system_message=SystemMessage(
                     content=f"{base}\n\n{OFF_TOPIC_INSTRUCTION}"
                 ),
-                tools=[],
+                tools=[t for t in request.tools if _name(t) in self._kept_tools],
             )
         return await handler(request)
