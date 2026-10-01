@@ -123,6 +123,11 @@ on `Settings.LLM`, a discriminated union selected by `LLM__BACKEND`:
 - `"azure_openai"` — `AzureChatOpenAI`, requiring `LLM__API_KEY` / `LLM__ENDPOINT` /
   `LLM__DEPLOYMENT` / `LLM__API_VERSION`.
 
+Either backend also takes `LLM__TEMPERATURE` (default `0.2`) and `LLM__RETRY_ATTEMPTS` (default
+`3`, tries per LLM call in agents and guards before the fallback). Retrieval and the guards are
+tuned under `RAG__`: `RAG__TOP_K` (default `3`, passages per search) and `RAG__MAX_REVISIONS`
+(default `1`, times the groundedness guard sends an answer back per turn).
+
 [infra/azure/main.bicep](../infra/azure/main.bicep)'s `llmProvider` param selects between the two
 at deploy time — see [docs/infra.md](infra.md) for the parameters each one needs.
 
@@ -219,7 +224,7 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 - `"logging"` (default) — `_LoggingCallbackHandler` logs LLM/tool start/end events through the
   standard `logging` module; zero extra infra.
 - `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `OBSERVABILITY__PUBLIC_KEY` /
-  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservability`
+  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservabilityConfig`
   model in `config.py` — missing one fails at startup). On teardown, the context manager's
   `finally` calls `get_client().flush()` so short-lived runs aren't lost.
 
@@ -290,6 +295,6 @@ there, so the response status comes from the exception class itself.
 - `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).
-- `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI.
-  `temperature` and `top_k` are currently static constants in the router, not yet threaded
-  through the actual generation/retrieval calls they name.
+- `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI, read from
+  the configured `Settings`: `LLM__MODEL` (the deployment on Azure), `LLM__TEMPERATURE` and
+  `RAG__TOP_K` — the same values generation and retrieval run with.

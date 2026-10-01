@@ -5,10 +5,12 @@ from typing import Annotated, Literal
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag.domain.constants import DEFAULT_PAGE_SIZE, MAX_MESSAGE_LENGTH, MAX_PAGE_SIZE
+MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 
+# Conversation list paging
+MAX_PAGE_SIZE = 100
 PageLimit = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
-DEFAULT_PAGE_LIMIT = DEFAULT_PAGE_SIZE
+DEFAULT_PAGE_LIMIT = 30
 
 
 class ConversationResponse(BaseModel):

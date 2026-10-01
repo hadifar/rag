@@ -8,7 +8,7 @@ from pathlib import Path
 from azure.identity.aio import DefaultAzureCredential
 from azure.storage.blob.aio import ContainerClient
 
-from rag.config import AzureBlobKbStorage, LocalKbStorage, Settings
+from rag.config import AzureBlobKbStorageConfig, LocalKbStorageConfig, Settings
 from rag.domain.ports import ArchiveStorePort
 
 
@@ -66,9 +66,9 @@ class AzureBlobArchiveStore:
 @asynccontextmanager
 async def open_archive_store(settings: Settings) -> AsyncGenerator[ArchiveStorePort]:
     match settings.KB_STORAGE:
-        case LocalKbStorage() as config:
+        case LocalKbStorageConfig() as config:
             yield LocalArchiveStore(config.DIR)
-        case AzureBlobKbStorage() as config:
+        case AzureBlobKbStorageConfig() as config:
             async with (
                 DefaultAzureCredential() as credential,
                 ContainerClient(

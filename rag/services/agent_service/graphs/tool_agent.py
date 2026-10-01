@@ -12,7 +12,6 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.domain.constants import LLM_RETRY_ATTEMPTS
 from rag.domain.models import (
     Check,
     GroundednessCheck,
@@ -70,6 +69,7 @@ def build_tool_agent(
     spec: ToolAgentSpec,
     classify: Classify,
     checkpointer: BaseCheckpointSaver,
+    retry_attempts: int,
 ) -> CompiledStateGraph:
     tools = _to_langchain_tools(spec.tools)
 
@@ -85,7 +85,7 @@ def build_tool_agent(
         middleware.append(TodoListMiddleware(system_prompt=instructions))
     middleware.append(
         ModelRetryMiddleware(
-            max_retries=LLM_RETRY_ATTEMPTS - 1, on_failure=_fallback_message
+            max_retries=retry_attempts - 1, on_failure=_fallback_message
         )
     )
     return create_agent(

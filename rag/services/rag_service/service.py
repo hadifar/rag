@@ -1,6 +1,5 @@
 from collections.abc import AsyncIterator
 
-from rag.domain.constants import MAX_REVISIONS
 from rag.domain.models import (
     GroundednessCheck,
     OffTopicCheck,
@@ -16,15 +15,19 @@ from rag.services.rag_service.tools import search_tool
 class RagService:
     """A chat turn grounded in the knowledge base: a tool-calling agent that searches
     `retrieval_service`, declines off-topic questions, and revises answers its searches
-    don't support.
+    don't support, up to `max_revisions` times per turn.
     """
 
-    def __init__(self, retrieval_service: SearchPort, agent_service: AgentServicePort):
-
+    def __init__(
+        self,
+        retrieval_service: SearchPort,
+        agent_service: AgentServicePort,
+        max_revisions: int,
+    ):
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
-            checks=[OffTopicCheck(), GroundednessCheck(MAX_REVISIONS)],
+            checks=[OffTopicCheck(), GroundednessCheck(max_revisions)],
             planning=Planning(PLANNING_INSTRUCTIONS),
         )
 

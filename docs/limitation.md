@@ -18,15 +18,13 @@
 - The keyword side is Postgres full-text with the `english` configuration and `ts_rank_cd`, not BM25: no IDF weighting, and non-English documents are stemmed as English
 - No reranker
 - Reciprocal rank fusion uses a hardcoded `k=5` (`_reciprocal_rank_fusion`) — untuned against any eval set; the conventional default is `k=60`, and this choice overweights whichever result lands rank 1
-- `top_k` is hardcoded to 3 in `RetrievalService.search` and never threaded through — `/api/settings` reports `top_k: 4`, which isn't actually what retrieval uses
 - No retrieval evaluation at all: no golden Q&A set, no precision/recall/groundedness metrics, nothing to catch a regression from a prompt, chunking, or model change before it ships
 
 ## Generation & guardrails
 - The topical guardrail is advisory, not a gate: an off-topic classification only adds a "please decline" instruction and removes the tools for that turn (`TopicalGuard`) — the model can still be talked out of following the instruction. There is no code path that actually blocks a request.
 - The guardrail classifies only the latest human message in isolation (`_latest_human_message`) — a multi-turn conversation that gradually drifts off-topic or builds up a jailbreak across turns isn't caught, since only the most recent turn is scored.
-- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_REVISIONS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
+- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `RAG__MAX_REVISIONS` (default 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
-- `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
 ## Conversation & session state
 - The LLM title is a separate request the client makes once a new conversation's first answer

@@ -6,7 +6,7 @@ from typing import Any
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 
-from rag.config import LangfuseObservability, LoggingObservability, Settings
+from rag.config import LangfuseObservabilityConfig, LoggingObservabilityConfig, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,16 @@ def _logging_trace_config(name: str | None = None) -> RunnableConfig:
 
 
 @asynccontextmanager
-async def _open_logging(config: LoggingObservability) -> AsyncGenerator[TraceConfig]:
+async def _open_logging(
+    config: LoggingObservabilityConfig,
+) -> AsyncGenerator[TraceConfig]:
     yield _logging_trace_config
 
 
 @asynccontextmanager
-async def _open_langfuse(config: LangfuseObservability) -> AsyncGenerator[TraceConfig]:
+async def _open_langfuse(
+    config: LangfuseObservabilityConfig,
+) -> AsyncGenerator[TraceConfig]:
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
 
@@ -74,9 +78,9 @@ async def _open_langfuse(config: LangfuseObservability) -> AsyncGenerator[TraceC
 @asynccontextmanager
 async def open_trace_config(settings: Settings) -> AsyncGenerator[TraceConfig]:
     match settings.OBSERVABILITY:
-        case LoggingObservability() as config:
+        case LoggingObservabilityConfig() as config:
             async with _open_logging(config) as trace_config:
                 yield trace_config
-        case LangfuseObservability() as config:
+        case LangfuseObservabilityConfig() as config:
             async with _open_langfuse(config) as trace_config:
                 yield trace_config

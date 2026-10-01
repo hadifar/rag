@@ -149,8 +149,8 @@ def _no_tracing(name: str | None) -> RunnableConfig:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        agents = AgentService(model, InMemorySaver(), _no_tracing)
-        self.rag = RagService(_StubRetrievalService(), agents)
+        agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+        self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
@@ -246,7 +246,7 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
 
     events = await _Chat(model).send("first")
 
-    # MAX_REVISIONS is 1: one revision, and the revised answer isn't re-verified.
+    # max_revisions is 1: one revision, and the revised answer isn't re-verified.
     assert sum(_is_revision_call(call) for call in model.agent_calls) == 1
     assert len(model.verifier_calls) == 1
     assert _text(events).endswith("still wrong")
@@ -350,7 +350,9 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
 
 
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:
-    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver(), _no_tracing)
+    agents = AgentService(
+        _ScriptedChatModel(answers=[]), InMemorySaver(), _no_tracing, retry_attempts=3
+    )
     docs = search_tool(_StubRetrievalService())
 
     with pytest.raises(ValueError, match="search_kb"):

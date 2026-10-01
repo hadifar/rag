@@ -6,7 +6,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
-from rag.domain.constants import LLM_RETRY_ATTEMPTS
 from rag.domain.models import AgentSpec, ToolAgentSpec
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
@@ -24,10 +23,12 @@ class AgentService:
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig],
+        retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
         self._checkpointer = checkpointer
         self._trace_config = trace_config
+        self._retry_attempts = retry_attempts
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         """One-shot completion as plain text, tried up to `attempts` times; raises if
@@ -53,7 +54,11 @@ class AgentService:
         match spec:
             case ToolAgentSpec():
                 graph = build_tool_agent(
-                    self._llm, spec, self._classify, self._checkpointer
+                    self._llm,
+                    spec,
+                    self._classify,
+                    self._checkpointer,
+                    self._retry_attempts,
                 )
         return Agent(graph, self._trace_config)
 
@@ -62,5 +67,5 @@ class AgentService:
         fallback message, which neither guard reads as a rejection (they fail open).
         """
         return await or_default(
-            self.generate(prompt, attempts=LLM_RETRY_ATTEMPTS), FALLBACK_MESSAGE
+            self.generate(prompt, attempts=self._retry_attempts), FALLBACK_MESSAGE
         )

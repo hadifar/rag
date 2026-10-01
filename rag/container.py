@@ -46,16 +46,21 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         open_archive_store(settings) as archive_store,
     ):
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
-        retrieval_service = RetrievalService(vector_store=vector_store)
+        retrieval_service = RetrievalService(
+            vector_store=vector_store, top_k=settings.RAG.TOP_K
+        )
 
         agent_service = AgentService(
             llm=build_llm(settings),
             checkpointer=checkpointer,
             trace_config=trace_config,
+            retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
 
         rag_service = RagService(
-            retrieval_service=retrieval_service, agent_service=agent_service
+            retrieval_service=retrieval_service,
+            agent_service=agent_service,
+            max_revisions=settings.RAG.MAX_REVISIONS,
         )
 
         ingestion_service = IngestionService(

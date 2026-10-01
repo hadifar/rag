@@ -7,11 +7,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from rag.domain.constants import (
-    FALLBACK_TITLE_LENGTH,
-    MAX_TITLE_LENGTH,
-    TITLE_MESSAGE_EXCERPT,
-)
 from rag.domain.errors import (
     BlankTitleError,
     ConversationNotFoundError,
@@ -24,6 +19,12 @@ from rag.shared.resilience import or_default
 TITLE_PROMPT = (
     "Write a title for a support conversation that starts with the message below.\n\n"
     "USER:\n{message}"
+)
+# Only the start of the message is needed to title it; caps the title call's cost.
+TITLE_MESSAGE_EXCERPT = 1000
+MAX_TITLE_LENGTH = 80  # cap on an LLM-written title
+FALLBACK_TITLE_LENGTH = (
+    60  # the title cut from the message when the LLM can't write one
 )
 
 

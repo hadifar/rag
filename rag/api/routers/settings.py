@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from rag.api.deps import get_current_user
+from rag.api.deps import SettingsDep, get_current_user
 from rag.api.schema.settings import SettingsResponse
 
 router = APIRouter(
@@ -9,5 +9,5 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_settings() -> SettingsResponse:
-    return SettingsResponse.reported()
+async def get_settings(settings: SettingsDep) -> SettingsResponse:
+    return SettingsResponse.from_settings(settings)

@@ -19,8 +19,8 @@ from rag.api.deps import get_current_user
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
-    LoggingObservability,
-    OpenAILLM,
+    LoggingObservabilityConfig,
+    OpenAILLMConfig,
     Settings,
 )
 from rag.container import Container
@@ -65,12 +65,12 @@ class _StubRetrievalService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
+        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
         DATABASE_URL=SecretStr("unused"),
         AUTH=AuthConfig(
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
         ),
-        OBSERVABILITY=LoggingObservability(),
+        OBSERVABILITY=LoggingObservabilityConfig(),
     )
 
 
