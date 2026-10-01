@@ -1,22 +1,78 @@
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel
 
 from rag.domain.errors import PreferenceNotFoundError
-from rag.domain.models import AgentSpec, HistoryMessage, Preference, ToolAgentSpec
-from rag.services.agent_service import preferences
-from rag.services.agent_service.agent import Agent
-from rag.services.agent_service.graphs.tool_agent import build_tool_agent
+from rag.domain.models import (
+    AgentSpec,
+    HistoryMessage,
+    Preference,
+    ReferencesReady,
+    StreamEvent,
+    ToolAgentSpec,
+)
+from rag.services.agent_service.graphs.agent_builder import build_tool_agent
+from rag.services.agent_service.middleware import preferences
+from rag.services.agent_service.middleware.preferences import ChatContext
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
-from rag.services.agent_service.turn import to_history
+from rag.services.agent_service.streaming import parse_event
+from rag.services.agent_service.turn import to_history, turn_references
 from rag.shared.resilience import or_default
+
+# TODO: error hanlding -> Something went wrong: Unexpected end of JSON input
+
+# Graph steps a turn may take before LangGraph stops it (its default is 25). Each tool
+# round trip plus the guards' and retry middleware's nodes cost several steps.
+RECURSION_LIMIT = 75
+
+
+class Agent:
+    """A chat agent on any message-state graph: streams each turn's events, then what its
+    tools cited. The graph saves the turn's messages through its checkpointer; the agent
+    service reads them back (`AgentService.get_history`).
+    """
+
+    def __init__(
+        self,
+        graph: CompiledStateGraph,
+        trace_config: Callable[[str | None], RunnableConfig],
+    ):
+        self._graph = graph
+        self._trace_config = trace_config
+
+    def _config(self, thread_id: str) -> RunnableConfig:
+        return {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": RECURSION_LIMIT,
+            **self._trace_config("chat"),
+        }
+
+    async def stream(
+        self, message: str, thread_id: str, user_id: uuid.UUID
+    ) -> AsyncIterator[StreamEvent]:
+        config = self._config(thread_id)
+
+        async for raw_event in self._graph.astream_events(
+            {"messages": [HumanMessage(content=message)]},
+            config=config,
+            context=ChatContext(user_id=user_id),
+            version="v2",
+        ):
+            for event in parse_event(raw_event):
+                yield event
+
+        final_state = await self._graph.aget_state(config)
+        references = turn_references(final_state.values.get("messages", []))
+        if references is not None:
+            yield ReferencesReady(references=references)
 
 
 class AgentService:

@@ -2,10 +2,11 @@ import uuid
 from collections.abc import AsyncIterator
 
 from rag.domain.models import (
-    GroundednessCheck,
-    OffTopicCheck,
-    Planning,
+    GroundednessMiddleware,
+    OffTopicMiddleware,
+    PreferenceMiddleware,
     StreamEvent,
+    TodolistMiddleware,
     ToolAgentSpec,
 )
 from rag.domain.ports import AgentServicePort, SearchPort
@@ -25,14 +26,18 @@ class RagService:
         agent_service: AgentServicePort,
         max_revisions: int,
     ):
+        # define agent spec
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
-            checks=[OffTopicCheck(), GroundednessCheck(max_revisions)],
-            planning=Planning(PLANNING_INSTRUCTIONS),
-            remember_preferences=True,
+            middleware=[
+                OffTopicMiddleware(),
+                GroundednessMiddleware(max_revisions),
+                PreferenceMiddleware(),
+                TodolistMiddleware(PLANNING_INSTRUCTIONS),
+            ],
         )
-
+        # create agent
         self._agent = agent_service.create_agent(agent_spec)
 
     async def stream_chat(

@@ -23,23 +23,25 @@ from langgraph.store.memory import InMemoryStore
 from pydantic import Field
 
 from rag.domain.models import (
+    AssistantMessage,
     Chunk,
+    PreferenceMiddleware,
     ReferencesReady,
     StreamEvent,
     TextDelta,
     Tool,
     ToolAgentSpec,
     ToolCall,
+    UserMessage,
 )
-from rag.services.agent_service.agent import Agent
-from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.preferences import (
+from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.middleware.preferences import (
     PREFERENCE_TOOL_NAMES,
     list_preferences,
     save_preference,
 )
-from rag.services.agent_service.service import AgentService
+from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.service import Agent, AgentService
 from rag.services.agent_service.turn import to_history
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
@@ -168,7 +170,7 @@ class _Chat:
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
-        self.config: RunnableConfig = agent.get_config("t1")
+        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
 
     async def send(self, text: str) -> list[StreamEvent]:
         return [event async for event in self.rag.stream_chat(text, "t1", _USER)]
@@ -331,9 +333,7 @@ async def test_verifier_only_sees_the_current_turns_context(
         assert "facts about pricing" not in model.verifier_calls[1]
 
 
-async def test_history_shows_each_question_with_its_final_answer_and_references() -> (
-    None
-):
+async def test_history_replays_each_turn_without_its_rejected_drafts() -> None:
     model = _ScriptedChatModel(
         answers=[
             _search("pricing"),
@@ -352,14 +352,29 @@ async def test_history_shows_each_question_with_its_final_answer_and_references(
 
     history = to_history(await chat.saved_messages())
 
-    assert [(m.role, m.text, m.references) for m in history] == [
-        ("user", "How much?", None),
-        ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
-        ("user", "thanks", None),
-        ("assistant", "You're welcome!", None),  # didn't search
-        ("user", "Who won the cup?", None),
-        ("assistant", "I don't know.", []),  # searched, found nothing
+    assert [m.role for m in history] == ["user", "assistant"] * 3
+    questions = [m.text for m in history if isinstance(m, UserMessage)]
+    answers = [m.events for m in history if isinstance(m, AssistantMessage)]
+    assert questions == ["How much?", "thanks", "Who won the cup?"]
+    # The rejected draft ("wrong") is dropped.
+    assert [_text(events) for events in answers] == [
+        "revised",
+        "You're welcome!",
+        "I don't know.",
     ]
+    assert [
+        [(e.status, e.query) for e in events if isinstance(e, ToolCall)]
+        for events in answers
+    ] == [
+        [("pending", "pricing"), ("done", None)],
+        [],
+        [("pending", _NO_RESULTS_QUERY), ("done", None)],
+    ]
+    # None: didn't search; []: searched, found nothing.
+    assert [
+        next((e.references for e in events if isinstance(e, ReferencesReady)), None)
+        for events in answers
+    ] == [["pricing"], None, []]
 
 
 def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
@@ -481,5 +496,7 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
 
     with pytest.raises(ValueError, match="save_user_preference"):
         agents.create_agent(
-            ToolAgentSpec(system_prompt="", tools=[clash], remember_preferences=True)
+            ToolAgentSpec(
+                system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
+            )
         )

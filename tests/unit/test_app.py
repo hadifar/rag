@@ -13,7 +13,6 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.api.deps import get_current_user
 from rag.app import create_app
@@ -38,6 +37,7 @@ from tests.unit.fakes import (
     FakeConversationRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
+    FakePasswordHasher,
     FakeUserRepository,
     StubGeneration,
     StubRag,
@@ -77,7 +77,7 @@ def _stub_settings() -> Settings:
 def _build_auth_service() -> AuthService:
     return AuthService(
         user_repository=FakeUserRepository(),
-        pass_hasher=Argon2PasswordHasher(),
+        pass_hasher=FakePasswordHasher(),
         token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
         refresh_ttl=timedelta(days=7),
@@ -437,10 +437,30 @@ def test_conversation_messages_and_delete(
     conversation_id = _start_conversation(client, auth_headers)
     messages_url = f"/api/conversations/{conversation_id}/messages"
 
-    messages = client.get(messages_url, headers=auth_headers).json()
-    assert [(m["role"], m["text"]) for m in messages] == [
-        ("user", "hi"),
-        ("assistant", "echo: hi"),
+    # The answer as the same events its stream sent, for the frontend to replay.
+    assert client.get(messages_url, headers=auth_headers).json() == [
+        {"role": "user", "text": "hi"},
+        {
+            "role": "assistant",
+            "events": [
+                {"type": "text", "text": "echo: hi"},
+                {
+                    "type": "tool",
+                    "name": "search",
+                    "status": "pending",
+                    "query": "hi",
+                    "output": None,
+                },
+                {
+                    "type": "tool",
+                    "name": "search",
+                    "status": "done",
+                    "query": None,
+                    "output": "stub result",
+                },
+                {"type": "references", "references": ["doc-a", "doc-b"]},
+            ],
+        },
     ]
 
     deleted = client.delete(

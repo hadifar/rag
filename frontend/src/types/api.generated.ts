@@ -344,6 +344,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AssistantMessageResponse
+         * @description A past answer as the events its stream sent, in order; replayed like the live stream.
+         */
+        AssistantMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "assistant";
+            /** Events */
+            events: components["schemas"]["StreamEventResponse"][];
+        };
         /** Body_upload_knowledge_base_api_ingestions_post */
         Body_upload_knowledge_base_api_ingestions_post: {
             /** File */
@@ -386,18 +399,11 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** HistoryMessageResponse */
-        HistoryMessageResponse: {
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant";
-            /** Text */
-            text: string;
-            /** References */
-            references: string[] | null;
-        };
+        /**
+         * HistoryMessageResponse
+         * @description One message of a saved conversation, told apart by `role`.
+         */
+        HistoryMessageResponse: components["schemas"]["UserMessageResponse"] | components["schemas"]["AssistantMessageResponse"];
         /** IngestionRunResponse */
         IngestionRunResponse: {
             /**
@@ -453,6 +459,19 @@ export interface components {
             text: string;
         };
         /**
+         * ReasoningEvent
+         * @description A piece of the model's reasoning summary, in order.
+         */
+        ReasoningEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reasoning";
+            /** Text */
+            text: string;
+        };
+        /**
          * ReferencesEvent
          * @description The turn's deduplicated references, once it's done. Only sent if the turn searched.
          */
@@ -479,7 +498,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["ReferencesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
@@ -492,6 +511,29 @@ export interface components {
             type: "text";
             /** Text */
             text: string;
+        };
+        /** TodoItem */
+        TodoItem: {
+            /** Content */
+            content: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "completed";
+        };
+        /**
+         * TodosEvent
+         * @description The agent's whole plan, each time it rewrites it.
+         */
+        TodosEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "todos";
+            /** Todos */
+            todos: components["schemas"]["TodoItem"][];
         };
         /** TokenResponse */
         TokenResponse: {
@@ -524,6 +566,16 @@ export interface components {
             query?: string | null;
             /** Output */
             output?: string | null;
+        };
+        /** UserMessageResponse */
+        UserMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "user";
+            /** Text */
+            text: string;
         };
         /** UserResponse */
         UserResponse: {

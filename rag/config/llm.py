@@ -9,6 +9,10 @@ class _ChatModelConfig(BaseModel):
     TEMPERATURE: float = Field(default=0.2, ge=0, le=2)
     # Tries per LLM call, in agents and guards, before falling back.
     RETRY_ATTEMPTS: int = Field(default=3, ge=1)
+    # Set only for a reasoning model (e.g. gpt-5-mini, o4-mini): switches to the
+    # Responses API so its reasoning summary streams to the user. TEMPERATURE is then
+    # ignored, since reasoning models reject it.
+    REASONING_EFFORT: Literal["minimal", "low", "medium", "high"] | None = None
 
 
 class OpenAILLMConfig(_ChatModelConfig):

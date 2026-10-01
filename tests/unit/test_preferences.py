@@ -5,7 +5,7 @@ from langgraph.store.memory import InMemoryStore
 
 from rag.domain.errors import InvalidPreferenceError, TooManyPreferencesError
 from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES
-from rag.services.agent_service.preferences import (
+from rag.services.agent_service.middleware.preferences import (
     delete_preference,
     list_preferences,
     save_preference,

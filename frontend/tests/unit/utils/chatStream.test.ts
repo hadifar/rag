@@ -36,6 +36,37 @@ describe('createBubbleHandler', () => {
     });
   });
 
+  it('grows one reasoning bubble, and ends it when the answer starts', () => {
+    const { append, update, handle } = setup();
+
+    handle({ type: 'reasoning', text: 'Weigh' });
+    handle({ type: 'reasoning', text: 'ing' });
+    handle({ type: 'text', text: 'Answer' });
+
+    expect(append).toHaveBeenNthCalledWith(1, {
+      type: 'reasoning',
+      content: { text: 'Weigh', streaming: true },
+    });
+    expect(update).toHaveBeenCalledWith('m1', {
+      type: 'reasoning',
+      content: { text: 'Weighing', streaming: false },
+    });
+    expect(append).toHaveBeenNthCalledWith(2, assistantText('Answer'));
+  });
+
+  it('starts a new reasoning bubble for reasoning that follows a tool call', () => {
+    const { append, handle } = setup();
+
+    handle({ type: 'reasoning', text: 'First' });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'pricing' });
+    handle({ type: 'reasoning', text: 'Second' });
+
+    expect(append).toHaveBeenNthCalledWith(3, {
+      type: 'reasoning',
+      content: { text: 'Second', streaming: true },
+    });
+  });
+
   it('still shows a references bubble when the search found nothing', () => {
     const { append, handle } = setup();
 
@@ -75,5 +106,31 @@ describe('createBubbleHandler', () => {
       type: 'tool',
       content: { name: 'search', output: 'result b', status: 'done' },
     });
+  });
+
+  it('rewrites one plan bubble in place each time the plan changes', () => {
+    const { append, update, handle } = setup();
+    const first = [{ content: 'Find the note', status: 'in_progress' as const }];
+    const second = [{ content: 'Find the note', status: 'completed' as const }];
+
+    handle({ type: 'todos', todos: first });
+    handle({ type: 'tool', name: 'search', status: 'pending', query: 'note' });
+    handle({ type: 'todos', todos: second });
+
+    expect(append).toHaveBeenNthCalledWith(1, { type: 'todos', content: { todos: first } });
+    expect(update).toHaveBeenCalledExactlyOnceWith('m1', {
+      type: 'todos',
+      content: { todos: second },
+    });
+  });
+
+  it('starts a new assistant bubble for text that follows the plan', () => {
+    const { append, handle } = setup();
+
+    handle({ type: 'text', text: 'Let me plan.' });
+    handle({ type: 'todos', todos: [{ content: 'Find the note', status: 'pending' }] });
+    handle({ type: 'text', text: 'Here is the answer.' });
+
+    expect(append).toHaveBeenNthCalledWith(3, assistantText('Here is the answer.'));
   });
 });

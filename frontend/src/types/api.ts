@@ -11,13 +11,18 @@ export type UserResponse = Schemas['UserResponse'];
 
 // agent.py
 export type TextEvent = Schemas['TextEvent'];
+export type ReasoningEvent = Schemas['ReasoningEvent'];
 export type ToolEvent = Schemas['ToolEvent'];
+export type TodoItem = Schemas['TodoItem'];
+export type TodosEvent = Schemas['TodosEvent'];
 export type ReferencesEvent = Schemas['ReferencesEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];
 
 // conversation.py
 export type ConversationResponse = Schemas['ConversationResponse'];
 export type ConversationPageResponse = Schemas['ConversationPageResponse'];
+export type UserMessageResponse = Schemas['UserMessageResponse'];
+export type AssistantMessageResponse = Schemas['AssistantMessageResponse'];
 export type HistoryMessageResponse = Schemas['HistoryMessageResponse'];
 export type MessageRequest = Schemas['MessageRequest'];
 

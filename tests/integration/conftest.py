@@ -8,8 +8,8 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import ValidationError
 
-from rag.adapters.archive_store import LocalArchiveStore
-from rag.adapters.llm_client import build_embeddings
+from rag.adapters.kb_archive_store import LocalArchiveStore
+from rag.adapters.lang_llm_client import build_embeddings
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository

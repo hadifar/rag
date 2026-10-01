@@ -9,10 +9,7 @@ RAG_SYSTEM_PROMPT = (
 
 # The chat agent's Planning: when to plan with write_todos, which only it can see.
 PLANNING_INSTRUCTIONS = (
-    "For a simple question, search and answer directly. Do not use write_todos for it.\n"
-    "When a message holds several distinct questions, or one that needs several "
-    "searches (comparing plans, a multi-step how-to), use write_todos first to list "
-    "one todo per question or search. Then work through them in order: mark a todo "
+    "Always use write_todos first to list one todo per question or search. Then work through them in order: mark a todo "
     "in_progress, run search_kb with a query focused on just that part, and mark it "
     "completed before starting the next. If a search shows the plan needs changing, "
     "update the list. Todos are your private scratchpad: never mention them to the "

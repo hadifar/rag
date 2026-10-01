@@ -26,7 +26,9 @@ class LangGraphPersistence:
 
 
 @asynccontextmanager
-async def open_langgraph(settings: Settings) -> AsyncGenerator[LangGraphPersistence]:
+async def open_langgraph(
+    settings: Settings,
+) -> AsyncGenerator[LangGraphPersistence, None]:
     """Opens the checkpointer and the store on one connection pool of their own for the
     caller's scope and tears it down on exit. Same database as `open_db_pool`, but a
     separate pool: both need dict rows, autocommit, no prepared statements and their own

@@ -3,13 +3,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
-from rag.adapters.archive_store import open_archive_store
 from rag.adapters.argon2 import Argon2PasswordHasher
-from rag.adapters.db import open_db_pool
 from rag.adapters.jwt_codec import JwtTokenCodec
-from rag.adapters.langgraph_persistence import open_langgraph
-from rag.adapters.llm_client import build_embeddings, build_llm
-from rag.adapters.observability import open_trace_config
+from rag.adapters.kb_archive_store import open_archive_store
+from rag.adapters.lang_llm_client import build_embeddings, build_llm
+from rag.adapters.lang_memory import open_langgraph
+from rag.adapters.lang_observability import open_trace_config
+from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
@@ -35,7 +35,7 @@ class Container:
 
 
 @asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container]:
+async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:
     """Opens connections and tears it down on exit."""
 
     async with (

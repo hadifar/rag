@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from rag.domain.models.agent.stream import StreamEvent
+
 
 @dataclass(frozen=True)
 class Conversation:
@@ -22,8 +24,19 @@ class ConversationPage:
 
 
 @dataclass(frozen=True)
-class HistoryMessage:
-    role: Literal["user", "assistant"]
+class UserMessage:
     text: str
-    # None unless the turn searched the knowledge base; empty if it found nothing.
-    references: list[str] | None = None
+    role: Literal["user"] = "user"
+
+
+@dataclass(frozen=True)
+class AssistantMessage:
+    """A turn's answer as the events its stream sent, in order: reasoning, searches,
+    the plan, the answer's text, and its references; replayed, it shows as it did live.
+    """
+
+    events: list[StreamEvent]
+    role: Literal["assistant"] = "assistant"
+
+
+HistoryMessage = UserMessage | AssistantMessage

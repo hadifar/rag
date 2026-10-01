@@ -1,27 +1,37 @@
 """The domain's data types, grouped by area; import them from here."""
 
-from rag.domain.models.agent import (
+from rag.domain.models.agent.agent import (
     MAX_PREFERENCE_LENGTH,
     MAX_PREFERENCES,
     AgentSpec,
-    Check,
-    GroundednessCheck,
-    OffTopicCheck,
-    Planning,
+    Middleware,
     Preference,
+    Tool,
+    ToolAgentSpec,
+    ToolResult,
+)
+from rag.domain.models.agent.middleware import (
+    GroundednessMiddleware,
+    OffTopicMiddleware,
+    PreferenceMiddleware,
+    TodolistMiddleware,
+)
+from rag.domain.models.agent.stream import (
+    ReasoningDelta,
     ReferencesReady,
     StreamEvent,
     TextDelta,
-    Tool,
-    ToolAgentSpec,
+    Todo,
+    TodosUpdated,
     ToolCall,
-    ToolResult,
 )
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
+    AssistantMessage,
     Conversation,
     ConversationPage,
     HistoryMessage,
+    UserMessage,
 )
 from rag.domain.models.ingestion import (
     IndexedDocument,
@@ -36,26 +46,32 @@ __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
-    "Check",
+    "AssistantMessage",
     "Chunk",
     "Conversation",
     "ConversationPage",
-    "GroundednessCheck",
+    "GroundednessMiddleware",
     "HistoryMessage",
     "IndexedDocument",
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
-    "OffTopicCheck",
-    "Planning",
+    "Middleware",
+    "OffTopicMiddleware",
     "Preference",
+    "PreferenceMiddleware",
     "RawDocument",
+    "ReasoningDelta",
     "ReferencesReady",
     "StreamEvent",
     "TextDelta",
+    "Todo",
+    "TodolistMiddleware",
+    "TodosUpdated",
     "Tool",
     "ToolAgentSpec",
     "ToolCall",
     "ToolResult",
     "User",
+    "UserMessage",
 ]

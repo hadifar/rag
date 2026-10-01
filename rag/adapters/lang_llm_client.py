@@ -1,3 +1,5 @@
+from typing import Any
+
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import (
     AzureChatOpenAI,
@@ -18,8 +20,8 @@ def build_llm(settings: Settings) -> BaseChatModel:
             return ChatOpenAI(
                 model=config.MODEL,
                 api_key=config.API_KEY,
-                temperature=config.TEMPERATURE,
                 streaming=True,
+                **_sampling(config),
             )
         case AzureOpenAILLMConfig() as config:
             return AzureChatOpenAI(
@@ -27,9 +29,21 @@ def build_llm(settings: Settings) -> BaseChatModel:
                 azure_deployment=config.DEPLOYMENT,
                 api_version=config.API_VERSION,
                 api_key=config.API_KEY,
-                temperature=config.TEMPERATURE,
                 streaming=True,
+                **_sampling(config),
             )
+
+
+def _sampling(config: OpenAILLMConfig | AzureOpenAILLMConfig) -> dict[str, Any]:
+    """Temperature for a plain chat model; for a reasoning model, the Responses API
+    with a reasoning summary, which is the only way OpenAI returns any reasoning text.
+    """
+    if config.REASONING_EFFORT is None:
+        return {"temperature": config.TEMPERATURE}
+    return {
+        "use_responses_api": True,
+        "reasoning": {"effort": config.REASONING_EFFORT, "summary": "auto"},
+    }
 
 
 def build_embeddings(settings: Settings) -> EmbeddingsPort:

@@ -99,13 +99,16 @@ class ChunkerPort(Protocol):
 
 Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSON, told apart by
 its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
-1. a dataclass in `rag/domain/models/agent.py`, added to the `StreamEvent` union and to
+1. a dataclass in `rag/domain/models/agent/stream.py`, added to the `StreamEvent` union and to
    the re-exports in `rag/domain/models/__init__.py`;
-2. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
+2. where it comes from in `rag/services/agent_service/streaming.py`: `parse_event` for the live
+   stream and, if it should survive a reload, `replay` for history (rebuilt from the saved
+   messages — anything not in them can't be replayed);
+3. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
-3. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`
+4. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`
    (`frontend/src/utils/chatStream.ts`) — whose `satisfies never` default fails to compile until
-   the new event is handled.
+   the new event is handled. History replays through the same handler, so it needs nothing more.
 
 The `frontend-api-types` pre-commit hook regenerates the types, and `frontend-typecheck` fails
 if the frontend no longer matches them.

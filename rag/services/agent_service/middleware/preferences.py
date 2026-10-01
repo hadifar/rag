@@ -18,10 +18,9 @@ from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Preference
 from rag.services.agent_service.prompts import PREFERENCES_INSTRUCTION
 
 
+# TODO: must move to somewhere else
 @dataclass(frozen=True)
 class ChatContext:
-    """What a chat turn runs for, set by the caller, never by the model."""
-
     user_id: uuid.UUID
 
 
@@ -135,16 +134,21 @@ class PreferencesMiddleware(AgentMiddleware[AgentState, ChatContext]):
         request: ModelRequest[ChatContext],
         handler: Callable[[ModelRequest[ChatContext]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
+
         store = request.runtime.store
         if store is None:
             raise RuntimeError("the agent was built without a store")
+
         preferences = await list_preferences(store, request.runtime.context.user_id)
+
         saved = (
             "\n".join(f"- [{p.id}] {p.text}" for p in preferences)
             if preferences
             else "(none yet)"
         )
+
         base = request.system_message.text if request.system_message else ""
+
         request = request.override(
             system_message=SystemMessage(
                 content=f"{base}\n\n{PREFERENCES_INSTRUCTION.format(preferences=saved)}"

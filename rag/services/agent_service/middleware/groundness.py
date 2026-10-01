@@ -11,7 +11,7 @@ from langchain.agents.middleware import (
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.runtime import Runtime
 
-from rag.services.agent_service.guards.topical import Classify
+from rag.services.agent_service.middleware.topical import Classify
 from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
@@ -41,13 +41,13 @@ async def is_grounded(
     context = _collect_context(messages, unverified_tools)
     answer = messages[-1]
 
-    if not context or not isinstance(answer, AIMessage) or not answer.content:
+    # .text, not .content: under the Responses API content is a list of blocks,
+    # reasoning included, and only the answer's text is to be verified.
+    if not context or not isinstance(answer, AIMessage) or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
         return True
 
-    verdict = await verify(
-        VERIFIER_PROMPT.format(context=context, answer=answer.content)
-    )
+    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer.text))
     return "UNGROUNDED" not in verdict.upper()
 
 
@@ -87,12 +87,13 @@ class GroundednessGuard(AgentMiddleware):
             return None  # Not a final answer yet: the model is still searching.
 
         revisions = len(_turn_answers(state["messages"])) - 1
-        # Fail open past the cap: end the turn rather than loop, or make the user wait
-        # on the LLM re-answering the same question indefinitely.
+
         if revisions >= self._max_revisions:
             return None
+
         if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
             return None
+
         return {"jump_to": "model"}
 
     async def awrap_model_call(
