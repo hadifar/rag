@@ -40,7 +40,7 @@ async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
 }
 
 describe('ChatPage', () => {
-  it('streams an answer with its sources into a new chat', async () => {
+  it('streams an answer with its references into a new chat', async () => {
     let sent: MessageRequest | undefined;
     server.use(
       http.post('/api/conversations', () =>
@@ -54,7 +54,7 @@ describe('ChatPage', () => {
           { type: 'tool', name: 'search_kb', status: 'done', output: '2 chunks' },
           { type: 'text', text: 'We offer ' },
           { type: 'text', text: 'three plans.' },
-          { type: 'sources', sources: ['02-plans-and-pricing.md'] },
+          { type: 'references', references: ['02-plans-and-pricing.md'] },
         ]);
       }),
       http.post('/api/conversations/:id/title', () =>
@@ -90,12 +90,22 @@ describe('ChatPage', () => {
     expect(await screen.findByText(/Something went wrong/)).toBeInTheDocument();
   });
 
-  it('loads a saved conversation from its URL', async () => {
+  it('loads a saved conversation from its URL, reasoning and plan included', async () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'How long is data kept?', sources: null },
-          { role: 'assistant', text: 'Ninety days.', sources: ['11-data-retention-policy.md'] },
+          { role: 'user', text: 'How long is data kept?' },
+          {
+            role: 'assistant',
+            events: [
+              { type: 'reasoning', text: 'Check the retention policy.' },
+              { type: 'todos', todos: [{ content: 'Find the policy', status: 'completed' }] },
+              { type: 'tool', name: 'search_kb', status: 'pending', query: 'retention' },
+              { type: 'tool', name: 'search_kb', status: 'done', output: '1 chunk' },
+              { type: 'text', text: 'Ninety days.' },
+              { type: 'references', references: ['11-data-retention-policy.md'] },
+            ],
+          },
         ]),
       ),
     );
@@ -103,6 +113,10 @@ describe('ChatPage', () => {
 
     expect(await screen.findByText('Ninety days.')).toBeInTheDocument();
     expect(screen.getByText('How long is data kept?')).toBeInTheDocument();
+    // Finished, as it was once the answer began.
+    expect(screen.getByText('Thought process')).toBeInTheDocument();
+    expect(screen.getByText('Check the retention policy.')).toBeInTheDocument();
+    expect(screen.getByText('Find the policy')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '11-data-retention-policy.md' })).toBeInTheDocument();
   });
 
@@ -110,10 +124,16 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'hi', sources: null },
-          { role: 'assistant', text: 'Hello!', sources: null },
-          { role: 'user', text: 'Who won the cup?', sources: null },
-          { role: 'assistant', text: "I don't know.", sources: [] },
+          { role: 'user', text: 'hi' },
+          { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
+          { role: 'user', text: 'Who won the cup?' },
+          {
+            role: 'assistant',
+            events: [
+              { type: 'text', text: "I don't know." },
+              { type: 'references', references: [] },
+            ],
+          },
         ]),
       ),
     );

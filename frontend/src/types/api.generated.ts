@@ -297,10 +297,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Preferences
+         * @description What the caller wants of every answer, oldest first; the chat agent applies
+         *     them, and saves or forgets them when asked to in a conversation too.
+         */
+        get: operations["list_preferences_api_settings_preferences_get"];
+        put?: never;
+        /**
+         * Add Preference
+         * @description Saves the preference; one the caller already has (ignoring case) comes back
+         *     as it is. 409 once they have the most allowed.
+         */
+        post: operations["add_preference_api_settings_preferences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/preferences/{preference_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Preference */
+        delete: operations["delete_preference_api_settings_preferences__preference_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AssistantMessageResponse
+         * @description A past answer as the events its stream sent, in order; replayed like the live stream.
+         */
+        AssistantMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "assistant";
+            /** Events */
+            events: components["schemas"]["StreamEventResponse"][];
+        };
         /** Body_upload_knowledge_base_api_ingestions_post */
         Body_upload_knowledge_base_api_ingestions_post: {
             /** File */
@@ -343,18 +399,11 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** HistoryMessageResponse */
-        HistoryMessageResponse: {
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant";
-            /** Text */
-            text: string;
-            /** Sources */
-            sources: string[] | null;
-        };
+        /**
+         * HistoryMessageResponse
+         * @description One message of a saved conversation, told apart by `role`.
+         */
+        HistoryMessageResponse: components["schemas"]["UserMessageResponse"] | components["schemas"]["AssistantMessageResponse"];
         /** IngestionRunResponse */
         IngestionRunResponse: {
             /**
@@ -397,6 +446,44 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** PreferenceRequest */
+        PreferenceRequest: {
+            /** Text */
+            text: string;
+        };
+        /** PreferenceResponse */
+        PreferenceResponse: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * ReasoningEvent
+         * @description A piece of the model's reasoning summary, in order.
+         */
+        ReasoningEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reasoning";
+            /** Text */
+            text: string;
+        };
+        /**
+         * ReferencesEvent
+         * @description The turn's deduplicated references, once it's done. Only sent if the turn searched.
+         */
+        ReferencesEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "references";
+            /** References */
+            references: string[];
+        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Model */
@@ -407,24 +494,11 @@ export interface components {
             top_k: number;
         };
         /**
-         * SourcesEvent
-         * @description The turn's deduplicated sources, once it's done. Only sent if the turn searched.
-         */
-        SourcesEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "sources";
-            /** Sources */
-            sources: string[];
-        };
-        /**
          * StreamEventResponse
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["SourcesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
@@ -437,6 +511,29 @@ export interface components {
             type: "text";
             /** Text */
             text: string;
+        };
+        /** TodoItem */
+        TodoItem: {
+            /** Content */
+            content: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "completed";
+        };
+        /**
+         * TodosEvent
+         * @description The agent's whole plan, each time it rewrites it.
+         */
+        TodosEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "todos";
+            /** Todos */
+            todos: components["schemas"]["TodoItem"][];
         };
         /** TokenResponse */
         TokenResponse: {
@@ -469,6 +566,16 @@ export interface components {
             query?: string | null;
             /** Output */
             output?: string | null;
+        };
+        /** UserMessageResponse */
+        UserMessageResponse: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            role: "user";
+            /** Text */
+            text: string;
         };
         /** UserResponse */
         UserResponse: {
@@ -988,6 +1095,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    list_preferences_api_settings_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceResponse"][];
+                };
+            };
+        };
+    };
+    add_preference_api_settings_preferences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_preference_api_settings_preferences__preference_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preference_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

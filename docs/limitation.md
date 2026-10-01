@@ -18,15 +18,18 @@
 - The keyword side is Postgres full-text with the `english` configuration and `ts_rank_cd`, not BM25: no IDF weighting, and non-English documents are stemmed as English
 - No reranker
 - Reciprocal rank fusion uses a hardcoded `k=5` (`_reciprocal_rank_fusion`) — untuned against any eval set; the conventional default is `k=60`, and this choice overweights whichever result lands rank 1
-- `top_k` is hardcoded to 3 in `RetrievalService.search` and never threaded through — `/api/settings` reports `top_k: 4`, which isn't actually what retrieval uses
 - No retrieval evaluation at all: no golden Q&A set, no precision/recall/groundedness metrics, nothing to catch a regression from a prompt, chunking, or model change before it ships
 
 ## Generation & guardrails
 - The topical guardrail is advisory, not a gate: an off-topic classification only adds a "please decline" instruction and removes the tools for that turn (`TopicalGuard`) — the model can still be talked out of following the instruction. There is no code path that actually blocks a request.
 - The guardrail classifies only the latest human message in isolation (`_latest_human_message`) — a multi-turn conversation that gradually drifts off-topic or builds up a jailbreak across turns isn't caught, since only the most recent turn is scored.
-- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `MAX_REVISIONS` (currently 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
+- The groundness verifier fails open in two ways: (1) if the agent answers without calling `search_kb` at all — including because it was talked out of it — `is_grounded` short-circuits to `True` with nothing to check against; (2) past `RAG__MAX_REVISIONS` (default 1), an ungrounded answer ships anyway rather than being blocked or flagged to the user.
+- Saved preferences go into the system prompt in the user's own words, so a user can put
+  instructions there that the prompt only asks the model to rank below its own; it reaches
+  only that user's chats, but it outlives the conversation it was said in.
+- The model decides whether a message states a preference worth saving; it may miss one, or
+  save one the user only implied, which they then have to ask it to forget.
 - Both guardrail and verifier parse the classifier LLM's free-text reply with a substring check (`"UNGROUNDED" not in ...`, `"IRRELEVANT" not in ...`) instead of structured/constrained output — any reply that doesn't hit the exact expected word defaults to the permissive outcome.
-- `ChatOpenAI` is constructed with no `temperature` — despite `/api/settings` reporting a specific value (0.2), generation actually runs at the provider default, so the reported and real behavior diverge, and runs aren't reproducible for eval purposes.
 
 ## Conversation & session state
 - The LLM title is a separate request the client makes once a new conversation's first answer
@@ -36,15 +39,14 @@
   conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
   but a conversation used on another device meanwhile won't show up until a reload.
 - Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
-  threads, which live in separate tables with no user link — a full user deletion (GDPR) still
+  threads or their preferences in the store, which live in separate tables with no user link — a full user deletion (GDPR) still
   has to delete each conversation's thread first.
-- A thread whose conversation row is gone (a delete that failed halfway, rows removed outside
-  the app) is unreachable; `rag prune-threads [--dry-run]` finds and deletes them, but nothing
-  runs it automatically.
+- A thread whose conversation row was removed outside the app (e.g. a user deleted in SQL) is
+  unreachable and stays in the checkpoint tables; nothing cleans these up.
 - One database, two schema owners: Alembic owns the tables in `public`
   (`users`/`conversations`/`documents`/`chunks`/`ingestion_runs`), while LangGraph's
-  `checkpointer.setup()` creates and migrates its own tables in the `langgraph` schema at every
-  boot, outside Alembic's history.
+  checkpointer's and store's `setup()` create and migrate their own tables in the `langgraph`
+  schema at every boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.
 - The groundedness check runs after the answer has already streamed. When it asks for a
@@ -53,7 +55,10 @@
 
 ## Frontend
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write
-  endpoint), which misleads users.
+  endpoint), which misleads users — all the more right above the answer-preferences section,
+  whose Add does save.
+- The preferences list loads when the Settings page opens; a preference the assistant saves or
+  forgets in a chat in another tab only shows up there after a reload.
 
 ## Security
 - Login/register are self-hosted, not a third-party identity provider — no self-serve signup
@@ -82,7 +87,7 @@
 
 ## Scalability
 - `cli.py`'s `serve()` calls `uvicorn.run(...)` with no `workers=` — the app always runs as a single process today, even though the Postgres checkpointer would actually support scaling out
-- Within one process, all checkpoint reads/writes run one at a time: `AsyncPostgresSaver` holds its own `asyncio.Lock` around every query, even with the connection pool `checkpointer.py` now gives it (the pool is for reconnecting after a Postgres restart, not for concurrency). The queries are short and the lock isn't held during LLM calls, so this only matters at high request rates; more workers/replicas each get their own lock
+- Within one process, all checkpoint reads/writes run one at a time: `AsyncPostgresSaver` holds its own `asyncio.Lock` around every query, even with the connection pool `langgraph_persistence.py` now gives it (`AsyncPostgresStore` has its own lock too) (the pool is for reconnecting after a Postgres restart, not for concurrency). The queries are short and the lock isn't held during LLM calls, so this only matters at high request rates; more workers/replicas each get their own lock
 - `main.bicep`'s App Service Plan has no autoscale rule or instance count set, so it defaults to a single instance regardless of load
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 

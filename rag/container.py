@@ -3,14 +3,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
-from rag.adapters.archive_store import open_archive_store
 from rag.adapters.argon2 import Argon2PasswordHasher
-from rag.adapters.checkpointer import open_checkpointer
-from rag.adapters.db import open_db_pool
-from rag.adapters.history_store import CheckpointHistoryStore
 from rag.adapters.jwt_codec import JwtTokenCodec
-from rag.adapters.llm_client import build_embeddings, build_llm
-from rag.adapters.observability import open_trace_config
+from rag.adapters.kb_archive_store import open_archive_store
+from rag.adapters.lang_llm_client import build_embeddings, build_llm
+from rag.adapters.lang_memory import open_langgraph
+from rag.adapters.lang_observability import open_trace_config
+from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
@@ -36,26 +35,32 @@ class Container:
 
 
 @asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container]:
+async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:
     """Opens connections and tears it down on exit."""
 
     async with (
-        open_checkpointer(settings) as checkpointer,
+        open_langgraph(settings) as langgraph,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
     ):
         vector_store = DocumentRepository(db_pool, build_embeddings(settings))
-        retrieval_service = RetrievalService(vector_store=vector_store)
+        retrieval_service = RetrievalService(
+            vector_store=vector_store, top_k=settings.RAG.TOP_K
+        )
 
         agent_service = AgentService(
             llm=build_llm(settings),
-            checkpointer=checkpointer,
+            checkpointer=langgraph.checkpointer,
+            store=langgraph.store,
             trace_config=trace_config,
+            retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
 
         rag_service = RagService(
-            retrieval_service=retrieval_service, agent_service=agent_service
+            retrieval_service=retrieval_service,
+            agent_service=agent_service,
+            max_revisions=settings.RAG.MAX_REVISIONS,
         )
 
         ingestion_service = IngestionService(
@@ -77,9 +82,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         conversation_service = ConversationService(
-            repository=ConversationRepository(
-                db_pool, CheckpointHistoryStore(checkpointer)
-            ),
+            repository=ConversationRepository(db_pool),
             agent_service=agent_service,
         )
 

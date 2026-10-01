@@ -4,20 +4,27 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 
-from rag.domain.agents import AgentSpec, Tool, ToolPort
-from rag.domain.errors import IngestionInProgressError
-from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
+from rag.domain.errors import IngestionInProgressError, PreferenceNotFoundError
 from rag.domain.models import (
+    AgentSpec,
+    AssistantMessage,
     Conversation,
     HistoryMessage,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
+    Preference,
+    ReferencesReady,
+    StreamEvent,
+    TextDelta,
     User,
+    UserMessage,
 )
 from rag.domain.ports import ChatAgentPort
+from rag.services.agent_service.middleware import preferences
 
 
 class FakeEmbeddings:
@@ -39,6 +46,19 @@ class FakeEmbeddings:
         seed = hashlib.sha256(text.encode()).digest()
         raw = (seed * (self.DIMENSIONS // len(seed) + 1))[: self.DIMENSIONS]
         return [(b / 127.5) - 1 for b in raw]
+
+
+class FakePasswordHasher:
+    """PasswordHasherPort without the cost: Argon2 is slow on purpose (~70 ms a hash),
+    which every API test would pay in its fixture. The real one is tested in
+    test_auth_service.py.
+    """
+
+    async def hash(self, password: str) -> str:
+        return f"hashed:{password}"
+
+    async def verify(self, hashed_password: str, password: str) -> bool:
+        return hashed_password == f"hashed:{password}"
 
 
 class FakeUserRepository:
@@ -168,10 +188,6 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
-        # Stored chat messages by thread id: what a real generation service writes
-        # (through the checkpointer) and this repository reads back.
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -226,29 +242,21 @@ class FakeConversationRepository:
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
 
-    async def all_ids(self) -> set[uuid.UUID]:
-        return set(self.rows)
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        return self.threads.get(thread_id, [])
-
-    async def delete_history(self, thread_id: str) -> None:
-        self.deleted_threads.append(thread_id)
-        self.threads.pop(thread_id, None)
-
-    async def list_thread_ids(self) -> set[str]:
-        return set(self.threads)
-
 
 class StubGeneration:
-    """AgentServicePort for single-shot generation only: answers every prompt with `reply`, or raises `error`, and
-    records the prompts.
+    """AgentServicePort without agents: answers every prompt with `reply`, or raises
+    `error`, and records the prompts. Its saved threads are `threads`, which a test
+    (or `StubRag`) fills in as an agent would. Preferences are the real ones, kept in an
+    in-memory store.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
+        self.threads: dict[str, list[HistoryMessage]] = {}
+        self.deleted_threads: list[str] = []
+        self.store = InMemoryStore()
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -262,40 +270,53 @@ class StubGeneration:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    def create_tools(self, tools: list[Tool]) -> list[ToolPort]:
-        raise NotImplementedError("the stub builds no tools")
-
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
+
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        return self.threads.get(thread_id, [])
+
+    async def delete_history(self, thread_id: str) -> None:
+        self.deleted_threads.append(thread_id)
+        self.threads.pop(thread_id, None)
+
+    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
+        return await preferences.list_preferences(self.store, user_id)
+
+    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
+        return await preferences.save_preference(self.store, user_id, text)
+
+    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
+        if not await preferences.delete_preference(self.store, user_id, preference_id):
+            raise PreferenceNotFoundError(preference_id)
 
 
 class StubRag:
     """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the fake repository's, so it shows up in its history) with `sources` on the answer.
+    the `StubGeneration`'s, so it shows up in its history) with `references` on the answer.
     """
 
     def __init__(
         self,
         threads: dict[str, list[HistoryMessage]],
         extra_events: list[StreamEvent] | None = None,
-        sources: list[str] | None = None,
+        references: list[str] | None = None,
     ):
         self.threads = threads
         self.extra_events = extra_events or []
-        self.sources = sources
+        self.references = references
 
     async def stream_chat(
-        self, message: str, thread_id: str
+        self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
-        reply = f"echo: {message}"
+        events: list[StreamEvent] = [
+            TextDelta(text=f"echo: {message}"),
+            *self.extra_events,
+        ]
+        if self.references is not None:
+            events.append(ReferencesReady(references=self.references))
         self.threads.setdefault(thread_id, []).extend(
-            [
-                HistoryMessage(role="user", text=message),
-                HistoryMessage(role="assistant", text=reply, sources=self.sources),
-            ]
+            [UserMessage(text=message), AssistantMessage(events=events)]
         )
-        yield TextDelta(text=reply)
-        for event in self.extra_events:
+        for event in events:
             yield event
-        if self.sources is not None:
-            yield ReferencesReady(references=self.sources)

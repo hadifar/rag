@@ -3,7 +3,6 @@ import hashlib
 import logging
 import uuid
 
-from rag.domain.constants import MAX_ARCHIVE_BYTES
 from rag.domain.errors import (
     AppError,
     ArchiveTooLargeError,
@@ -29,6 +28,7 @@ from rag.services.ingestion_service.loaders import load_archive
 logger = logging.getLogger(__name__)
 
 # Keep in sync with client_max_body_size for /api/ingestions in nginx.conf.template.
+MAX_ARCHIVE_BYTES = 20 * 1024 * 1024  # size of an uploaded zip
 
 
 class IngestionService:

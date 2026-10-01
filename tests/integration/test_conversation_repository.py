@@ -6,11 +6,9 @@ import uuid
 from collections.abc import AsyncGenerator
 
 import pytest
-from langgraph.checkpoint.memory import InMemorySaver
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from rag.adapters.history_store import CheckpointHistoryStore
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 
@@ -44,7 +42,7 @@ async def user_id(
 async def test_create_get_touch_title_delete(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:
-    repository = ConversationRepository(pool, CheckpointHistoryStore(InMemorySaver()))
+    repository = ConversationRepository(pool)
 
     created = await repository.get_or_create_empty(user_id)
     assert created.title is None
@@ -67,7 +65,7 @@ async def test_create_get_touch_title_delete(
 async def test_keyset_pagination_visits_every_row_once_newest_first(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:
-    repository = ConversationRepository(pool, CheckpointHistoryStore(InMemorySaver()))
+    repository = ConversationRepository(pool)
     created = []
     for i in range(5):
         conversation = await repository.get_or_create_empty(user_id)
@@ -92,7 +90,7 @@ async def test_keyset_pagination_visits_every_row_once_newest_first(
 async def test_deleting_a_user_deletes_their_conversations(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:
-    repository = ConversationRepository(pool, CheckpointHistoryStore(InMemorySaver()))
+    repository = ConversationRepository(pool)
     conversation = await repository.get_or_create_empty(user_id)
 
     async with pool.connection() as conn:

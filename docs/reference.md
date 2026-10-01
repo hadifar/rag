@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers, error handling
@@ -43,7 +43,7 @@ rag/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
 │   ├── llm_client.py
-│   ├── checkpointer.py
+│   ├── langgraph_persistence.py      # LangGraph's checkpointer + store, on one pool
 │   ├── observability.py
 │   ├── archive_store.py              # uploaded knowledge-base zips: local disk or Azure Blob (KB_STORAGE)
 │   └── db.py                         # the app's Postgres pool (users, conversations, documents)
@@ -86,7 +86,7 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard and preferences middleware), tool calls, streaming, tracing; reads/deletes a thread's history; each user's preferences (LangGraph store) | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer, store |
 | `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
 | `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -123,6 +123,11 @@ on `Settings.LLM`, a discriminated union selected by `LLM__BACKEND`:
 - `"azure_openai"` — `AzureChatOpenAI`, requiring `LLM__API_KEY` / `LLM__ENDPOINT` /
   `LLM__DEPLOYMENT` / `LLM__API_VERSION`.
 
+Either backend also takes `LLM__TEMPERATURE` (default `0.2`) and `LLM__RETRY_ATTEMPTS` (default
+`3`, tries per LLM call in agents and guards before the fallback). Retrieval and the guards are
+tuned under `RAG__`: `RAG__TOP_K` (default `3`, passages per search) and `RAG__MAX_REVISIONS`
+(default `1`, times the groundedness guard sends an answer back per turn).
+
 [infra/azure/main.bicep](../infra/azure/main.bicep)'s `llmProvider` param selects between the two
 at deploy time — see [docs/infra.md](infra.md) for the parameters each one needs.
 
@@ -143,16 +148,18 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   `POST /api/conversations/{id}/title` (not waiting for the answer), and an LLM call renames it
   from that message.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
-  it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
-  answer and sources; tool calls aren't replayed).
+  it, and `GET /api/conversations/{id}/messages` reads it back: each question, then its answer
+  as the events its stream sent (see [Streaming](#streaming)). Nothing extra is saved for this:
+  the reasoning summary, the plan and the searches are all in the checkpointed messages.
 
-The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
-context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` over a
-connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from the
-repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
+The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
+context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
+`AsyncPostgresStore` (what outlives a thread, e.g. a user's preferences; no semantic index) sharing
+one connection pool of their own on the app's `DATABASE_URL` (required). It's a separate pool from
+the repositories' because LangGraph needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
-so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+so a Postgres restart doesn't need a backend restart; the saver's and the store's `setup()` run
+on connect (idempotent schema migrations). Its tables live in their own `langgraph` Postgres schema (the pool
 connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
 across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so
@@ -194,18 +201,30 @@ its own Postgres).
 ## Streaming
 
 `agent_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
-vocabulary (`TextDelta`, `ToolCall` — `status` `pending` with its `query`, then `done` with its `output` — and `SourcesReady`), filtered to the `model` node's chat
+vocabulary (`TextDelta`, `ReasoningDelta` — the model's reasoning summary, only with
+`LLM__REASONING_EFFORT` set — `ToolCall` — `status` `pending` with its `query`, then `done` with
+its `output` — `TodosUpdated` — the whole plan, each time `write_todos` rewrites it — and
+`ReferencesReady`), filtered to the `model` node's chat
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
 - FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
-  `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
-  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
-  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
-  generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
+  `data:` line of JSON told apart by `type` — `text`, `reasoning`, `tool` (`status` `pending`
+  with its `query`, then `done` with its `output`), `todos` and `references`. The shapes are
+  Pydantic models (`TextEvent`/`ReasoningEvent`/`ToolEvent`/`TodosEvent`/`ReferencesEvent`), so
+  they're in the OpenAPI schema and the frontend's generated types. JSON also keeps a token
+  containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
-  (which links to `/api/retrieval/{filename}`).
+  (`api/chat.ts`); `createBubbleHandler` (`utils/chatStream.ts`) turns the events into bubbles —
+  reasoning via `ReasoningBubble`, tool calls via `ToolBubble`, the plan via `TodosBubble` and
+  citations via `ReferencesBubble` (which links to `/api/retrieval/{filename}`).
+
+A saved conversation is shown the same way. `streaming.py`'s `replay()` rebuilds a past turn's
+events from its checkpointed messages (each reply's reasoning and text from its content blocks,
+each search `pending` then `done`, each `write_todos` call as its plan); `turn.py`'s
+`to_history()` drops the drafts the groundedness guard rejected and adds the references. The
+frontend's `historyToMessages` (`utils/history.ts`) feeds those events through
+`createBubbleHandler`, so a reloaded chat renders exactly as it did live.
 
 ## Observability
 
@@ -219,7 +238,7 @@ wired in — so callers always pass `config=trace_config(...)` with no behaviora
 - `"logging"` (default) — `_LoggingCallbackHandler` logs LLM/tool start/end events through the
   standard `logging` module; zero extra infra.
 - `"langfuse"` — a single Langfuse `CallbackHandler`, requiring `OBSERVABILITY__PUBLIC_KEY` /
-  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservability`
+  `OBSERVABILITY__SECRET_KEY` / `OBSERVABILITY__HOST` (required fields on the `LangfuseObservabilityConfig`
   model in `config.py` — missing one fails at startup). On teardown, the context manager's
   `finally` calls `get_client().flush()` so short-lived runs aren't lost.
 
@@ -274,7 +293,9 @@ there, so the response status comes from the exception class itself.
   LLM-written title for that first message and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
-- `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
+- `GET /api/conversations/{id}/messages` — `[{role: "user", text} | {role: "assistant",
+  events}]`, where `events` are the answer's stream events in order (as the SSE stream sends
+  them, references last); or 404.
 - `DELETE /api/conversations/{id}` — deletes its messages, then the conversation; 204, or 404.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — queries the `chunks` table (fails if Postgres is unreachable or
@@ -287,9 +308,16 @@ there, so the response status comes from the exception class itself.
 - `GET /api/ingestions/{id}` — the run, for polling until `status` is `succeeded` or `failed`;
   404 if unknown.
 - `GET /api/ingestions/latest` — the most recent run, or `null`.
+- `GET /api/settings/preferences` — the caller's preferences for every answer, `[{id, text}]`, oldest
+  first. The chat agent reads them on every turn, and saves or forgets one when asked to in a
+  conversation.
+- `POST /api/settings/preferences` — `{text}` (1–200 characters, 422 otherwise) → `{id, text}`; the same
+  text again (ignoring case) returns the preference already saved. 400 if only whitespace, 409
+  past 20 per user.
+- `DELETE /api/settings/preferences/{id}` — 204, or 404 for a missing or someone else's preference.
 - `GET /api/retrieval/{filename}` — returns the reassembled document as `text/plain`, or 404. Used by
   the frontend's source citations (fetched with the auth header and opened as a blob — a bare
   `<a href>` can't carry a bearer token).
-- `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI.
-  `temperature` and `top_k` are currently static constants in the router, not yet threaded
-  through the actual generation/retrieval calls they name.
+- `GET /api/settings` — returns `{model, temperature, top_k}` for display in the UI, read from
+  the configured `Settings`: `LLM__MODEL` (the deployment on Azure), `LLM__TEMPERATURE` and
+  `RAG__TOP_K` — the same values generation and retrieval run with.

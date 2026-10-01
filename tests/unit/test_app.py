@@ -13,20 +13,18 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.api.deps import get_current_user
 from rag.app import create_app
 from rag.config import (
     AuthConfig,
-    LoggingObservability,
-    OpenAILLM,
+    LoggingObservabilityConfig,
+    OpenAILLMConfig,
     Settings,
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.events import ToolCall
-from rag.domain.models import Chunk
+from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Chunk, ToolCall
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
@@ -39,6 +37,7 @@ from tests.unit.fakes import (
     FakeConversationRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
+    FakePasswordHasher,
     FakeUserRepository,
     StubGeneration,
     StubRag,
@@ -66,19 +65,19 @@ class _StubRetrievalService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        LLM=OpenAILLM(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
+        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
         DATABASE_URL=SecretStr("unused"),
         AUTH=AuthConfig(
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
         ),
-        OBSERVABILITY=LoggingObservability(),
+        OBSERVABILITY=LoggingObservabilityConfig(),
     )
 
 
 def _build_auth_service() -> AuthService:
     return AuthService(
         user_repository=FakeUserRepository(),
-        pass_hasher=Argon2PasswordHasher(),
+        pass_hasher=FakePasswordHasher(),
         token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
         refresh_ttl=timedelta(days=7),
@@ -95,12 +94,12 @@ def client() -> Generator[TestClient]:
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
     rag = StubRag(
-        conversation_repository.threads,
+        generation.threads,
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
         ],
-        sources=["doc-a", "doc-b"],
+        references=["doc-a", "doc-b"],
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
@@ -317,7 +316,7 @@ def test_send_message_contract_matches_frontend_parsing(
 ) -> None:
     """Locks the wire format to what frontend/src/api/chat.ts parses: one JSON object
     per event's `data`, told apart by `type`. The payloads' fields are typed through
-    OpenAPI (TextEvent/ToolEvent/SourcesEvent); this checks they arrive that way.
+    OpenAPI (TextEvent/ToolEvent/ReferencesEvent); this checks they arrive that way.
     """
     conversation_id = _create_conversation(client, auth_headers)
 
@@ -339,7 +338,7 @@ def test_send_message_contract_matches_frontend_parsing(
             "query": None,
             "output": "stub result",
         },
-        {"type": "sources", "sources": ["doc-a", "doc-b"]},
+        {"type": "references", "references": ["doc-a", "doc-b"]},
     ]
 
 
@@ -438,10 +437,30 @@ def test_conversation_messages_and_delete(
     conversation_id = _start_conversation(client, auth_headers)
     messages_url = f"/api/conversations/{conversation_id}/messages"
 
-    messages = client.get(messages_url, headers=auth_headers).json()
-    assert [(m["role"], m["text"]) for m in messages] == [
-        ("user", "hi"),
-        ("assistant", "echo: hi"),
+    # The answer as the same events its stream sent, for the frontend to replay.
+    assert client.get(messages_url, headers=auth_headers).json() == [
+        {"role": "user", "text": "hi"},
+        {
+            "role": "assistant",
+            "events": [
+                {"type": "text", "text": "echo: hi"},
+                {
+                    "type": "tool",
+                    "name": "search",
+                    "status": "pending",
+                    "query": "hi",
+                    "output": None,
+                },
+                {
+                    "type": "tool",
+                    "name": "search",
+                    "status": "done",
+                    "query": None,
+                    "output": "stub result",
+                },
+                {"type": "references", "references": ["doc-a", "doc-b"]},
+            ],
+        },
     ]
 
     deleted = client.delete(
@@ -585,3 +604,67 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
+
+
+def test_preferences_are_added_listed_and_deleted_per_user(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    other = _login(client, _OTHER_EMAIL)
+    added = client.post(
+        "/api/settings/preferences",
+        headers=auth_headers,
+        json={"text": "Answer in Dutch"},
+    )
+    assert added.status_code == 200
+    preference = added.json()
+
+    # The same text again, in other case, is the same preference.
+    again = client.post(
+        "/api/settings/preferences",
+        headers=auth_headers,
+        json={"text": "answer in dutch"},
+    )
+    assert again.json() == preference
+    assert client.get("/api/settings/preferences", headers=auth_headers).json() == [
+        preference
+    ]
+    assert client.get("/api/settings/preferences", headers=other).json() == []
+
+    url = f"/api/settings/preferences/{preference['id']}"
+    assert client.delete(url, headers=other).status_code == 404
+    assert client.delete(url, headers=auth_headers).status_code == 204
+    assert client.get("/api/settings/preferences", headers=auth_headers).json() == []
+    assert client.delete(url, headers=auth_headers).status_code == 404
+
+
+@pytest.mark.parametrize("text", ["", "x" * (MAX_PREFERENCE_LENGTH + 1)])
+def test_an_empty_or_too_long_preference_is_rejected(
+    client: TestClient, auth_headers: dict[str, str], text: str
+) -> None:
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": text}
+    )
+    assert response.status_code == 422
+
+
+def test_a_blank_preference_is_rejected(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": "  "}
+    )
+    assert response.status_code == 400
+
+
+def test_a_preference_past_the_cap_is_409(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    for i in range(MAX_PREFERENCES):
+        client.post(
+            "/api/settings/preferences", headers=auth_headers, json={"text": f"p{i}"}
+        )
+
+    response = client.post(
+        "/api/settings/preferences", headers=auth_headers, json={"text": "one too many"}
+    )
+    assert response.status_code == 409

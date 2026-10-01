@@ -119,23 +119,48 @@ All enforced by oxlint; see [enforcement.md](enforcement.md#frontend-code-qualit
 
 ## Agent
 
-`agent_service/graph.py` builds the agent with LangChain's `create_agent`;
+`agent_service/graphs/tool_agent.py` builds the agent with LangChain's `create_agent`. The
+graph below is the RAG agent's `graph.get_graph().draw_mermaid()`, as generated:
 
 ```mermaid
-graph TD
-    __start__((start)) --> topical(TopicalGuard.before_agent)
-    topical --> model(model)
-    model --> verify(GroundednessGuard.after_model)
-    verify -.->|tool call| tools(tools)
-    verify -.->|ungrounded, under cap| model
-    verify -.->|final answer| __end__((end))
-    tools --> model
-
-    classDef default fill:#f2f0ff,line-height:1.2
-    classDef first fill-opacity:0
-    classDef last fill:#bfb6fc
-    class __start__ first
-    class __end__ last
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	model(model)
+	tools(tools)
+	TopicalGuard\2ebefore_agent(TopicalGuard.before_agent)
+	GroundednessGuard\2eafter_model(GroundednessGuard.after_model)
+	TodoListMiddleware\2eafter_model(TodoListMiddleware.after_model)
+	__end__([<p>__end__</p>]):::last
+	GroundednessGuard\2eafter_model -.-> __end__;
+	GroundednessGuard\2eafter_model -.-> model;
+	GroundednessGuard\2eafter_model -.-> tools;
+	TodoListMiddleware\2eafter_model --> GroundednessGuard\2eafter_model;
+	TopicalGuard\2ebefore_agent --> model;
+	__start__ --> TopicalGuard\2ebefore_agent;
+	model --> TodoListMiddleware\2eafter_model;
+	tools -.-> model;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
 ```
+
+Nodes are the steps that change the graph's state:
+- `TopicalGuard.before_agent` classifies the user's message once per turn.
+- `TodoListMiddleware.after_model` rejects a reply that calls `write_todos` more than once.
+- `GroundednessGuard.after_model` routes the turn: to `tools` for tool calls, back to `model`
+  for an ungrounded answer under the revision cap, or to the end. `after_model` hooks run in
+  reverse middleware order, so the first middleware's runs last.
+- `tools` runs `search_kb`, `write_todos`, `save_user_preference` and `forget_user_preference`.
+
+Middleware that only wraps each LLM call adds no node: `TopicalGuard` (off-topic instruction and
+tool filter), `GroundednessGuard` (revision instruction), `PreferencesMiddleware` (the user's
+preferences), `TodoListMiddleware` (planning instructions) and `ModelRetryMiddleware` (retries).
+The checkpointer saves the thread after each step; the preference tools and middleware read and
+write the store.
 
 See [services.md](services.md#generation-service) for what each middleware does and why.
