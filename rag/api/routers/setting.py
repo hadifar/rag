@@ -6,7 +6,7 @@ from rag.api.deps import (
     SettingsDep,
     get_current_user,
 )
-from rag.api.schema.settings import (
+from rag.api.schema.setting import (
     PreferenceRequest,
     PreferenceResponse,
     SettingsResponse,

@@ -278,18 +278,18 @@ class StubGeneration:
 
 class StubRag:
     """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the `StubGeneration`'s, so it shows up in its history) with `sources` on the answer.
+    the `StubGeneration`'s, so it shows up in its history) with `references` on the answer.
     """
 
     def __init__(
         self,
         threads: dict[str, list[HistoryMessage]],
         extra_events: list[StreamEvent] | None = None,
-        sources: list[str] | None = None,
+        references: list[str] | None = None,
     ):
         self.threads = threads
         self.extra_events = extra_events or []
-        self.sources = sources
+        self.references = references
 
     async def stream_chat(
         self, message: str, thread_id: str, user_id: uuid.UUID
@@ -298,11 +298,13 @@ class StubRag:
         self.threads.setdefault(thread_id, []).extend(
             [
                 HistoryMessage(role="user", text=message),
-                HistoryMessage(role="assistant", text=reply, sources=self.sources),
+                HistoryMessage(
+                    role="assistant", text=reply, references=self.references
+                ),
             ]
         )
         yield TextDelta(text=reply)
         for event in self.extra_events:
             yield event
-        if self.sources is not None:
-            yield ReferencesReady(references=self.sources)
+        if self.references is not None:
+            yield ReferencesReady(references=self.references)

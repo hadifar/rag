@@ -5,13 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from rag.api.routers.agent import router as agent_router
 from rag.api.routers.auth import router as auth_router
-from rag.api.routers.conversations import router as conversations_router
+from rag.api.routers.conversation import router as conversation_router
 from rag.api.routers.health import router as health_router
-from rag.api.routers.ingestions import router as ingestions_router
-from rag.api.routers.rag import router as rag_router
+from rag.api.routers.ingestion import router as ingestion_router
 from rag.api.routers.retrieval import router as retrieval_router
-from rag.api.routers.settings import router as settings_router
+from rag.api.routers.setting import router as setting_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
 from rag.domain.errors import AppError
@@ -62,11 +62,11 @@ def create_app(
 
     app.include_router(auth_router)
     app.include_router(health_router)
-    app.include_router(conversations_router)
-    app.include_router(rag_router)
+    app.include_router(conversation_router)
+    app.include_router(agent_router)
     app.include_router(retrieval_router)
-    app.include_router(ingestions_router)
-    app.include_router(settings_router)
+    app.include_router(ingestion_router)
+    app.include_router(setting_router)
 
     register_error_handlers(app)
 

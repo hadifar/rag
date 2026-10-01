@@ -34,7 +34,7 @@ class HistoryMessageResponse(BaseModel):
 
     role: Literal["user", "assistant"]
     text: str
-    sources: list[str] | None
+    references: list[str] | None
 
 
 class MessageRequest(BaseModel):

@@ -149,7 +149,7 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   from that message.
 - The server never reconstructs history from a request payload — the checkpointer loads/saves
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
-  answer and sources; tool calls aren't replayed).
+  answer and references; tool calls aren't replayed).
 
 The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
 context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
@@ -206,11 +206,11 @@ answer) through the same graph, and `astream_events` would otherwise leak those 
 text stream too. Two consumers read the normalized stream:
 - FastAPI's `POST /api/conversations/{id}/messages` turns it into SSE: each event is one
   `data:` line of JSON told apart by `type` — `text`, `tool` (`status` `pending` with its
-  `query`, then `done` with its `output`) and `sources`. The shapes are Pydantic models
-  (`TextEvent`/`ToolEvent`/`SourcesEvent`), so they're in the OpenAPI schema and the frontend's
+  `query`, then `done` with its `output`) and `references`. The shapes are Pydantic models
+  (`TextEvent`/`ToolEvent`/`ReferencesEvent`), so they're in the OpenAPI schema and the frontend's
   generated types. JSON also keeps a token containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `SourcesBubble`
+  (`api/chat.ts`), rendering tool calls via `ToolBubble` and citations via `ReferencesBubble`
   (which links to `/api/retrieval/{filename}`).
 
 ## Observability
@@ -280,7 +280,7 @@ there, so the response status comes from the exception class itself.
   LLM-written title for that first message and returns it; keeps the current title if the LLM fails. 404 as above.
 - `GET /api/conversations?limit=&cursor=` — the caller's conversations, most recently used first,
   as `{items, next_cursor}`; pass `next_cursor` back for the next page (`null` on the last).
-- `GET /api/conversations/{id}/messages` — `[{role, text, sources}]`, or 404.
+- `GET /api/conversations/{id}/messages` — `[{role, text, references}]`, or 404.
 - `DELETE /api/conversations/{id}` — deletes its messages, then the conversation; 204, or 404.
 - `GET /api/health/live` — always 200 (liveness probe).
 - `GET /api/health/ready` — queries the `chunks` table (fails if Postgres is unreachable or

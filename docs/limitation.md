@@ -55,7 +55,10 @@
 
 ## Frontend
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write
-  endpoint), which misleads users.
+  endpoint), which misleads users — all the more right above the answer-preferences section,
+  whose Add does save.
+- The preferences list loads when the Settings page opens; a preference the assistant saves or
+  forgets in a chat in another tab only shows up there after a reload.
 
 ## Security
 - Login/register are self-hosted, not a third-party identity provider — no self-serve signup

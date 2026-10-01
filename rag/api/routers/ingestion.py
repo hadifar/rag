@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile
 
 from rag.api.deps import AdminUserDep, IngestionServiceDep, get_current_admin
-from rag.api.schema.ingestions import IngestionRunResponse
+from rag.api.schema.ingestion import IngestionRunResponse
 
 router = APIRouter(
     prefix="/api/ingestions",

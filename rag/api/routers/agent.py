@@ -10,8 +10,8 @@ from rag.api.deps import (
     RagServiceDep,
     get_current_user,
 )
-from rag.api.schema.conversations import MessageRequest
-from rag.api.schema.rag import StreamEventResponse, to_stream_event
+from rag.api.schema.agent import StreamEventResponse, to_stream_event
+from rag.api.schema.conversation import MessageRequest
 
 router = APIRouter(
     prefix="/api/conversations",

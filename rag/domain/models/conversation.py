@@ -26,4 +26,4 @@ class HistoryMessage:
     role: Literal["user", "assistant"]
     text: str
     # None unless the turn searched the knowledge base; empty if it found nothing.
-    sources: list[str] | None = None
+    references: list[str] | None = None

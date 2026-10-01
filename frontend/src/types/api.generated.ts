@@ -395,8 +395,8 @@ export interface components {
             role: "user" | "assistant";
             /** Text */
             text: string;
-            /** Sources */
-            sources: string[] | null;
+            /** References */
+            references: string[] | null;
         };
         /** IngestionRunResponse */
         IngestionRunResponse: {
@@ -452,6 +452,19 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * ReferencesEvent
+         * @description The turn's deduplicated references, once it's done. Only sent if the turn searched.
+         */
+        ReferencesEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "references";
+            /** References */
+            references: string[];
+        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Model */
@@ -462,24 +475,11 @@ export interface components {
             top_k: number;
         };
         /**
-         * SourcesEvent
-         * @description The turn's deduplicated sources, once it's done. Only sent if the turn searched.
-         */
-        SourcesEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "sources";
-            /** Sources */
-            sources: string[];
-        };
-        /**
          * StreamEventResponse
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["SourcesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.

@@ -99,7 +99,7 @@ def client() -> Generator[TestClient]:
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
         ],
-        sources=["doc-a", "doc-b"],
+        references=["doc-a", "doc-b"],
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
@@ -316,7 +316,7 @@ def test_send_message_contract_matches_frontend_parsing(
 ) -> None:
     """Locks the wire format to what frontend/src/api/chat.ts parses: one JSON object
     per event's `data`, told apart by `type`. The payloads' fields are typed through
-    OpenAPI (TextEvent/ToolEvent/SourcesEvent); this checks they arrive that way.
+    OpenAPI (TextEvent/ToolEvent/ReferencesEvent); this checks they arrive that way.
     """
     conversation_id = _create_conversation(client, auth_headers)
 
@@ -338,7 +338,7 @@ def test_send_message_contract_matches_frontend_parsing(
             "query": None,
             "output": "stub result",
         },
-        {"type": "sources", "sources": ["doc-a", "doc-b"]},
+        {"type": "references", "references": ["doc-a", "doc-b"]},
     ]
 
 

@@ -177,7 +177,7 @@ class _Chat:
         return (await self.graph.aget_state(self.config)).values["messages"]
 
 
-def _sources(events: list[StreamEvent]) -> list[str]:
+def _references(events: list[StreamEvent]) -> list[str]:
     return [
         ref for e in events if isinstance(e, ReferencesReady) for ref in e.references
     ]
@@ -199,17 +199,17 @@ async def test_streams_only_the_agents_answer_not_the_guards_verdicts() -> None:
     assert _text(events) == "It costs 10."
 
 
-async def test_sources_cover_only_the_current_turn() -> None:
+async def test_references_cover_only_the_current_turn() -> None:
     model = _ScriptedChatModel(
         answers=[_search("pricing"), _answer("A"), _search("security"), _answer("B")]
     )
     chat = _Chat(model)
 
-    assert _sources(await chat.send("first")) == ["pricing"]
-    assert _sources(await chat.send("second")) == ["security"]
+    assert _references(await chat.send("first")) == ["pricing"]
+    assert _references(await chat.send("second")) == ["security"]
 
 
-async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
+async def test_a_search_that_finds_nothing_sends_empty_references() -> None:
     model = _ScriptedChatModel(
         answers=[_search(_NO_RESULTS_QUERY), _answer("I don't know.")]
     )
@@ -221,7 +221,7 @@ async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
     ]
 
 
-async def test_a_turn_without_a_search_sends_no_sources() -> None:
+async def test_a_turn_without_a_search_sends_no_references() -> None:
     model = _ScriptedChatModel(answers=[_answer("hi!")])
 
     events = await _Chat(model).send("hello")
@@ -331,7 +331,9 @@ async def test_verifier_only_sees_the_current_turns_context(
         assert "facts about pricing" not in model.verifier_calls[1]
 
 
-async def test_history_shows_each_question_with_its_final_answer_and_sources() -> None:
+async def test_history_shows_each_question_with_its_final_answer_and_references() -> (
+    None
+):
     model = _ScriptedChatModel(
         answers=[
             _search("pricing"),
@@ -350,7 +352,7 @@ async def test_history_shows_each_question_with_its_final_answer_and_sources() -
 
     history = to_history(await chat.saved_messages())
 
-    assert [(m.role, m.text, m.sources) for m in history] == [
+    assert [(m.role, m.text, m.references) for m in history] == [
         ("user", "How much?", None),
         ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
         ("user", "thanks", None),

@@ -1,6 +1,7 @@
 import type { SubmitEvent } from 'react';
 
 import { KnowledgeBaseSection } from '../components/settings/KnowledgeBaseSection';
+import { PreferencesSection } from '../components/settings/PreferencesSection';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../hooks/useSettings';
 
@@ -67,6 +68,8 @@ export function SettingsPage() {
           {saved && <span className="text-sm text-green-600">Saved</span>}
         </div>
       </form>
+
+      <PreferencesSection />
 
       {user?.is_admin && <KnowledgeBaseSection />}
     </div>

@@ -24,16 +24,16 @@ class ToolEvent(BaseModel):
     output: str | None = None
 
 
-class SourcesEvent(BaseModel):
-    """The turn's deduplicated sources, once it's done. Only sent if the turn searched."""
+class ReferencesEvent(BaseModel):
+    """The turn's deduplicated references, once it's done. Only sent if the turn searched."""
 
-    type: Literal["sources"] = "sources"
-    sources: list[str]
+    type: Literal["references"] = "references"
+    references: list[str]
 
 
 class StreamEventResponse(
     RootModel[
-        Annotated[TextEvent | ToolEvent | SourcesEvent, Field(discriminator="type")]
+        Annotated[TextEvent | ToolEvent | ReferencesEvent, Field(discriminator="type")]
     ]
 ):
     """One event of the message stream. A named model rather than a bare union, so it's
@@ -45,12 +45,11 @@ def to_stream_event(event: StreamEvent) -> StreamEventResponse:
     return StreamEventResponse(_payload(event))
 
 
-# TODO: chatstream.ts
-def _payload(event: StreamEvent) -> TextEvent | ToolEvent | SourcesEvent:
+def _payload(event: StreamEvent) -> TextEvent | ToolEvent | ReferencesEvent:
     match event:
         case TextDelta(text=text):
             return TextEvent(text=text)
         case ToolCall(name=name, status=status, query=query, output=output):
             return ToolEvent(name=name, status=status, query=query, output=output)
         case ReferencesReady(references=references):
-            return SourcesEvent(sources=references)
+            return ReferencesEvent(references=references)

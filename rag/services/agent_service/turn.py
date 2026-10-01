@@ -30,12 +30,12 @@ def turn_references(messages: Sequence[BaseMessage]) -> list[str] | None:
     """Deduplicated ids the tools cited (as their artifacts) this turn; empty if
     they found nothing, None if no citing tool ran.
     """
-    return _sources(current_turn(messages))
+    return _references(current_turn(messages))
 
 
 def to_history(messages: Sequence[BaseMessage]) -> list[HistoryMessage]:
     """The thread as the user saw it: each question, then that turn's final answer
-    with its sources. Tool calls are left out, and if the answer was revised only
+    with its references. Tool calls are left out, and if the answer was revised only
     the revision is kept.
     """
     history: list[HistoryMessage] = []
@@ -45,7 +45,9 @@ def to_history(messages: Sequence[BaseMessage]) -> list[HistoryMessage]:
         if answers:
             history.append(
                 HistoryMessage(
-                    role="assistant", text=answers[-1].text, sources=_sources(turn)
+                    role="assistant",
+                    text=answers[-1].text,
+                    references=_references(turn),
                 )
             )
     return history
@@ -57,7 +59,7 @@ def _split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]
     return [messages[start:end] for start, end in pairwise([*starts, len(messages)])]
 
 
-def _sources(turn: Sequence[BaseMessage]) -> list[str] | None:
+def _references(turn: Sequence[BaseMessage]) -> list[str] | None:
     artifacts = [
         message.artifact
         for message in turn
@@ -65,4 +67,4 @@ def _sources(turn: Sequence[BaseMessage]) -> list[str] | None:
     ]
     if not artifacts:
         return None
-    return sorted({source for artifact in artifacts for source in artifact})
+    return sorted({ref for artifact in artifacts for ref in artifact})

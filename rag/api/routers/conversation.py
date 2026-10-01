@@ -7,7 +7,7 @@ from rag.api.deps import (
     ConversationServiceDep,
     get_current_user,
 )
-from rag.api.schema.conversations import (
+from rag.api.schema.conversation import (
     DEFAULT_PAGE_LIMIT,
     ConversationPageResponse,
     ConversationResponse,

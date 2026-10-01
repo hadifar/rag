@@ -8,8 +8,8 @@ export function historyToMessages(history: HistoryMessageResponse[]): ChatMessag
     }
     const answer: ChatMessageInput = { type: 'text', content: { text: message.text } };
     // null: the answer didn't search; [] searched and found nothing (still shown).
-    return message.sources !== null
-      ? [answer, { type: 'sources', content: { sources: message.sources } }]
+    return message.references !== null
+      ? [answer, { type: 'references', content: { references: message.references } }]
       : [answer];
   });
 }

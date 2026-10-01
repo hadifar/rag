@@ -13,7 +13,7 @@ class ChatAgentPort(Protocol):
     ) -> AsyncIterator[StreamEvent]:
         """Answers `message` in the thread for `user_id` (whose preferences apply),
         saving the turn to it: the answer's events as they happen, then the turn's
-        sources if it searched.
+        references if it searched.
         """
         ...
 

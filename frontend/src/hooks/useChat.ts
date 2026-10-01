@@ -128,12 +128,12 @@ export function useChat(conversationId: string | undefined) {
   );
 
   /** Opens a cited knowledge-base document in a new tab. */
-  const openSource = useCallback((name: string) => {
+  const openReference = useCallback((name: string) => {
     openKbSource(name).catch(() => window.alert("Couldn't open that document. Please try again."));
   }, []);
 
   // Only a new chat: an existing one is also empty for a moment while its history loads.
   const showWelcome = !conversationId && messages.length === 0;
 
-  return { messages, showWelcome, sendMessage, openSource };
+  return { messages, showWelcome, sendMessage, openReference };
 }

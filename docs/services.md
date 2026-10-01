@@ -21,4 +21,4 @@
 Guard instructions are never saved to the thread: the checkpoint holds only what the user and
 the assistant said, so nothing carries over into later turns. "This turn" is everything after
 the latest `HumanMessage` (`agent_service/turn.py`); `search_kb` returns its source ids as
-the `ToolMessage` artifact, and the `sources` event is built from this turn's artifacts.
+the `ToolMessage` artifact, and the `references` event is built from this turn's artifacts.
