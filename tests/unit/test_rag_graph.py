@@ -24,8 +24,8 @@ from pydantic import Field
 
 from rag.domain.models import (
     Chunk,
+    PreferenceMiddleware,
     ReferencesReady,
-    RememberPreferences,
     StreamEvent,
     TextDelta,
     Tool,
@@ -482,6 +482,6 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
     with pytest.raises(ValueError, match="save_user_preference"):
         agents.create_agent(
             ToolAgentSpec(
-                system_prompt="", tools=[clash], middleware=[RememberPreferences()]
+                system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
             )
         )

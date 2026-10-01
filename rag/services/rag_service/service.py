@@ -2,10 +2,10 @@ import uuid
 from collections.abc import AsyncIterator
 
 from rag.domain.models import (
-    GroundednessCheck,
-    OffTopicCheck,
-    Planning,
-    RememberPreferences,
+    GroundednessMiddleware,
+    OffTopicMiddleware,
+    PlanningMiddleware,
+    PreferenceMiddleware,
     StreamEvent,
     ToolAgentSpec,
 )
@@ -30,10 +30,10 @@ class RagService:
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
             middleware=[
-                OffTopicCheck(),
-                GroundednessCheck(max_revisions),
-                RememberPreferences(),
-                Planning(PLANNING_INSTRUCTIONS),
+                OffTopicMiddleware(),
+                GroundednessMiddleware(max_revisions),
+                PreferenceMiddleware(),
+                PlanningMiddleware(PLANNING_INSTRUCTIONS),
             ],
         )
 

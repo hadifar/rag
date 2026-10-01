@@ -1,22 +1,26 @@
 """The domain's data types, grouped by area; import them from here."""
 
-from rag.domain.models.agent import (
+from rag.domain.models.agent.agent import (
     MAX_PREFERENCE_LENGTH,
     MAX_PREFERENCES,
     AgentSpec,
-    GroundednessCheck,
     Middleware,
-    OffTopicCheck,
-    Planning,
     Preference,
-    ReferencesReady,
-    RememberPreferences,
-    StreamEvent,
-    TextDelta,
     Tool,
     ToolAgentSpec,
-    ToolCall,
     ToolResult,
+)
+from rag.domain.models.agent.middleware import (
+    GroundednessMiddleware,
+    OffTopicMiddleware,
+    PlanningMiddleware,
+    PreferenceMiddleware,
+)
+from rag.domain.models.agent.stream import (
+    ReferencesReady,
+    StreamEvent,
+    TextDelta,
+    ToolCall,
 )
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
@@ -40,19 +44,19 @@ __all__ = [
     "Chunk",
     "Conversation",
     "ConversationPage",
-    "GroundednessCheck",
+    "GroundednessMiddleware",
     "HistoryMessage",
     "IndexedDocument",
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
     "Middleware",
-    "OffTopicCheck",
-    "Planning",
+    "OffTopicMiddleware",
+    "PlanningMiddleware",
     "Preference",
+    "PreferenceMiddleware",
     "RawDocument",
     "ReferencesReady",
-    "RememberPreferences",
     "StreamEvent",
     "TextDelta",
     "Tool",

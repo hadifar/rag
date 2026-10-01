@@ -87,12 +87,13 @@ class GroundednessGuard(AgentMiddleware):
             return None  # Not a final answer yet: the model is still searching.
 
         revisions = len(_turn_answers(state["messages"])) - 1
-        # Fail open past the cap: end the turn rather than loop, or make the user wait
-        # on the LLM re-answering the same question indefinitely.
+
         if revisions >= self._max_revisions:
             return None
+
         if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
             return None
+
         return {"jump_to": "model"}
 
     async def awrap_model_call(

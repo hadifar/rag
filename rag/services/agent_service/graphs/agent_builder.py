@@ -14,11 +14,11 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
 from rag.domain.models import (
-    GroundednessCheck,
+    GroundednessMiddleware,
     Middleware,
-    OffTopicCheck,
-    Planning,
-    RememberPreferences,
+    OffTopicMiddleware,
+    PlanningMiddleware,
+    PreferenceMiddleware,
     Tool,
     ToolAgentSpec,
 )
@@ -74,15 +74,15 @@ def _to_langchain_middleware(
     and their results aren't what an answer is checked against.
     """
     match middleware:
-        case OffTopicCheck():
+        case OffTopicMiddleware():
             return TopicalGuard(classify, kept_tools=user_tools)
-        case GroundednessCheck(max_revisions=max_revisions):
+        case GroundednessMiddleware(max_revisions=max_revisions):
             return GroundednessGuard(
                 classify, max_revisions=max_revisions, unverified_tools=user_tools
             )
-        case RememberPreferences():
+        case PreferenceMiddleware():
             return PreferencesMiddleware()
-        case Planning(instructions=instructions):
+        case PlanningMiddleware(instructions=instructions):
             # The instructions come with the tool, so the model is never told to plan
             # with a tool it doesn't have.
             return TodoListMiddleware(
@@ -98,9 +98,11 @@ def build_tool_agent(
     store: BaseStore,
     retry_attempts: int,
 ) -> CompiledStateGraph:
+
     remember_preferences = any(
-        isinstance(m, RememberPreferences) for m in spec.middleware
+        isinstance(m, PreferenceMiddleware) for m in spec.middleware
     )
+
     user_tools = PREFERENCE_TOOL_NAMES if remember_preferences else frozenset()
     tools = _to_langchain_tools(spec.tools, reserved=user_tools)
 
