@@ -10,6 +10,8 @@ from rag.services.agent_service.preferences import ChatContext
 from rag.services.agent_service.streaming import parse_event
 from rag.services.agent_service.turn import turn_references
 
+# TODO: error hanlding -> Something went wrong: Unexpected end of JSON input
+
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its

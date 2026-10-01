@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from rag.adapters.archive_store import LocalArchiveStore
+from rag.adapters.kb_archive_store import LocalArchiveStore
 from rag.domain.errors import (
     ArchiveTooLargeError,
     EmptyKnowledgeBaseError,
