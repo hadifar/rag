@@ -17,10 +17,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # apply `alembic upgrade head`, then exits; the backend waits for it.
+  migrate:
+    image: rag-backend:local
+    pull_policy: never
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
+    entrypoint: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.backend
+    # Named so `migrate` runs the same image without building it a second time.
+    image: rag-backend:local
     env_file: .env
     # .env targets the host (localhost); inside the compose network it's `postgres`.
     environment:
@@ -31,8 +45,8 @@ services:
     volumes:
       - kbuploads:/var/lib/rag/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     expose:
       - "8000"
 

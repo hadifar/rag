@@ -132,5 +132,8 @@ export function useChat(conversationId: string | undefined) {
     openKbSource(name).catch(() => window.alert("Couldn't open that document. Please try again."));
   }, []);
 
-  return { messages, sendMessage, openSource };
+  // Only a new chat: an existing one is also empty for a moment while its history loads.
+  const showWelcome = !conversationId && messages.length === 0;
+
+  return { messages, showWelcome, sendMessage, openSource };
 }

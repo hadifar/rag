@@ -15,6 +15,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useConversations } from '../../hooks/useConversations';
 import { useConfirmDeleteConversation } from '../../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../../utils/conversations';
+import { ConfirmDeleteModal } from '../ui/ConfirmDeleteModal';
 import type { ConversationResponse } from '../../types';
 
 // Shown until the conversation's first answer names it.
@@ -59,7 +60,7 @@ const ConversationLink = memo(function ConversationLink({
   onDelete,
 }: {
   conversation: ConversationResponse;
-  onDelete: (id: string) => void;
+  onDelete: (conversation: ConversationResponse) => void;
 }) {
   return (
     <div className="group flex items-center gap-1">
@@ -78,7 +79,7 @@ const ConversationLink = memo(function ConversationLink({
       </NavLink>
       <button
         type="button"
-        onClick={() => onDelete(conversation.id)}
+        onClick={() => onDelete(conversation)}
         title="Delete chat"
         className="shrink-0 rounded-md p-1 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
       >
@@ -90,7 +91,8 @@ const ConversationLink = memo(function ConversationLink({
 
 function ConversationList() {
   const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversations();
-  const confirmDelete = useConfirmDeleteConversation();
+  const { requestDelete, pending, isDeleting, error, confirm, cancel } =
+    useConfirmDeleteConversation();
 
   return (
     <>
@@ -103,7 +105,7 @@ function ConversationList() {
         <p className="px-3 py-2 text-[13px] text-slate-400">No chats yet.</p>
       )}
       {conversations.map((conversation) => (
-        <ConversationLink key={conversation.id} conversation={conversation} onDelete={confirmDelete} />
+        <ConversationLink key={conversation.id} conversation={conversation} onDelete={requestDelete} />
       ))}
       {hasMore && (
         <button
@@ -115,6 +117,22 @@ function ConversationList() {
           {isLoadingMore ? 'Loading…' : 'Load more'}
         </button>
       )}
+      <ConfirmDeleteModal
+        isOpen={pending !== null}
+        title="Delete chat?"
+        message={
+          <>
+            <span className="font-medium text-slate-700">
+              “{pending?.title ?? NEW_CHAT_TITLE}”
+            </span>{' '}
+            will be permanently deleted. This can't be undone.
+          </>
+        }
+        isBusy={isDeleting}
+        error={error}
+        onConfirm={confirm}
+        onCancel={cancel}
+      />
     </>
   );
 }

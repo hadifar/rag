@@ -24,7 +24,7 @@ database holds everything: users, conversations, their messages and the knowledg
 
 For login, set `AUTH__JWT_SECRET` to a random value (e.g. `openssl rand -hex 32`). Before serving for the first time — and after pulling changes that add a migration — apply the
 migrations (`users`, `conversations`, `chunks`, `documents`) and create a user (there's no public signup — accounts are
-created out-of-band):
+created out-of-band). Under Docker Compose the migrations apply themselves (see [Docker](#docker)); when running with uv:
 ```bash
 uv run alembic upgrade head
 uv run rag create-user you@example.com --admin
@@ -60,11 +60,14 @@ and the frontend (nginx) on `http://localhost:3000`; the `backend` container isn
 the host, only reachable inside the compose network. nginx proxies `/api/*` to it, so use the
 frontend URL for both the UI and the API.
 
-Once the stack is up, apply the migrations and create a login (one-time, or after a fresh
-`pgdata` volume) — the backend serves fine without this, but nothing can log in until it's
-done:
+Before `backend` starts, a one-off `migrate` service (same image) runs `alembic upgrade head` and
+exits; `backend` waits for it to succeed, so a failed migration keeps the old-schema server from
+starting (`docker compose logs migrate` shows why). It runs on every `up` and is a no-op once the
+schema is current.
+
+Once the stack is up, create a login (one-time, or after a fresh `pgdata` volume) — nothing can
+log in until it's done:
 ```bash
-docker compose exec backend alembic upgrade head
 docker compose exec backend rag create-user you@example.com --admin
 ```
 
