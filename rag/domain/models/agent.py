@@ -36,9 +36,6 @@ class GroundednessCheck:
     max_revisions: int
 
 
-Check = OffTopicCheck | GroundednessCheck
-
-
 @dataclass(frozen=True)
 class Planning:
     """Lets the agent split a multi-part question into steps and work through them
@@ -49,15 +46,21 @@ class Planning:
 
 
 @dataclass(frozen=True)
+class RememberPreferences:
+    """Answers by the user's preferences, and saves or forgets one when they ask."""
+
+
+Middleware = OffTopicCheck | GroundednessCheck | Planning | RememberPreferences
+
+
+@dataclass(frozen=True)
 class ToolAgentSpec:
     """The standard tool-calling agent: the model calls `tools` until it answers."""
 
     system_prompt: str
     tools: list[Tool]
-    checks: list[Check] = field(default_factory=list[Check])  # run in this order
-    planning: Planning | None = None
-    # Answers by the user's preferences, and saves or forgets one when they ask.
-    remember_preferences: bool = False
+    # Wrapped around each model call in this order, the first outermost.
+    middleware: list[Middleware] = field(default_factory=list[Middleware])
 
 
 # Every kind of agent the agent service can build; a custom graph adds its spec here.

@@ -25,19 +25,20 @@ from pydantic import Field
 from rag.domain.models import (
     Chunk,
     ReferencesReady,
+    RememberPreferences,
     StreamEvent,
     TextDelta,
     Tool,
     ToolAgentSpec,
     ToolCall,
 )
-from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.memory_store.preferences import (
+from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.middleware.preferences import (
     PREFERENCE_TOOL_NAMES,
     list_preferences,
     save_preference,
 )
+from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import Agent, AgentService
 from rag.services.agent_service.turn import to_history
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
@@ -480,5 +481,7 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
 
     with pytest.raises(ValueError, match="save_user_preference"):
         agents.create_agent(
-            ToolAgentSpec(system_prompt="", tools=[clash], remember_preferences=True)
+            ToolAgentSpec(
+                system_prompt="", tools=[clash], middleware=[RememberPreferences()]
+            )
         )

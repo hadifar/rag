@@ -5,6 +5,7 @@ from rag.domain.models import (
     GroundednessCheck,
     OffTopicCheck,
     Planning,
+    RememberPreferences,
     StreamEvent,
     ToolAgentSpec,
 )
@@ -28,9 +29,12 @@ class RagService:
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
-            checks=[OffTopicCheck(), GroundednessCheck(max_revisions)],
-            planning=Planning(PLANNING_INSTRUCTIONS),
-            remember_preferences=True,
+            middleware=[
+                OffTopicCheck(),
+                GroundednessCheck(max_revisions),
+                RememberPreferences(),
+                Planning(PLANNING_INSTRUCTIONS),
+            ],
         )
 
         self._agent = agent_service.create_agent(agent_spec)

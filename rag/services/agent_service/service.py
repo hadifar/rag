@@ -20,8 +20,8 @@ from rag.domain.models import (
     ToolAgentSpec,
 )
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
-from rag.services.agent_service.memory_store import preferences
-from rag.services.agent_service.memory_store.preferences import ChatContext
+from rag.services.agent_service.middleware import preferences
+from rag.services.agent_service.middleware.preferences import ChatContext
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 from rag.services.agent_service.streaming import parse_event
 from rag.services.agent_service.turn import to_history, turn_references
