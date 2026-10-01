@@ -75,7 +75,7 @@ typeCheckingMode = "basic"
 # Strict everywhere but rag/services, where LangChain's partly untyped API leaks in.
 strict = [
     "rag/domain", "rag/api", "rag/repository", "rag/adapters",
-    "rag/app.py", "rag/cli.py", "rag/config.py", "rag/container.py", "rag/__main__.py",
+    "rag/app.py", "rag/cli.py", "rag/config", "rag/container.py", "rag/__main__.py",
 ]
 pythonVersion = "3.12"
 venvPath = "."

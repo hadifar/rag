@@ -1,7 +1,7 @@
 import uuid
 
 from rag.container import build_container
-from rag.domain.events import TextDelta, ToolCall
+from rag.domain.models import TextDelta, ToolCall
 
 
 async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
@@ -10,7 +10,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         tool_calls = []
 
         async for event in container.rag_service.stream_chat(
-            message, thread_id=str(uuid.uuid4())
+            message, thread_id=str(uuid.uuid4()), user_id=uuid.uuid4()
         ):
             if isinstance(event, TextDelta):
                 answer += event.text

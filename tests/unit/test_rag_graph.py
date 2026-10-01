@@ -19,16 +19,31 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.memory import InMemoryStore
 from pydantic import Field
 
-from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
-from rag.domain.models import Chunk
-from rag.domain.prompts import PLANNING_INSTRUCTIONS
-from rag.services.agent_service.agent import Agent
-from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
-from rag.services.agent_service.service import AgentService
+from rag.domain.models import (
+    AssistantMessage,
+    Chunk,
+    PreferenceMiddleware,
+    ReferencesReady,
+    StreamEvent,
+    TextDelta,
+    Tool,
+    ToolAgentSpec,
+    ToolCall,
+    UserMessage,
+)
+from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
+from rag.services.agent_service.middleware.preferences import (
+    PREFERENCE_TOOL_NAMES,
+    list_preferences,
+    save_preference,
+)
+from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.service import Agent, AgentService
 from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
 from rag.services.rag_service.tools import search_tool
 
@@ -142,23 +157,29 @@ def _no_tracing(name: str | None) -> RunnableConfig:
     return {}
 
 
+_USER = uuid.uuid4()
+
+
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        agents = AgentService(model, InMemorySaver(), _no_tracing)
-        self.rag = RagService(_StubRetrievalService(), agents)
+        self.store = InMemoryStore()
+        agents = AgentService(
+            model, InMemorySaver(), self.store, _no_tracing, retry_attempts=3
+        )
+        self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
-        self.config: RunnableConfig = agent.get_config("t1")
+        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.rag.stream_chat(text, "t1")]
+        return [event async for event in self.rag.stream_chat(text, "t1", _USER)]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
 
 
-def _sources(events: list[StreamEvent]) -> list[str]:
+def _references(events: list[StreamEvent]) -> list[str]:
     return [
         ref for e in events if isinstance(e, ReferencesReady) for ref in e.references
     ]
@@ -180,17 +201,17 @@ async def test_streams_only_the_agents_answer_not_the_guards_verdicts() -> None:
     assert _text(events) == "It costs 10."
 
 
-async def test_sources_cover_only_the_current_turn() -> None:
+async def test_references_cover_only_the_current_turn() -> None:
     model = _ScriptedChatModel(
         answers=[_search("pricing"), _answer("A"), _search("security"), _answer("B")]
     )
     chat = _Chat(model)
 
-    assert _sources(await chat.send("first")) == ["pricing"]
-    assert _sources(await chat.send("second")) == ["security"]
+    assert _references(await chat.send("first")) == ["pricing"]
+    assert _references(await chat.send("second")) == ["security"]
 
 
-async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
+async def test_a_search_that_finds_nothing_sends_empty_references() -> None:
     model = _ScriptedChatModel(
         answers=[_search(_NO_RESULTS_QUERY), _answer("I don't know.")]
     )
@@ -202,7 +223,7 @@ async def test_a_search_that_finds_nothing_sends_empty_sources() -> None:
     ]
 
 
-async def test_a_turn_without_a_search_sends_no_sources() -> None:
+async def test_a_turn_without_a_search_sends_no_references() -> None:
     model = _ScriptedChatModel(answers=[_answer("hi!")])
 
     events = await _Chat(model).send("hello")
@@ -241,7 +262,7 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
 
     events = await _Chat(model).send("first")
 
-    # MAX_REVISIONS is 1: one revision, and the revised answer isn't re-verified.
+    # max_revisions is 1: one revision, and the revised answer isn't re-verified.
     assert sum(_is_revision_call(call) for call in model.agent_calls) == 1
     assert len(model.verifier_calls) == 1
     assert _text(events).endswith("still wrong")
@@ -279,9 +300,12 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
 
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
     assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
-    assert off_topic_call["tools"] == []
+    # Off-topic, the model keeps only the tools about the user, not the product.
+    assert sorted(off_topic_call["tools"]) == sorted(PREFERENCE_TOOL_NAMES)
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
-    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
+    assert sorted(on_topic_call["tools"]) == sorted(
+        ["search_kb", "write_todos", *PREFERENCE_TOOL_NAMES]
+    )
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
 
@@ -309,7 +333,7 @@ async def test_verifier_only_sees_the_current_turns_context(
         assert "facts about pricing" not in model.verifier_calls[1]
 
 
-async def test_history_shows_each_question_with_its_final_answer_and_sources() -> None:
+async def test_history_replays_each_turn_without_its_rejected_drafts() -> None:
     model = _ScriptedChatModel(
         answers=[
             _search("pricing"),
@@ -328,14 +352,29 @@ async def test_history_shows_each_question_with_its_final_answer_and_sources() -
 
     history = to_history(await chat.saved_messages())
 
-    assert [(m.role, m.text, m.sources) for m in history] == [
-        ("user", "How much?", None),
-        ("assistant", "revised", ["pricing"]),  # the rejected draft is dropped
-        ("user", "thanks", None),
-        ("assistant", "You're welcome!", None),  # didn't search
-        ("user", "Who won the cup?", None),
-        ("assistant", "I don't know.", []),  # searched, found nothing
+    assert [m.role for m in history] == ["user", "assistant"] * 3
+    questions = [m.text for m in history if isinstance(m, UserMessage)]
+    answers = [m.events for m in history if isinstance(m, AssistantMessage)]
+    assert questions == ["How much?", "thanks", "Who won the cup?"]
+    # The rejected draft ("wrong") is dropped.
+    assert [_text(events) for events in answers] == [
+        "revised",
+        "You're welcome!",
+        "I don't know.",
     ]
+    assert [
+        [(e.status, e.query) for e in events if isinstance(e, ToolCall)]
+        for events in answers
+    ] == [
+        [("pending", "pricing"), ("done", None)],
+        [],
+        [("pending", _NO_RESULTS_QUERY), ("done", None)],
+    ]
+    # None: didn't search; []: searched, found nothing.
+    assert [
+        next((e.references for e in events if isinstance(e, ReferencesReady)), None)
+        for events in answers
+    ] == [["pricing"], None, []]
 
 
 def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
@@ -345,8 +384,119 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
 
 
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:
-    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver(), _no_tracing)
+    agents = AgentService(
+        _ScriptedChatModel(answers=[]),
+        InMemorySaver(),
+        InMemoryStore(),
+        _no_tracing,
+        retry_attempts=3,
+    )
     docs = search_tool(_StubRetrievalService())
 
     with pytest.raises(ValueError, match="search_kb"):
-        agents.create_tools([docs, docs])
+        agents.create_agent(ToolAgentSpec(system_prompt="", tools=[docs, docs]))
+
+
+def _call(name: str, **args: str) -> AIMessage:
+    return AIMessage(
+        content="", tool_calls=[{"name": name, "args": args, "id": str(uuid.uuid4())}]
+    )
+
+
+async def test_saved_preferences_are_in_every_model_calls_prompt_not_the_thread() -> (
+    None
+):
+    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("Het kost 10.")])
+    chat = _Chat(model)
+    await save_preference(chat.store, _USER, "Answer in Dutch")
+
+    await chat.send("How much?")
+
+    assert all("Answer in Dutch" in c["messages"][0].text for c in model.agent_calls)
+    assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
+
+
+async def test_a_preference_saved_in_one_turn_applies_from_the_next_call_on() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _call("save_user_preference", text="Keep answers short"),
+            _answer("Noted."),
+            _search("pricing"),
+            _answer("10."),
+        ]
+    )
+    chat = _Chat(model)
+
+    events = await chat.send("Please always keep answers short")
+    await chat.send("How much?")
+
+    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+        "Keep answers short"
+    ]
+    assert "Keep answers short" not in model.agent_calls[0]["messages"][0].text
+    assert "Keep answers short" in model.agent_calls[1]["messages"][0].text
+    # Saving a preference is no search: the turn cites nothing and isn't verified.
+    assert not any(isinstance(e, ReferencesReady) for e in events)
+    assert len(model.verifier_calls) == 1  # only the pricing answer
+
+
+async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _call("save_user_preference", text="Answer in Dutch"),
+            _answer("Opgeslagen."),
+        ],
+        off_topic_messages={"Always answer in Dutch"},
+    )
+    chat = _Chat(model)
+
+    await chat.send("Always answer in Dutch")
+
+    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+        "Answer in Dutch"
+    ]
+
+
+async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
+    model = _ScriptedChatModel(answers=[])
+    chat = _Chat(model)
+    mine = await save_preference(chat.store, _USER, "Answer in Dutch")
+    theirs = await save_preference(chat.store, uuid.uuid4(), "Answer in French")
+    model.answers.extend(
+        [
+            _call("forget_user_preference", preference_id=theirs.id),
+            _call("forget_user_preference", preference_id=mine.id),
+            _answer("Done."),
+        ]
+    )
+
+    events = await chat.send("Forget my preferences")
+
+    outputs = [e.output for e in events if isinstance(e, ToolCall) and e.output]
+    assert outputs == [
+        f"No saved preference has the id {theirs.id}.",
+        f"Forgot preference {mine.id}.",
+    ]
+    assert await list_preferences(chat.store, _USER) == []
+
+
+def test_a_tool_cant_take_a_preference_tools_name() -> None:
+    agents = AgentService(
+        _ScriptedChatModel(answers=[]),
+        InMemorySaver(),
+        InMemoryStore(),
+        _no_tracing,
+        retry_attempts=3,
+    )
+    clash = Tool(
+        name="save_user_preference",
+        description="",
+        run=search_tool(_StubRetrievalService()).run,
+    )
+
+    with pytest.raises(ValueError, match="save_user_preference"):
+        agents.create_agent(
+            ToolAgentSpec(
+                system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
+            )
+        )

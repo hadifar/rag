@@ -1,4 +1,4 @@
-from rag.domain.agents import Tool, ToolResult
+from rag.domain.models import Tool, ToolResult
 from rag.domain.ports import SearchPort
 
 

@@ -7,11 +7,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from rag.domain.constants import (
-    FALLBACK_TITLE_LENGTH,
-    MAX_TITLE_LENGTH,
-    TITLE_MESSAGE_EXCERPT,
-)
 from rag.domain.errors import (
     BlankTitleError,
     ConversationNotFoundError,
@@ -19,8 +14,18 @@ from rag.domain.errors import (
 )
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import AgentServicePort, ConversationRepositoryPort
-from rag.domain.prompts import TITLE_PROMPT
-from rag.domain.resilience import or_default
+from rag.shared.resilience import or_default
+
+TITLE_PROMPT = (
+    "Write a title for a support conversation that starts with the message below.\n\n"
+    "USER:\n{message}"
+)
+# Only the start of the message is needed to title it; caps the title call's cost.
+TITLE_MESSAGE_EXCERPT = 1000
+MAX_TITLE_LENGTH = 80  # cap on an LLM-written title
+FALLBACK_TITLE_LENGTH = (
+    60  # the title cut from the message when the LLM can't write one
+)
 
 
 class TitleOutput(BaseModel):
@@ -91,26 +96,14 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         await self.get_owned(user_id, conversation_id)
-        return await self._repository.get_history(str(conversation_id))
+        return await self._agent_service.get_history(str(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         await self.get_owned(user_id, conversation_id)
         # Messages first: if this fails, the row is still there to retry the delete,
         # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._repository.delete_history(str(conversation_id))
+        await self._agent_service.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
-
-    async def prune_orphaned_threads(self, *, dry_run: bool = False) -> list[str]:
-        """Deletes stored messages whose conversation no longer exists, and returns their
-        thread ids. Deleting a conversation removes its messages first, so these only come
-        from a delete that failed halfway or rows removed outside the app.
-        """
-        conversation_ids = {str(id_) for id_ in await self._repository.all_ids()}
-        orphans = sorted(await self._repository.list_thread_ids() - conversation_ids)
-        if not dry_run:
-            for thread_id in orphans:
-                await self._repository.delete_history(thread_id)
-        return orphans
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID

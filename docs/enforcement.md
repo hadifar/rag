@@ -135,8 +135,8 @@ graph LR
   content hash is a SHA-256, chunk indexes aren't negative, and an ingestion run has exactly
   the fields its status allows; partial unique indexes allow one running ingestion and one
   empty conversation per user
-- LangGraph's checkpoint tables live in their own `langgraph` schema (migration `0008`; the
-  checkpointer connects with `search_path=langgraph`), so `public` holds only tables Alembic
+- LangGraph's checkpoint and store tables live in their own `langgraph` schema (migration
+  `0008`; their pool connects with `search_path=langgraph`), so `public` holds only tables Alembic
   owns
 
 ## General file hygiene

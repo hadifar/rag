@@ -3,7 +3,9 @@ from typing import Annotated
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from rag.config import Settings
 from rag.container import Container
+from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
@@ -21,6 +23,18 @@ def get_container(request: Request) -> Container:
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]
+
+
+def get_app_settings(request: Request) -> Settings:
+    """The Settings create_app stashed on app.state."""
+    return request.app.state.settings
+
+
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+
+
+def get_agent_service(container: ContainerDep) -> AgentService:
+    return container.agent_service
 
 
 def get_retrieval_service(container: ContainerDep) -> RetrievalService:
@@ -44,6 +58,9 @@ def get_rag_service(container: ContainerDep) -> RagService:
 
 
 RagServiceDep = Annotated[RagService, Depends(get_rag_service)]
+
+
+AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
 
 
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]

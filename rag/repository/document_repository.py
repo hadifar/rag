@@ -5,9 +5,10 @@ from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
-from rag.domain.constants import RRF_K
 from rag.domain.models import Chunk, IndexedDocument
 from rag.domain.ports import EmbeddingsPort
+
+RRF_K = 5  # reciprocal-rank-fusion constant when merging vector and full-text results
 
 # One round trip: the k nearest chunks by cosine distance (HNSW index) and the k best
 # full-text matches (GIN index), fused by reciprocal rank. A chunk found by both lists

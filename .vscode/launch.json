@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Needs Postgres up (docker compose up -d postgres) and port 8000 free.
+            // No --reload: the reloader's child process wouldn't stop at breakpoints.
+            "name": "Backend: FastAPI (debug)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "rag.app:create_app",
+                "--factory",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000"
+            ],
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": false
+        },
+        {
+            "name": "Tests: current file",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-q"
+            ],
+            "justMyCode": false
+        }
+    ]
+}

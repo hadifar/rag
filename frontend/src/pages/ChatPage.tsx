@@ -6,14 +6,14 @@ import { WelcomePlaceholder } from '../components/chat/WelcomePlaceholder';
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { messages, showWelcome, sendMessage, openSource } = useChat(conversationId);
+  const { messages, showWelcome, sendMessage, openReference } = useChat(conversationId);
 
   return (
     <div className="flex h-full flex-col">
       {showWelcome ? (
         <WelcomePlaceholder />
       ) : (
-        <MessageList messages={messages} onOpenSource={openSource} />
+        <MessageList messages={messages} onOpenReference={openReference} />
       )}
       <Composer onSend={sendMessage} />
     </div>
