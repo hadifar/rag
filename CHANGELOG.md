@@ -1,3 +1,35 @@
+## v0.12.0 (2026-10-01)
+
+### Feat
+
+- **chat**: keep reasoning, plan and searches in a reloaded conversation
+- **chat**: show the agent's plan as a live todo list instead of raw tool output
+- **chat**: stream the model's reasoning summary (opt-in via LLM__REASONING_EFFORT)
+- **api**: let users list, add and delete their answer preferences
+- **agent**: remember each user's answer preferences in the LangGraph store
+- **agent**: open a LangGraph Postgres store alongside the checkpointer
+
+### Fix
+
+- raise the graph recursion limit to 75
+
+### Refactor
+
+- **frontend**: keep reasoning visible in a lighter colour
+- rename middleware to be consitent with langchain
+- **domain**: break down agent model for simplification
+- **agent**: fold checks, planning and preferences into ToolAgentSpec.middleware
+- clean up agent service
+- rename adapter & update docs
+- **agent**: make Agent's run config private; fix its docstring
+- call a turn's citations references end to end
+- **cli**: remove prune-threads command
+- **agent**: own chat history in AgentService; drop CheckpointHistoryStore
+- **config**: move constants to their users; split config into a package; make tuning values real settings
+- **domain**: move models.py into models/
+- move prompts out of domain into the services that use them
+- **domain**: split ports into a package named after the services
+
 ## v0.11.0 (2026-10-01)
 
 ### Feat
