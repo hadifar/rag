@@ -3,6 +3,7 @@ from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
@@ -12,11 +13,6 @@ from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.domain.resilience import or_default
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
-from rag.services.agent_service.tools import to_langchain_tool
-
-
-def _no_trace(name: str | None = None) -> RunnableConfig:
-    return {}
 
 
 class AgentService:
@@ -28,7 +24,7 @@ class AgentService:
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
-        trace_config: Callable[[str | None], RunnableConfig] = _no_trace,
+        trace_config: Callable[[str | None], RunnableConfig],
     ):
         self._llm = llm
         self._checkpointer = checkpointer
@@ -57,6 +53,7 @@ class AgentService:
         names = [tool.name for tool in tools]
         if duplicates := sorted({name for name in names if names.count(name) > 1}):
             raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
+
         return [to_langchain_tool(tool) for tool in tools]
 
     def create_agent(self, spec: AgentSpec) -> Agent:
@@ -77,3 +74,20 @@ class AgentService:
         return await or_default(
             self.generate(prompt, attempts=LLM_RETRY_ATTEMPTS), FALLBACK_MESSAGE
         )
+
+
+def to_langchain_tool(tool: Tool) -> BaseTool:
+    """The model reads the result's content; its references ride along as the
+    ToolMessage's artifact, where the turn's references are collected from.
+    """
+
+    async def run(query: str) -> tuple[str, list[str] | None]:
+        result = await tool.run(query)
+        return result.content, result.references
+
+    return StructuredTool.from_function(
+        coroutine=run,
+        name=tool.name,
+        description=tool.description,
+        response_format="content_and_artifact",
+    )

@@ -138,9 +138,13 @@ def _answer(text: str) -> AIMessage:
     return AIMessage(content=text)
 
 
+def _no_tracing(name: str | None) -> RunnableConfig:
+    return {}
+
+
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        agents = AgentService(model, InMemorySaver())
+        agents = AgentService(model, InMemorySaver(), _no_tracing)
         self.rag = RagService(_StubRetrievalService(), agents)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
@@ -341,7 +345,7 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
 
 
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:
-    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver())
+    agents = AgentService(_ScriptedChatModel(answers=[]), InMemorySaver(), _no_tracing)
     docs = search_tool(_StubRetrievalService())
 
     with pytest.raises(ValueError, match="search_kb"):

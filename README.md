@@ -24,10 +24,10 @@ Then sign in at http://localhost:3000 and load the knowledge base: upload `data/
 Full setup and other ways to run it, are in [docs/setup.md](docs/setup.md).
 
 ## Docs
-See [docs/README.md](docs/README.md) & [docs/](docs/).
+See [docs/README.md](docs/README.md) & [docs/](docs/)
 
 ## Contribution
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 [LICENSE](LICENSE)
