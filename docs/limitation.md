@@ -40,8 +40,8 @@
   unreachable and stays in the checkpoint tables; nothing cleans these up.
 - One database, two schema owners: Alembic owns the tables in `public`
   (`users`/`conversations`/`documents`/`chunks`/`ingestion_runs`), while LangGraph's
-  `checkpointer.setup()` creates and migrates its own tables in the `langgraph` schema at every
-  boot, outside Alembic's history.
+  checkpointer's and store's `setup()` create and migrate their own tables in the `langgraph`
+  schema at every boot, outside Alembic's history.
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.
 - The groundedness check runs after the answer has already streamed. When it asks for a
@@ -79,7 +79,7 @@
 
 ## Scalability
 - `cli.py`'s `serve()` calls `uvicorn.run(...)` with no `workers=` — the app always runs as a single process today, even though the Postgres checkpointer would actually support scaling out
-- Within one process, all checkpoint reads/writes run one at a time: `AsyncPostgresSaver` holds its own `asyncio.Lock` around every query, even with the connection pool `checkpointer.py` now gives it (the pool is for reconnecting after a Postgres restart, not for concurrency). The queries are short and the lock isn't held during LLM calls, so this only matters at high request rates; more workers/replicas each get their own lock
+- Within one process, all checkpoint reads/writes run one at a time: `AsyncPostgresSaver` holds its own `asyncio.Lock` around every query, even with the connection pool `langgraph_persistence.py` now gives it (`AsyncPostgresStore` has its own lock too) (the pool is for reconnecting after a Postgres restart, not for concurrency). The queries are short and the lock isn't held during LLM calls, so this only matters at high request rates; more workers/replicas each get their own lock
 - `main.bicep`'s App Service Plan has no autoscale rule or instance count set, so it defaults to a single instance regardless of load
 - nginx's `limit_req` rate limit is per-nginx-process, in-memory state — the moment the frontend itself scales to more than one instance, the "10 req/min" budget becomes per-replica, not global, silently multiplying the effective limit
 

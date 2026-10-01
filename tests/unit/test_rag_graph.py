@@ -19,6 +19,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.memory import InMemoryStore
 from pydantic import Field
 
 from rag.domain.models import (
@@ -149,7 +150,9 @@ def _no_tracing(name: str | None) -> RunnableConfig:
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+        agents = AgentService(
+            model, InMemorySaver(), InMemoryStore(), _no_tracing, retry_attempts=3
+        )
         self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
@@ -351,7 +354,11 @@ def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
 
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:
     agents = AgentService(
-        _ScriptedChatModel(answers=[]), InMemorySaver(), _no_tracing, retry_attempts=3
+        _ScriptedChatModel(answers=[]),
+        InMemorySaver(),
+        InMemoryStore(),
+        _no_tracing,
+        retry_attempts=3,
     )
     docs = search_tool(_StubRetrievalService())
 

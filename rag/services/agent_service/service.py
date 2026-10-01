@@ -5,6 +5,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.store.base import BaseStore
 from pydantic import BaseModel
 
 from rag.domain.models import AgentSpec, HistoryMessage, ToolAgentSpec
@@ -24,11 +25,13 @@ class AgentService:
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
+        store: BaseStore,
         trace_config: Callable[[str | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
         self._checkpointer = checkpointer
+        self._store = store
         self._trace_config = trace_config
         self._retry_attempts = retry_attempts
 
@@ -60,6 +63,7 @@ class AgentService:
                     spec,
                     self._classify,
                     self._checkpointer,
+                    self._store,
                     self._retry_attempts,
                 )
         return Agent(graph, self._trace_config)

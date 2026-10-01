@@ -43,7 +43,7 @@ rag/
 │
 ├── adapters/                         # concrete SDK clients — the only importers of 3rd-party SDKs
 │   ├── llm_client.py
-│   ├── checkpointer.py
+│   ├── langgraph_persistence.py      # LangGraph's checkpointer + store, on one pool
 │   ├── observability.py
 │   ├── archive_store.py              # uploaded knowledge-base zips: local disk or Azure Blob (KB_STORAGE)
 │   └── db.py                         # the app's Postgres pool (users, conversations, documents)
@@ -86,7 +86,7 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard middleware), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer, store |
 | `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
 | `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -151,13 +151,14 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   it, and `GET /api/conversations/{id}/messages` reads it back (each question with its final
   answer and sources; tool calls aren't replayed).
 
-The checkpointer is built by `adapters/checkpointer.py`'s `open_checkpointer()` (an async
-context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` over a
-connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from the
-repositories' because the saver needs different connection settings (`dict_row`, autocommit, no
+The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
+context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
+`AsyncPostgresStore` (what outlives a thread, e.g. a user's preferences; no semantic index) sharing
+one connection pool of their own on the app's `DATABASE_URL` (required). It's a separate pool from
+the repositories' because LangGraph needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
-so a Postgres restart doesn't need a backend restart; `checkpointer.setup()` runs on connect
-(idempotent schema migration). Its tables live in their own `langgraph` Postgres schema (the pool
+so a Postgres restart doesn't need a backend restart; the saver's and the store's `setup()` run
+on connect (idempotent schema migrations). Its tables live in their own `langgraph` Postgres schema (the pool
 connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
 across restarts and safe for multiple backend replicas.
 There is deliberately no in-memory option: conversation rows always live in Postgres, so

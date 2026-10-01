@@ -11,6 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from rag.domain.models import (
     Check,
@@ -69,6 +70,7 @@ def build_tool_agent(
     spec: ToolAgentSpec,
     classify: Classify,
     checkpointer: BaseCheckpointSaver,
+    store: BaseStore,
     retry_attempts: int,
 ) -> CompiledStateGraph:
     tools = _to_langchain_tools(spec.tools)
@@ -94,4 +96,5 @@ def build_tool_agent(
         system_prompt=spec.system_prompt,
         middleware=middleware,
         checkpointer=checkpointer,
+        store=store,
     )
