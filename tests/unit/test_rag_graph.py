@@ -168,7 +168,7 @@ class _Chat:
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
-        self.config: RunnableConfig = agent.get_config("t1")
+        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
 
     async def send(self, text: str) -> list[StreamEvent]:
         return [event async for event in self.rag.stream_chat(text, "t1", _USER)]

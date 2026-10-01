@@ -98,16 +98,19 @@ def build_tool_agent(
     ]
     if spec.remember_preferences:
         middleware.append(PreferencesMiddleware())
+
     if spec.planning is not None:
         # The instructions come with the tool, so the model is never told to plan
         # with a tool it doesn't have.
         instructions = f"{WRITE_TODOS_SYSTEM_PROMPT}\n\n{spec.planning.instructions}"
         middleware.append(TodoListMiddleware(system_prompt=instructions))
+
     middleware.append(
         ModelRetryMiddleware(
             max_retries=retry_attempts - 1, on_failure=_fallback_message
         )
     )
+    # TODO: why we have context_schema!?
     return create_agent(
         llm,
         tools,

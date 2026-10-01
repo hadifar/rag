@@ -13,8 +13,8 @@ from rag.services.agent_service.turn import turn_references
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its
-    tools cited. The graph saves the turn's messages through its checkpointer; reading
-    them back is the conversation repository's job.
+    tools cited. The graph saves the turn's messages through its checkpointer; the agent
+    service reads them back (`AgentService.get_history`).
     """
 
     def __init__(
@@ -25,13 +25,13 @@ class Agent:
         self._graph = graph
         self._trace_config = trace_config
 
-    def get_config(self, thread_id: str) -> RunnableConfig:
+    def _config(self, thread_id: str) -> RunnableConfig:
         return {"configurable": {"thread_id": thread_id}, **self._trace_config("chat")}
 
     async def stream(
         self, message: str, thread_id: str, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
-        config = self.get_config(thread_id)
+        config = self._config(thread_id)
 
         async for raw_event in self._graph.astream_events(
             {"messages": [HumanMessage(content=message)]},
