@@ -21,13 +21,15 @@ export function useMessageList() {
     flushHandle.current = null;
     const pending = pendingUpdates.current;
     if (pending.size === 0) return;
+    // A fresh map for later updates, not clear(): React may run the updater below only
+    // at render, after this returns, and it must still see this batch then.
+    pendingUpdates.current = new Map();
     setMessages((prev) =>
       prev.map((m) => {
         const next = pending.get(m.id);
         return next === undefined ? m : withId(next, m.id);
       })
     );
-    pending.clear();
   }, [withId]);
 
   useEffect(() => {
