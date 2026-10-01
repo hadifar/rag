@@ -36,9 +36,8 @@
 - Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
   threads, which live in separate tables with no user link — a full user deletion (GDPR) still
   has to delete each conversation's thread first.
-- A thread whose conversation row is gone (a delete that failed halfway, rows removed outside
-  the app) is unreachable; `rag prune-threads [--dry-run]` finds and deletes them, but nothing
-  runs it automatically.
+- A thread whose conversation row was removed outside the app (e.g. a user deleted in SQL) is
+  unreachable and stays in the checkpoint tables; nothing cleans these up.
 - One database, two schema owners: Alembic owns the tables in `public`
   (`users`/`conversations`/`documents`/`chunks`/`ingestion_runs`), while LangGraph's
   `checkpointer.setup()` creates and migrates its own tables in the `langgraph` schema at every

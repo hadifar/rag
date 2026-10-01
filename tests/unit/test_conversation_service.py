@@ -188,20 +188,6 @@ async def test_history_returns_the_threads_messages() -> None:
     ]
 
 
-async def test_prune_deletes_only_threads_without_a_conversation() -> None:
-    service, _, generation = _service()
-    kept = (await service.create(ALICE)).id
-    await _chat(generation, kept, "hi")
-    generation.threads["orphan"] = []
-
-    assert await service.prune_orphaned_threads(dry_run=True) == ["orphan"]
-    assert generation.deleted_threads == []  # a dry run deletes nothing
-
-    assert await service.prune_orphaned_threads() == ["orphan"]
-    assert generation.deleted_threads == ["orphan"]
-    assert str(kept) in generation.threads
-
-
 async def test_blank_generated_title_falls_back_to_the_message() -> None:
     service, repository, _ = _service(StubGeneration("  \n "))
     conversation_id = (await service.create(ALICE)).id

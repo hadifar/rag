@@ -224,9 +224,6 @@ class FakeConversationRepository:
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
 
-    async def all_ids(self) -> set[uuid.UUID]:
-        return set(self.rows)
-
 
 class StubGeneration:
     """AgentServicePort without agents: answers every prompt with `reply`, or raises
@@ -262,9 +259,6 @@ class StubGeneration:
     async def delete_history(self, thread_id: str) -> None:
         self.deleted_threads.append(thread_id)
         self.threads.pop(thread_id, None)
-
-    async def list_thread_ids(self) -> set[str]:
-        return set(self.threads)
 
 
 class StubRag:

@@ -23,7 +23,7 @@ of how pieces connect, see [architecture.md](architecture.md). For rules to foll
 ```
 rag/
 ├── __init__.py / __main__.py         # `python -m rag` entrypoint
-├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`, `rag prune-threads`
+├── cli.py                            # Typer: `rag serve`, `rag ingest`, `rag create-user`, `rag set-admin`
 ├── config.py                         # Settings (pydantic-settings)
 ├── container.py                      # composition root
 ├── app.py                            # FastAPI-specific only: lifespan, app.state, routers, error handling

@@ -77,14 +77,6 @@ class AgentService:
     async def delete_history(self, thread_id: str) -> None:
         await self._checkpointer.adelete_thread(thread_id)
 
-    async def list_thread_ids(self) -> set[str]:
-        """Every thread that has stored messages."""
-        return {
-            thread_id
-            async for checkpoint in self._checkpointer.alist(None)
-            if (thread_id := checkpoint.config.get("configurable", {}).get("thread_id"))
-        }
-
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the
         fallback message, which neither guard reads as a rejection (they fail open).
