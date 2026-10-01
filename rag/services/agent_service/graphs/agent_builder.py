@@ -17,8 +17,8 @@ from rag.domain.models import (
     GroundednessMiddleware,
     Middleware,
     OffTopicMiddleware,
-    PlanningMiddleware,
     PreferenceMiddleware,
+    TodolistMiddleware,
     Tool,
     ToolAgentSpec,
 )
@@ -82,7 +82,7 @@ def _to_langchain_middleware(
             )
         case PreferenceMiddleware():
             return PreferencesMiddleware()
-        case PlanningMiddleware(instructions=instructions):
+        case TodolistMiddleware(instructions=instructions):
             # The instructions come with the tool, so the model is never told to plan
             # with a tool it doesn't have.
             return TodoListMiddleware(

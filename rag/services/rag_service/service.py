@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 from rag.domain.models import (
     GroundednessMiddleware,
     OffTopicMiddleware,
-    PlanningMiddleware,
     PreferenceMiddleware,
     StreamEvent,
+    TodolistMiddleware,
     ToolAgentSpec,
 )
 from rag.domain.ports import AgentServicePort, SearchPort
@@ -26,6 +26,7 @@ class RagService:
         agent_service: AgentServicePort,
         max_revisions: int,
     ):
+        # define agent spec
         agent_spec = ToolAgentSpec(
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
@@ -33,10 +34,10 @@ class RagService:
                 OffTopicMiddleware(),
                 GroundednessMiddleware(max_revisions),
                 PreferenceMiddleware(),
-                PlanningMiddleware(PLANNING_INSTRUCTIONS),
+                TodolistMiddleware(PLANNING_INSTRUCTIONS),
             ],
         )
-
+        # create agent
         self._agent = agent_service.create_agent(agent_spec)
 
     async def stream_chat(

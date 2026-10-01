@@ -18,7 +18,7 @@ class GroundednessMiddleware:
 
 
 @dataclass(frozen=True)
-class PlanningMiddleware:
+class TodolistMiddleware:
     """Lets the agent split a multi-part question into steps and work through them
     before answering. The plan is its private scratchpad, never part of the answer.
     """
@@ -34,6 +34,6 @@ class PreferenceMiddleware:
 Middleware = (
     OffTopicMiddleware
     | GroundednessMiddleware
-    | PlanningMiddleware
+    | TodolistMiddleware
     | PreferenceMiddleware
 )

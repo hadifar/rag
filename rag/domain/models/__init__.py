@@ -13,8 +13,8 @@ from rag.domain.models.agent.agent import (
 from rag.domain.models.agent.middleware import (
     GroundednessMiddleware,
     OffTopicMiddleware,
-    PlanningMiddleware,
     PreferenceMiddleware,
+    TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
     ReferencesReady,
@@ -52,13 +52,13 @@ __all__ = [
     "IngestionRunStatus",
     "Middleware",
     "OffTopicMiddleware",
-    "PlanningMiddleware",
     "Preference",
     "PreferenceMiddleware",
     "RawDocument",
     "ReferencesReady",
     "StreamEvent",
     "TextDelta",
+    "TodolistMiddleware",
     "Tool",
     "ToolAgentSpec",
     "ToolCall",
