@@ -46,6 +46,19 @@ class FakeEmbeddings:
         return [(b / 127.5) - 1 for b in raw]
 
 
+class FakePasswordHasher:
+    """PasswordHasherPort without the cost: Argon2 is slow on purpose (~70 ms a hash),
+    which every API test would pay in its fixture. The real one is tested in
+    test_auth_service.py.
+    """
+
+    async def hash(self, password: str) -> str:
+        return f"hashed:{password}"
+
+    async def verify(self, hashed_password: str, password: str) -> bool:
+        return hashed_password == f"hashed:{password}"
+
+
 class FakeUserRepository:
     """In-memory UserRepositoryPort."""
 
