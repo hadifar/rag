@@ -11,7 +11,7 @@ from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.runtime import Runtime
 
-from rag.domain.prompts import (
+from rag.services.agent_service.prompts import (
     GUARDRAIL_PROMPT,
     OFF_TOPIC_INSTRUCTION,
 )

@@ -9,10 +9,10 @@ from pydantic import BaseModel
 
 from rag.domain.agents import AgentSpec, Tool, ToolAgentSpec, ToolPort
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.domain.resilience import or_default
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
+from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 
 
 class AgentService:

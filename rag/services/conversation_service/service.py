@@ -19,8 +19,12 @@ from rag.domain.errors import (
 )
 from rag.domain.models import Conversation, ConversationPage, HistoryMessage
 from rag.domain.ports import AgentServicePort, ConversationRepositoryPort
-from rag.domain.prompts import TITLE_PROMPT
 from rag.domain.resilience import or_default
+
+TITLE_PROMPT = (
+    "Write a title for a support conversation that starts with the message below.\n\n"
+    "USER:\n{message}"
+)
 
 
 class TitleOutput(BaseModel):

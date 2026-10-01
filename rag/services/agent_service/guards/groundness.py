@@ -11,11 +11,11 @@ from langchain.agents.middleware import (
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.runtime import Runtime
 
-from rag.domain.prompts import (
+from rag.services.agent_service.guards.topical import Classify
+from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.agent_service.guards.topical import Classify
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,

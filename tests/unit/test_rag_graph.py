@@ -23,12 +23,12 @@ from pydantic import Field
 
 from rag.domain.events import ReferencesReady, StreamEvent, TextDelta
 from rag.domain.models import Chunk
-from rag.domain.prompts import PLANNING_INSTRUCTIONS
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.guards.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.guards.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import AgentService
 from rag.services.agent_service.turn import to_history
+from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
 from rag.services.rag_service.tools import search_tool
 

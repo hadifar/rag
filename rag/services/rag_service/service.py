@@ -9,7 +9,7 @@ from rag.domain.agents import (
 from rag.domain.constants import MAX_REVISIONS
 from rag.domain.events import StreamEvent
 from rag.domain.ports import AgentServicePort, SearchPort
-from rag.domain.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
+from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
 from rag.services.rag_service.tools import search_tool
 
 

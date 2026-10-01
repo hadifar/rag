@@ -14,9 +14,9 @@ from langgraph.graph.state import CompiledStateGraph
 
 from rag.domain.agents import Check, GroundednessCheck, OffTopicCheck, ToolAgentSpec
 from rag.domain.constants import LLM_RETRY_ATTEMPTS
-from rag.domain.prompts import FALLBACK_MESSAGE
 from rag.services.agent_service.guards.groundness import GroundednessGuard
 from rag.services.agent_service.guards.topical import Classify, TopicalGuard
+from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 
 
 def _fallback_message(_exc: Exception) -> str:
