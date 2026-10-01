@@ -2,20 +2,22 @@ from collections.abc import Callable
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, ToolAgentSpec
+from rag.domain.models import AgentSpec, HistoryMessage, ToolAgentSpec
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.graphs.tool_agent import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
+from rag.services.agent_service.turn import to_history
 from rag.shared.resilience import or_default
 
 
 class AgentService:
     """The only holder of the LLM, and the only place LangChain is used: single-shot
-    generation, and the tools and agents built on the model.
+    generation, the tools and agents built on the model, and the threads they save.
     """
 
     def __init__(
@@ -61,6 +63,27 @@ class AgentService:
                     self._retry_attempts,
                 )
         return Agent(graph, self._trace_config)
+
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
+        checkpoint = await self._checkpointer.aget(
+            {"configurable": {"thread_id": thread_id}}
+        )
+        messages: list[BaseMessage] = (
+            checkpoint["channel_values"].get("messages", []) if checkpoint else []
+        )
+        return to_history(messages)
+
+    async def delete_history(self, thread_id: str) -> None:
+        await self._checkpointer.adelete_thread(thread_id)
+
+    async def list_thread_ids(self) -> set[str]:
+        """Every thread that has stored messages."""
+        return {
+            thread_id
+            async for checkpoint in self._checkpointer.alist(None)
+            if (thread_id := checkpoint.config.get("configurable", {}).get("thread_id"))
+        }
 
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the

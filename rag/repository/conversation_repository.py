@@ -1,11 +1,7 @@
 import uuid
 from datetime import datetime
 
-from psycopg import AsyncConnection
-from psycopg_pool import AsyncConnectionPool
-
-from rag.domain.models import Conversation, HistoryMessage
-from rag.domain.ports import HistoryStorePort
+from rag.domain.models import Conversation
 from rag.repository.base_repository import BaseRepository
 
 _COLUMNS = "id, user_id, title, created_at, updated_at"
@@ -13,14 +9,6 @@ _COLUMNS = "id, user_id, title, created_at, updated_at"
 
 class ConversationRepository(BaseRepository[Conversation]):
     row_type = Conversation
-
-    def __init__(
-        self,
-        pool: AsyncConnectionPool[AsyncConnection],
-        history: HistoryStorePort,
-    ):
-        super().__init__(pool)
-        self._history = history
 
     async def get_or_create_empty(self, user_id: uuid.UUID) -> Conversation:
         # One statement, so two concurrent calls can't both create one: the second
@@ -96,12 +84,3 @@ class ConversationRepository(BaseRepository[Conversation]):
         async with self._pool.connection() as conn:
             cur = await conn.execute("SELECT id FROM conversations")
             return {row[0] for row in await cur.fetchall()}
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        return await self._history.get_history(thread_id)
-
-    async def delete_history(self, thread_id: str) -> None:
-        await self._history.delete_history(thread_id)
-
-    async def list_thread_ids(self) -> set[str]:
-        return await self._history.list_thread_ids()

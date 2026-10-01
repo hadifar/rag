@@ -7,7 +7,6 @@ from rag.adapters.archive_store import open_archive_store
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.checkpointer import open_checkpointer
 from rag.adapters.db import open_db_pool
-from rag.adapters.history_store import CheckpointHistoryStore
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.llm_client import build_embeddings, build_llm
 from rag.adapters.observability import open_trace_config
@@ -82,9 +81,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container]:
         )
 
         conversation_service = ConversationService(
-            repository=ConversationRepository(
-                db_pool, CheckpointHistoryStore(checkpointer)
-            ),
+            repository=ConversationRepository(db_pool),
             agent_service=agent_service,
         )
 

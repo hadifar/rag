@@ -170,10 +170,6 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
-        # Stored chat messages by thread id: what a real generation service writes
-        # (through the checkpointer) and this repository reads back.
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -231,26 +227,19 @@ class FakeConversationRepository:
     async def all_ids(self) -> set[uuid.UUID]:
         return set(self.rows)
 
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        return self.threads.get(thread_id, [])
-
-    async def delete_history(self, thread_id: str) -> None:
-        self.deleted_threads.append(thread_id)
-        self.threads.pop(thread_id, None)
-
-    async def list_thread_ids(self) -> set[str]:
-        return set(self.threads)
-
 
 class StubGeneration:
-    """AgentServicePort for single-shot generation only: answers every prompt with `reply`, or raises `error`, and
-    records the prompts.
+    """AgentServicePort without agents: answers every prompt with `reply`, or raises
+    `error`, and records the prompts. Its saved threads are `threads`, which a test
+    (or `StubRag`) fills in as an agent would.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
+        self.threads: dict[str, list[HistoryMessage]] = {}
+        self.deleted_threads: list[str] = []
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -267,10 +256,20 @@ class StubGeneration:
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
 
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        return self.threads.get(thread_id, [])
+
+    async def delete_history(self, thread_id: str) -> None:
+        self.deleted_threads.append(thread_id)
+        self.threads.pop(thread_id, None)
+
+    async def list_thread_ids(self) -> set[str]:
+        return set(self.threads)
+
 
 class StubRag:
     """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the fake repository's, so it shows up in its history) with `sources` on the answer.
+    the `StubGeneration`'s, so it shows up in its history) with `sources` on the answer.
     """
 
     def __init__(

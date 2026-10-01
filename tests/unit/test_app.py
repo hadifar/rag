@@ -94,7 +94,7 @@ def client() -> Generator[TestClient]:
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
     rag = StubRag(
-        conversation_repository.threads,
+        generation.threads,
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),

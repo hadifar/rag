@@ -3,7 +3,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, StreamEvent
+from rag.domain.models import AgentSpec, HistoryMessage, StreamEvent
 
 
 class ChatAgentPort(Protocol):
@@ -15,8 +15,8 @@ class ChatAgentPort(Protocol):
 
 
 class AgentServicePort(Protocol):
-    """The LLM: single-shot generation, and the tools and agents built on it, so
-    nothing else ever holds the model or touches LangChain.
+    """The LLM: single-shot generation, the tools and agents built on it, and the
+    threads they save, so nothing else ever holds the model or touches LangChain.
     """
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
@@ -37,4 +37,13 @@ class AgentServicePort(Protocol):
         """A chat agent built as `spec` describes; raises ValueError if two of its
         tools share a name.
         """
+        ...
+
+    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
+        """The thread's messages as the user saw them; empty for an unknown thread."""
+        ...
+
+    async def delete_history(self, thread_id: str) -> None: ...
+    async def list_thread_ids(self) -> set[str]:
+        """Every thread that has stored messages."""
         ...

@@ -96,13 +96,13 @@ class ConversationService:
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         await self.get_owned(user_id, conversation_id)
-        return await self._repository.get_history(str(conversation_id))
+        return await self._agent_service.get_history(str(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         await self.get_owned(user_id, conversation_id)
         # Messages first: if this fails, the row is still there to retry the delete,
         # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._repository.delete_history(str(conversation_id))
+        await self._agent_service.delete_history(str(conversation_id))
         await self._repository.delete(conversation_id)
 
     async def prune_orphaned_threads(self, *, dry_run: bool = False) -> list[str]:
@@ -111,10 +111,10 @@ class ConversationService:
         from a delete that failed halfway or rows removed outside the app.
         """
         conversation_ids = {str(id_) for id_ in await self._repository.all_ids()}
-        orphans = sorted(await self._repository.list_thread_ids() - conversation_ids)
+        orphans = sorted(await self._agent_service.list_thread_ids() - conversation_ids)
         if not dry_run:
             for thread_id in orphans:
-                await self._repository.delete_history(thread_id)
+                await self._agent_service.delete_history(thread_id)
         return orphans
 
     async def get_owned(

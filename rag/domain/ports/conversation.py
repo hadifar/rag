@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import Conversation, HistoryMessage
+from rag.domain.models import Conversation
 
 
 class ConversationRepositoryPort(Protocol):
@@ -27,26 +27,4 @@ class ConversationRepositoryPort(Protocol):
     async def delete(self, conversation_id: uuid.UUID) -> None: ...
     async def all_ids(self) -> set[uuid.UUID]:
         """Every conversation's id, whoever owns it."""
-        ...
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        """The thread's messages as the user saw them; empty for an unknown thread."""
-        ...
-
-    async def delete_history(self, thread_id: str) -> None: ...
-    async def list_thread_ids(self) -> set[str]:
-        """Every thread that has stored messages."""
-        ...
-
-
-class HistoryStorePort(Protocol):
-    """The chat messages stored per thread, which the chat agent writes as it answers."""
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        """The thread's messages as the user saw them; empty for an unknown thread."""
-        ...
-
-    async def delete_history(self, thread_id: str) -> None: ...
-    async def list_thread_ids(self) -> set[str]:
-        """Every thread that has stored messages."""
         ...
