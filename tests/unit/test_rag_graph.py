@@ -19,14 +19,12 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.store.memory import InMemoryStore
 from pydantic import Field
 
 from rag.domain.models import (
     AssistantMessage,
     Chunk,
     OffTopicMiddleware,
-    PreferenceMiddleware,
     ReferencesReady,
     RunContext,
     StreamEvent,
@@ -38,17 +36,14 @@ from rag.domain.models import (
     UserMessage,
 )
 from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.middleware.preferences import (
-    PREFERENCE_TOOL_NAMES,
-    list_preferences,
-    save_preference,
-)
 from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import Agent, AgentService
 from rag.services.agent_service.turn import to_history
+from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
 from rag.services.rag_service.tools import search_tool
+from tests.unit.fakes import FakePreferenceRepository
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -162,15 +157,19 @@ def _no_tracing(name: str | None) -> RunnableConfig:
 
 _USER = uuid.uuid4()
 _CONVERSATION = uuid.uuid4()
+_PREFERENCE_TOOLS = ["forget_user_preference", "save_user_preference"]
 
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        self.store = InMemoryStore()
-        agents = AgentService(
-            model, InMemorySaver(), self.store, _no_tracing, retry_attempts=3
+        self.preferences = PreferenceService(FakePreferenceRepository())
+        agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+        self.rag = RagService(
+            _StubRetrievalService(),
+            agents,
+            max_revisions=1,
+            capabilities=[self.preferences.capability()],
         )
-        self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
@@ -309,10 +308,10 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
     assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
     # Off-topic, the model keeps only the tools about the user, not the product.
-    assert sorted(off_topic_call["tools"]) == sorted(PREFERENCE_TOOL_NAMES)
+    assert sorted(off_topic_call["tools"]) == _PREFERENCE_TOOLS
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == sorted(
-        ["search_kb", "write_todos", *PREFERENCE_TOOL_NAMES]
+        ["search_kb", "write_todos", *_PREFERENCE_TOOLS]
     )
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
@@ -395,7 +394,6 @@ def test_tools_with_the_same_name_are_rejected_up_front() -> None:
     agents = AgentService(
         _ScriptedChatModel(answers=[]),
         InMemorySaver(),
-        InMemoryStore(),
         _no_tracing,
         retry_attempts=3,
     )
@@ -416,7 +414,7 @@ async def test_saved_preferences_are_in_every_model_calls_prompt_not_the_thread(
 ):
     model = _ScriptedChatModel(answers=[_search("pricing"), _answer("Het kost 10.")])
     chat = _Chat(model)
-    await save_preference(chat.store, _USER, "Answer in Dutch")
+    await chat.preferences.add(_USER, "Answer in Dutch")
 
     await chat.send("How much?")
 
@@ -438,7 +436,7 @@ async def test_a_preference_saved_in_one_turn_applies_from_the_next_call_on() ->
     events = await chat.send("Please always keep answers short")
     await chat.send("How much?")
 
-    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
         "Keep answers short"
     ]
     assert "Keep answers short" not in model.agent_calls[0]["messages"][0].text
@@ -460,7 +458,7 @@ async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
 
     await chat.send("Always answer in Dutch")
 
-    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
         "Answer in Dutch"
     ]
 
@@ -468,8 +466,8 @@ async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
 async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
     model = _ScriptedChatModel(answers=[])
     chat = _Chat(model)
-    mine = await save_preference(chat.store, _USER, "Answer in Dutch")
-    theirs = await save_preference(chat.store, uuid.uuid4(), "Answer in French")
+    mine = await chat.preferences.add(_USER, "Answer in Dutch")
+    theirs = await chat.preferences.add(uuid.uuid4(), "Answer in French")
     model.answers.extend(
         [
             _call("forget_user_preference", preference_id=theirs.id),
@@ -485,14 +483,13 @@ async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
         f"No saved preference has the id {theirs.id}.",
         f"Forgot preference {mine.id}.",
     ]
-    assert await list_preferences(chat.store, _USER) == []
+    assert await chat.preferences.list_for_user(_USER) == []
 
 
 def test_a_tool_cant_take_a_preference_tools_name() -> None:
     agents = AgentService(
         _ScriptedChatModel(answers=[]),
         InMemorySaver(),
-        InMemoryStore(),
         _no_tracing,
         retry_attempts=3,
     )
@@ -501,12 +498,11 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
         description="",
         run=search_tool(_StubRetrievalService()).run,
     )
+    preferences = PreferenceService(FakePreferenceRepository()).capability()
 
     with pytest.raises(ValueError, match="save_user_preference"):
         agents.create_agent(
-            ToolAgentSpec(
-                system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
-            )
+            ToolAgentSpec(system_prompt="", tools=[clash], capabilities=[preferences])
         )
 
 
@@ -515,9 +511,7 @@ async def test_a_user_tool_gets_the_turns_context_and_is_kept_off_topic() -> Non
         answers=[_call("whoami", query="me"), _answer("You're you.")],
         off_topic_messages={"who am I?"},
     )
-    agents = AgentService(
-        model, InMemorySaver(), InMemoryStore(), _no_tracing, retry_attempts=3
-    )
+    agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
     seen: list[RunContext] = []
 
     async def whoami(query: str, ctx: RunContext) -> ToolResult:

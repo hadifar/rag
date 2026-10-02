@@ -9,6 +9,7 @@ from rag.adapters.kb_archive_store import open_archive_store
 from rag.adapters.lang_llm_client import build_embeddings, build_llm
 from rag.adapters.lang_memory import open_langgraph
 from rag.adapters.lang_observability import open_trace_config
+from rag.adapters.lang_preference_store import LangGraphPreferenceRepository
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
@@ -20,6 +21,7 @@ from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -27,7 +29,7 @@ from rag.services.retrieval_service.service import RetrievalService
 @dataclass
 class Container:
     retrieval_service: RetrievalService
-    agent_service: AgentService
+    preference_service: PreferenceService
     rag_service: RagService
     ingestion_service: IngestionService
     auth_service: AuthService
@@ -52,15 +54,19 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         agent_service = AgentService(
             llm=build_llm(settings),
             checkpointer=langgraph.checkpointer,
-            store=langgraph.store,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
+        )
+
+        preference_service = PreferenceService(
+            repository=LangGraphPreferenceRepository(langgraph.store)
         )
 
         rag_service = RagService(
             retrieval_service=retrieval_service,
             agent_service=agent_service,
             max_revisions=settings.RAG.MAX_REVISIONS,
+            capabilities=[preference_service.capability()],
         )
 
         ingestion_service = IngestionService(
@@ -87,10 +93,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
 
         yield Container(
-            retrieval_service,
-            agent_service,
-            rag_service,
-            ingestion_service,
-            auth_service,
-            conversation_service,
+            retrieval_service=retrieval_service,
+            preference_service=preference_service,
+            rag_service=rag_service,
+            ingestion_service=ingestion_service,
+            auth_service=auth_service,
+            conversation_service=conversation_service,
         )

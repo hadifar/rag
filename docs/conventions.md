@@ -54,7 +54,7 @@ class ChunkerPort(Protocol):
 
 - A new route joins the existing router for its area (`auth`, `conversation`, `ingestion`,
   `retrieval`, `setting`, `health`), even if it calls a service that router didn't use yet
-  (e.g. a user's preferences are `/api/settings/preferences`, on `AgentService`). A router's
+  (e.g. a user's preferences are `/api/settings/preferences`, on `PreferenceService`). A router's
   file, and its schema module, is named after its area in the singular (`setting.py` serves
   `/api/settings`). A new router means a new area of the API: decide it on its own, never as a
   side effect of a feature. The one exception is `agent.py`: it shares `/api/conversations` to
@@ -135,6 +135,19 @@ if the frontend no longer matches them.
   built (example: `build_search_tool(knowledge_base)` in `tools.py`).
 - Never a module-level global (e.g. a module-level `@tool` function), and never a client
   re-instantiated per call.
+
+## Giving the chat agent a feature of its own: a `Capability`, not a middleware
+
+- A feature the agent should use (preferences today; feedback, memory, …) lives in its own
+  service and hands the agent a `Capability` (`rag.domain.models`): its `Tool`s, and
+  `instructions(ctx)` read fresh for every model call. Example: `PreferenceService.capability()`.
+- The container passes it to the agent's spec (`RagService(capabilities=[...])`); the agent
+  service never learns the feature's name, so nothing in `agent_service/` changes.
+- A tool that acts on the user rather than the product is `kind="user"`: the topical guard keeps
+  it off-topic, and the groundedness guard doesn't check answers against its output. A tool reads
+  whose turn it is from its `RunContext` argument, never from the model.
+- A new `Middleware` spec is only for changing how the agent itself runs (a guard, planning),
+  not for giving it a feature.
 
 ## Adding a new backend behind a `Settings`-driven choice: extend the discriminated union, don't branch downstream
 

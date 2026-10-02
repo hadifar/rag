@@ -86,7 +86,8 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard and preferences middleware), tool calls, streaming, tracing; reads/deletes a thread's history; each user's preferences (LangGraph store) | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer, store |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guards, capability instructions), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, checkpointer |
+| `preference_service` | each user's preferences: their rules, the `/api/settings/preferences` operations, and the `Capability` (instructions + tools) the chat agent is given | `PreferenceRepositoryPort` |
 | `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
 | `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |

@@ -4,10 +4,9 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
-from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 
-from rag.domain.errors import IngestionInProgressError, PreferenceNotFoundError
+from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
     AgentSpec,
     AssistantMessage,
@@ -24,7 +23,6 @@ from rag.domain.models import (
     UserMessage,
 )
 from rag.domain.ports import ChatAgentPort
-from rag.services.agent_service.middleware import preferences
 
 
 class FakeEmbeddings:
@@ -246,8 +244,7 @@ class FakeConversationRepository:
 class StubGeneration:
     """AgentServicePort without agents: answers every prompt with `reply`, or raises
     `error`, and records the prompts. Its saved threads are `threads`, which a test
-    (or `StubRag`) fills in as an agent would. Preferences are the real ones, kept in an
-    in-memory store.
+    (or `StubRag`) fills in as an agent would.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
@@ -256,7 +253,6 @@ class StubGeneration:
         self.prompts: list[str] = []
         self.threads: dict[str, list[HistoryMessage]] = {}
         self.deleted_threads: list[str] = []
-        self.store = InMemoryStore()
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -280,15 +276,25 @@ class StubGeneration:
         self.deleted_threads.append(thread_id)
         self.threads.pop(thread_id, None)
 
-    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
-        return await preferences.list_preferences(self.store, user_id)
 
-    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
-        return await preferences.save_preference(self.store, user_id, text)
+class FakePreferenceRepository:
+    """PreferenceRepositoryPort in memory: each user's preferences, oldest first."""
 
-    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
-        if not await preferences.delete_preference(self.store, user_id, preference_id):
-            raise PreferenceNotFoundError(preference_id)
+    def __init__(self):
+        self.rows: dict[uuid.UUID, list[Preference]] = {}
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Preference]:
+        return list(self.rows.get(user_id, []))
+
+    async def add(self, user_id: uuid.UUID, preference: Preference) -> None:
+        self.rows.setdefault(user_id, []).append(preference)
+
+    async def delete(self, user_id: uuid.UUID, preference_id: str) -> bool:
+        kept = [p for p in self.rows.get(user_id, []) if p.id != preference_id]
+        if len(kept) == len(self.rows.get(user_id, [])):
+            return False
+        self.rows[user_id] = kept
+        return True
 
 
 class StubRag:

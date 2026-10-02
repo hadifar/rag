@@ -36,8 +36,21 @@ class Tool:
 
     name: str  # what the model calls it; unique among an agent's tools
     description: str  # what the model is told it does
-    run: Callable[[str, RunContext], Awaitable[ToolResult]]  # the model's query in
+    run: Callable[[str, RunContext], Awaitable[ToolResult]]  # the model's argument in
     kind: ToolKind = "product"
+    parameter: str = "query"  # the name the model gives its one argument
+
+
+@dataclass(frozen=True)
+class Capability:
+    """What a feature outside the agent service gives an agent (e.g. the user's
+    preferences): more tools, and instructions read fresh for each model call of a
+    turn, so a change one tool call makes applies from the next call on. The
+    instructions are added to the call only, never saved to the thread.
+    """
+
+    tools: list[Tool] = field(default_factory=list[Tool])
+    instructions: Callable[[RunContext], Awaitable[str | None]] | None = None
 
 
 @dataclass(frozen=True)
@@ -48,21 +61,9 @@ class ToolAgentSpec:
     tools: list[Tool]
     # Wrapped around each model call in this order, the first outermost.
     middleware: list[Middleware] = field(default_factory=list[Middleware])
+    # Their tools join `tools`; their instructions follow the middleware's.
+    capabilities: list[Capability] = field(default_factory=list[Capability])
 
 
 # # Every kind of agent the agent service can build;
 AgentSpec = ToolAgentSpec
-
-
-MAX_PREFERENCES = 20  # per user; every one is added to each of their chat turns' prompt
-MAX_PREFERENCE_LENGTH = 200
-
-
-@dataclass(frozen=True)
-class Preference:
-    """Something the user wants of every answer (e.g. "Answer in Dutch"), in their own
-    words. Kept per user, across all their conversations.
-    """
-
-    id: str
-    text: str

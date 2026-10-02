@@ -25,11 +25,11 @@ from rag.config import (
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Chunk, ToolCall
-from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
@@ -38,6 +38,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakePreferenceRepository,
     FakeUserRepository,
     StubGeneration,
     StubRag,
@@ -103,7 +104,7 @@ def client() -> Generator[TestClient]:
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        agent_service=cast(AgentService, generation),
+        preference_service=PreferenceService(FakePreferenceRepository()),
         rag_service=cast(RagService, rag),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),

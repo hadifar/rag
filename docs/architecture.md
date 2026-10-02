@@ -158,9 +158,9 @@ Nodes are the steps that change the graph's state:
 - `tools` runs `search_kb`, `write_todos`, `save_user_preference` and `forget_user_preference`.
 
 Middleware that only wraps each LLM call adds no node: `TopicalGuard` (off-topic instruction and
-tool filter), `GroundednessGuard` (revision instruction), `PreferencesMiddleware` (the user's
-preferences), `TodoListMiddleware` (planning instructions) and `ModelRetryMiddleware` (retries).
-The checkpointer saves the thread after each step; the preference tools and middleware read and
-write the store.
+tool filter), `GroundednessGuard` (revision instruction), `CapabilityInstructions` (each capability's
+instructions, e.g. the user's preferences), `TodoListMiddleware` (planning instructions) and `ModelRetryMiddleware` (retries).
+The checkpointer saves the thread after each step; the preference tools and instructions read and
+write preferences through `PreferenceService`.
 
 See [services.md](services.md#generation-service) for what each middleware does and why.

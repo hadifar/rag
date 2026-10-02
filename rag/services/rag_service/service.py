@@ -2,9 +2,9 @@ import uuid
 from collections.abc import AsyncIterator
 
 from rag.domain.models import (
+    Capability,
     GroundednessMiddleware,
     OffTopicMiddleware,
-    PreferenceMiddleware,
     RunContext,
     StreamEvent,
     TodolistMiddleware,
@@ -18,7 +18,8 @@ from rag.services.rag_service.tools import search_tool
 class RagService:
     """A chat turn grounded in the knowledge base: a tool-calling agent that searches
     `retrieval_service`, declines off-topic questions, and revises answers its searches
-    don't support, up to `max_revisions` times per turn.
+    don't support, up to `max_revisions` times per turn. `capabilities` are what other
+    features give it (e.g. the user's preferences).
     """
 
     def __init__(
@@ -26,6 +27,7 @@ class RagService:
         retrieval_service: SearchPort,
         agent_service: AgentServicePort,
         max_revisions: int,
+        capabilities: list[Capability],
     ):
         # define agent spec
         agent_spec = ToolAgentSpec(
@@ -34,9 +36,9 @@ class RagService:
             middleware=[
                 OffTopicMiddleware(),
                 GroundednessMiddleware(max_revisions),
-                PreferenceMiddleware(),
                 TodolistMiddleware(PLANNING_INSTRUCTIONS),
             ],
+            capabilities=capabilities,
         )
         # create agent
         self._agent = agent_service.create_agent(agent_spec)

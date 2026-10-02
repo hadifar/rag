@@ -26,14 +26,4 @@ class TodolistMiddleware:
     instructions: str  # when to plan and how, for this agent's kind of work
 
 
-@dataclass(frozen=True)
-class PreferenceMiddleware:
-    """Answers by the user's preferences, and saves or forgets one when they ask."""
-
-
-Middleware = (
-    OffTopicMiddleware
-    | GroundednessMiddleware
-    | TodolistMiddleware
-    | PreferenceMiddleware
-)
+Middleware = OffTopicMiddleware | GroundednessMiddleware | TodolistMiddleware
