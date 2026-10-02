@@ -150,6 +150,12 @@
                   "**/api/**"
                 ],
                 "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
               }
             ]
           }
@@ -322,8 +328,7 @@
     },
     {
       "files": [
-        "src/app/**",
-        "src/pages/**"
+        "src/app/**"
       ],
       "rules": {
         "no-restricted-imports": [
@@ -367,6 +372,94 @@
     },
     {
       "files": [
+        "src/app/App.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/pages/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/pages/ChatPage.tsx"
       ],
       "rules": {
@@ -397,6 +490,12 @@
                   "**/api/**"
                 ],
                 "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
               }
             ]
           }
@@ -437,6 +536,12 @@
                   "**/api/**"
                 ],
                 "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
               }
             ]
           }

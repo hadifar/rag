@@ -137,6 +137,23 @@ if the frontend no longer matches them.
 - Something two features need that belongs to neither (a UI primitive, a generic hook) goes in
   `shared/`, which never imports a feature.
 
+## Loading server data in the frontend: a query hook, never a fetch in an effect
+
+- Read server data with `useQuery` (`useInfiniteQuery` for a paged list), change it with
+  `useMutation`, inside a hook in the feature's `hooks/`. The hook returns what the UI needs
+  (`status` via `loadStatus`, ready-to-show values, actions) — components and pages never import
+  `@tanstack/react-query` (oxlint rejects it).
+- Spell a feature's cache keys once, in its `api/queryKeys.ts` (`conversationKeys.list`), so a
+  hook that patches or invalidates them can't drift from the one that reads them.
+- After a mutation, patch the cache with `setQueryData` when the response says what changed
+  (an added preference, a renamed chat); invalidate only when it doesn't. Another feature's
+  cache is changed through a hook it exports (`useConversationCache`), never by its keys.
+- Retries follow `shouldRetry` (`shared/api/queryClient.ts`): network errors and 5xx twice, never
+  a 4xx. A query that needs otherwise (polling an ingestion run) sets its own `retry`.
+- A delete treats a 404 as done (it's idempotent), in the hook's `mutationFn`.
+- Navigation after a change (deleting the open chat) belongs to the hook that runs the user's
+  action, not to the cache.
+
 ## Adding a frontend type: shared ones in `shared/types/`, feature ones in the feature
 
 - A type several features use lives in `frontend/src/shared/types/` (e.g. `LoadStatus`),

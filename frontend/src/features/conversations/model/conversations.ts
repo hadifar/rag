@@ -1,4 +1,9 @@
-import type { ConversationResponse } from '@/shared/types';
+import type { InfiniteData } from '@tanstack/react-query';
+
+import type { ConversationPageResponse, ConversationResponse } from '@/shared/types';
+
+/** The sidebar list as it's cached: the pages loaded so far, each with its cursor. */
+export type ConversationPages = InfiniteData<ConversationPageResponse, string | null>;
 
 /** Puts `conversation` first (it was just used), replacing any older copy of it. */
 export function upsertConversation(
@@ -39,6 +44,24 @@ export function removeConversation(
   id: string
 ): ConversationResponse[] {
   return list.filter((c) => c.id !== id);
+}
+
+/** The loaded pages as one list, oldest page last, each conversation once. */
+export function flattenPages(data: ConversationPages): ConversationResponse[] {
+  return data.pages.reduce<ConversationResponse[]>((list, page) => appendPage(list, page.items), []);
+}
+
+/**
+ * Applies `update` to the loaded pages as one list. The result goes in the first page and
+ * the others are emptied, but every page keeps its cursor, so "load more" and a refetch
+ * (which reloads each page by its cursor) still work.
+ */
+export function patchPages(
+  data: ConversationPages,
+  update: (list: ConversationResponse[]) => ConversationResponse[]
+): ConversationPages {
+  const list = update(flattenPages(data));
+  return { ...data, pages: data.pages.map((page, i) => ({ ...page, items: i === 0 ? list : [] })) };
 }
 
 export function conversationPath(id: string): string {

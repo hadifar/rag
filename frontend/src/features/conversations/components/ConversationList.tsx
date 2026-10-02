@@ -4,7 +4,7 @@ import { TrashIcon } from '@heroicons/react/24/outline';
 
 import { ConfirmDeleteModal } from '@/shared/ui/ConfirmDeleteModal';
 import type { ConversationResponse } from '@/shared/types';
-import { useConversations } from '../hooks/useConversations';
+import { useConversationList } from '../hooks/useConversationList';
 import { useConfirmDeleteConversation } from '../hooks/useConfirmDeleteConversation';
 import { conversationPath } from '../model/conversations';
 
@@ -47,7 +47,7 @@ const ConversationLink = memo(function ConversationLink({
 
 /** The sidebar's recent chats: paged in on demand, each deletable after a confirmation. */
 export function ConversationList() {
-  const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversations();
+  const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversationList();
   const { requestDelete, pending, isDeleting, error, confirm, cancel } =
     useConfirmDeleteConversation();
 

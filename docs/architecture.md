@@ -128,11 +128,12 @@ Inside a feature (and `shared/`), the layers:
 * `api` only talks to the backend through `shared/api/client.ts`; it imports no hook, context,
   component or other feature.
 * `model` is pure — no network, no framework state, no presentation.
-* Hooks and context providers call their feature's `api` directly, and that's the intended shape:
-  a hook is the data-access layer, the same role a `useQuery` hook plays elsewhere. Only two
-  contexts exist (`AuthProvider`, `ConversationsProvider`) because only the session and the
-  sidebar's conversation list are genuinely app-wide; everything else is local to the hook that
-  owns it.
+* Server data lives in TanStack Query's cache (one `QueryClient`, created in `app/App.tsx`): a
+  feature's hooks wrap `useQuery`/`useMutation` around its `api` calls, under the keys in its
+  `api/queryKeys.ts`, and components only see what the hooks return. After a change the hooks
+  patch the cache (`setQueryData`) rather than refetch, e.g. chat moving a conversation to the top
+  of the sidebar list. The one context left, `AuthProvider`, holds the session, which isn't
+  server data to cache; logging out clears the cache, so the next user can't see it.
 * `shared/types` has two sources, not one: `rag/api/schema/*.py` (Pydantic models) generate it at
   build time — a different relationship than `api`'s runtime calls to `backend`, and
   one-directional (the schema is the source of truth; `api.generated.ts` is generated, never

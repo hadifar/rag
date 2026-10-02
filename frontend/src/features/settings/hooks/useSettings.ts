@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
-import { useLoadOnMount } from '@/shared/hooks/useLoadOnMount';
-import type { LoadStatus, SettingsResponse } from '@/shared/types';
+import { loadStatus } from '@/shared/api/queryClient';
+import type { SettingsResponse } from '@/shared/types';
+import { settingsKeys } from '../api/queryKeys';
 import { fetchSettings } from '../api/settings';
 
 const EMPTY: SettingsResponse = { model: '', temperature: 0, top_k: 4 };
@@ -9,18 +11,16 @@ const SAVED_NOTICE_MS = 3000;
 
 /** The settings form: loaded from the server, edited locally, and saved. */
 export function useSettings() {
-  const [form, setForm] = useState<SettingsResponse>(EMPTY);
-  const [status, setStatus] = useState<LoadStatus>('loading');
+  const query = useQuery({
+    queryKey: settingsKeys.current,
+    queryFn: ({ signal }) => fetchSettings(signal),
+  });
+  // The user's edits; until the first one the form shows the server's values, so a
+  // refetch can't overwrite what they typed. A failed load keeps the blank form, so it
+  // can still be filled in.
+  const [edited, setEdited] = useState<SettingsResponse | null>(null);
+  const form = edited ?? query.data ?? EMPTY;
   const [saved, setSaved] = useState(false);
-
-  useLoadOnMount(
-    fetchSettings,
-    (settings) => {
-      setForm(settings);
-      setStatus('ready');
-    },
-    () => setStatus('error') // keeps the blank form, so it can still be filled in
-  );
 
   // Hide the "Saved" notice again after a moment.
   useEffect(() => {
@@ -31,13 +31,13 @@ export function useSettings() {
 
   const update = useCallback(
     <K extends keyof SettingsResponse>(key: K, value: SettingsResponse[K]) => {
-      setForm((current) => ({ ...current, [key]: value }));
+      setEdited({ ...form, [key]: value });
     },
-    []
+    [form]
   );
 
   // TODO: persist via the settings API once the endpoint supports writes.
   const save = useCallback(() => setSaved(true), []);
 
-  return { form, status, saved, update, save };
+  return { form, status: loadStatus(query), saved, update, save };
 }

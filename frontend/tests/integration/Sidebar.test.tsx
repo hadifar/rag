@@ -5,9 +5,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { Sidebar } from '@/app/layout/Sidebar';
-import { ConversationsProvider } from '@/features/conversations';
 import { AuthContext } from '@/features/auth/hooks/useAuth';
 import type { ConversationPageResponse } from '@/shared/types';
+import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
 const page: ConversationPageResponse = {
@@ -38,16 +38,14 @@ function renderSidebar() {
               logout: async () => {},
             }}
           >
-            <ConversationsProvider>
-              <Sidebar />
-            </ConversationsProvider>
+            <Sidebar />
           </AuthContext>
         ),
       },
     ],
     { initialEntries: ['/chat'] },
   );
-  render(<RouterProvider router={router} />);
+  render(withQueryClient(<RouterProvider router={router} />));
   return userEvent.setup();
 }
 

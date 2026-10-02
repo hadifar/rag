@@ -66,12 +66,12 @@ frontend/                              # repo root — separate Vite/React app
 │   ├── pages/                        # thin route pages composing features, incl. LoginPage
 │   ├── features/                     # one folder per feature, each with api/ hooks/ context/ model/ components/ + index.ts (its public API)
 │   │   ├── auth/                     # AuthProvider (session status + user), useAuth, useLogin, RequireAuth
-│   │   ├── conversations/            # ConversationsProvider + ConversationList (sidebar list, paging, delete)
+│   │   ├── conversations/            # ConversationList (sidebar list, paging, delete) + useConversationCache (keeps it in step with chat)
 │   │   ├── chat/                     # useChat (streaming + history loading), chatStream/history (events → bubbles), message list, composer, bubbles
 │   │   ├── preferences/              # answer preferences
 │   │   ├── settings/                 # model settings form
 │   │   └── knowledge-base/           # upload + run polling (admin), opening cited documents
-│   └── shared/                       # api/client.ts (token + refresh), types/ (backend shapes, LoadStatus), ui/ (Modal), hooks/
+│   └── shared/                       # api/client.ts (token + refresh), api/queryClient.ts (cache + retry policy), types/ (backend shapes, LoadStatus), ui/ (Modal)
 └── (Vite build served by nginx in Docker)
 
 infra/                                 # Docker + Azure, no Python

@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import { AuthProvider, RequireAuth } from '@/features/auth';
@@ -5,7 +6,11 @@ import { HomePage } from '@/pages/HomePage';
 import { LoginPage } from '@/pages/LoginPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { createQueryClient } from '@/shared/api/queryClient';
 import { AppLayout } from './layout/AppLayout';
+
+// The server data every page reads, cached and shared; cleared on logout (see AuthProvider).
+const queryClient = createQueryClient();
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -33,8 +38,10 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

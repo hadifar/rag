@@ -7,7 +7,7 @@ import {
   fetchConversationMessages,
   generateTitle,
   touchConversation,
-  useConversations,
+  useConversationCache,
 } from '@/features/conversations';
 import { openKbSource } from '@/features/knowledge-base';
 import { ApiError } from '@/shared/api/client';
@@ -24,7 +24,7 @@ function historyErrorText(err: unknown): string {
 
 /** `conversationId` is the one in the URL; undefined for a new, not yet sent chat. */
 export function useChat(conversationId: string | undefined) {
-  const { upsert, bump, rename } = useConversations();
+  const { upsert, bump, rename } = useConversationCache();
   const navigate = useNavigate();
   const { messages, append, update, showTyping, replace } = useMessageList();
 

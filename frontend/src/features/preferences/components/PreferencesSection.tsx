@@ -10,7 +10,7 @@ export function PreferencesSection() {
 
   const handleSubmit = (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    void add();
+    add();
   };
 
   return (
@@ -39,7 +39,7 @@ export function PreferencesSection() {
               <span>{preference.text}</span>
               <button
                 type="button"
-                onClick={() => void remove(preference.id)}
+                onClick={() => remove(preference.id)}
                 aria-label={`Remove "${preference.text}"`}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >

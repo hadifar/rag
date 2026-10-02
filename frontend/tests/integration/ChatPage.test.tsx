@@ -4,9 +4,9 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { ConversationsProvider } from '@/features/conversations';
 import { ChatPage } from '@/pages/ChatPage';
 import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '@/shared/types';
+import { withQueryClient } from '../queryClient';
 import { server, sse } from '../server';
 
 // The real page, hook and API client; only the backend is faked (see ../server.ts).
@@ -15,16 +15,12 @@ function renderChat(path: string) {
     [
       {
         path: '/chat/:conversationId?',
-        element: (
-          <ConversationsProvider>
-            <ChatPage />
-          </ConversationsProvider>
-        ),
+        element: <ChatPage />,
       },
     ],
     { initialEntries: [path] },
   );
-  render(<RouterProvider router={router} />);
+  render(withQueryClient(<RouterProvider router={router} />));
   return { router, user: userEvent.setup() };
 }
 

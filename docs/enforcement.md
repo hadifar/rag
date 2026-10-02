@@ -61,25 +61,28 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
     markdown renderer — anywhere else it would land in the main bundle
   - `shared/` never imports `features/`, `pages/` or `app/`
   - components, pages and the app shell never import an `api/`: they only present, and reach the
-    server through a hook or context
+    server through a hook or context. Only `app/App.tsx`, which wires the app together, may
+    import `shared/api/queryClient.ts` to create the cache
+  - components and pages never import `@tanstack/react-query`: server data reaches them through
+    a feature's hook, never a `useQuery` of their own
   - hooks and context never import `components/`, `pages/` or `shared/ui/` — the logic layer
     doesn't depend on presentation
   - `api/` never imports `hooks/`, `context/`, `components/`, `pages/`, `shared/ui/` or another
     feature — it only talks to the backend (`shared/api/client.ts` + `shared/types`), so it stays
     usable from anywhere
   - `model/` never imports `api/`, `hooks/`, `context/`, `components/`, `pages/`, `shared/ui/`
-    or `shared/hooks/` — pure helpers, no network, no framework state, no presentation
+    or `shared/hooks/` — pure helpers, no network, no framework state, no presentation (a
+    type-only import such as TanStack Query's `InfiniteData` is fine)
   - shared types come from the `@/shared/types` index, never a single file inside it; only
     `shared/types/api.ts` imports the generated `api.generated.ts`
   - no bare `fetch` outside `shared/api/client.ts` and `features/auth/api/auth.ts`, so every call
     goes through the client that adds the token and refreshes it (`no-restricted-globals`)
   - tests may import a file inside a feature, to test a unit on its own
   - hooks and context providers routinely call their feature's `api/` directly (e.g. `useChat`,
-    `useSettings`, `AuthProvider`) — that's the intended shape, not a gap: a hook/provider *is* the data-access
-    layer, the same role a `useQuery` hook plays in TanStack Query. Only two contexts exist
-    (`AuthProvider`, `ConversationsProvider`) because only session and the sidebar's conversation
-    list are genuinely app-wide state; everything else is correctly local to the hook that owns
-    it. `AuthProvider` importing `AuthContext` *from* `hooks/useAuth.ts` (not the other way
+    `useSettings`, `AuthProvider`) — that's the intended shape, not a gap: a hook *is* the
+    data-access layer, wrapping `useQuery`/`useMutation` around the `api/` calls. Only one context
+    exists (`AuthProvider`), because the session is the only app-wide state that isn't server
+    data; that lives in TanStack Query's cache. `AuthProvider` importing `AuthContext` *from* `hooks/useAuth.ts` (not the other way
     round) is deliberate too: it keeps the Context object (non-component export) out of the
     Provider's file, which is what `react/only-export-components` is already guarding against
     (mixing component and non-component exports breaks React Fast Refresh)

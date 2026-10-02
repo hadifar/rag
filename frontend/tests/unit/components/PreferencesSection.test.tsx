@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PreferencesSection } from '@/features/preferences';
 import type { PreferenceRequest, PreferenceResponse } from '@/shared/types';
+import { withQueryClient } from '../../queryClient';
 import { server } from '../../server';
 
 const URL = '/api/settings/preferences';
@@ -32,7 +33,7 @@ function serve(saved: PreferenceResponse[], { full = false } = {}) {
 }
 
 function renderSection() {
-  render(<PreferencesSection />);
+  render(withQueryClient(<PreferencesSection />));
   return {
     user: userEvent.setup(),
     box: screen.getByRole('textbox', { name: 'New preference' }),
