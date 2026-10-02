@@ -3,28 +3,23 @@ from collections.abc import AsyncIterator, Callable
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.store.base import BaseStore
 from pydantic import BaseModel
 
-from rag.domain.errors import PreferenceNotFoundError
 from rag.domain.models import (
     AgentSpec,
-    HistoryMessage,
-    Preference,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     ToolAgentSpec,
 )
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
-from rag.services.agent_service.middleware import preferences
-from rag.services.agent_service.middleware.preferences import ChatContext
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 from rag.services.agent_service.streaming import parse_event
-from rag.services.agent_service.turn import to_history, turn_references
+from rag.services.agent_service.turn import turn_references
 from rag.shared.resilience import or_default
 
 # TODO: error hanlding -> Something went wrong: Unexpected end of JSON input
@@ -36,16 +31,18 @@ RECURSION_LIMIT = 75
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its
-    tools cited. The graph saves the turn's messages through its checkpointer; the agent
-    service reads them back (`AgentService.get_history`).
+    tools cited. The graph keeps each conversation's messages, the model's memory of it,
+    through its checkpointer; what the user saw is the conversation service's to keep.
     """
 
     def __init__(
         self,
         graph: CompiledStateGraph,
+        checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig],
     ):
         self._graph = graph
+        self._checkpointer = checkpointer
         self._trace_config = trace_config
 
     def _config(self, thread_id: str) -> RunnableConfig:
@@ -55,15 +52,13 @@ class Agent:
             **self._trace_config("chat"),
         }
 
-    async def stream(
-        self, message: str, thread_id: str, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        config = self._config(thread_id)
+    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+        config = self._config(str(ctx.conversation_id))
 
         async for raw_event in self._graph.astream_events(
             {"messages": [HumanMessage(content=message)]},
             config=config,
-            context=ChatContext(user_id=user_id),
+            context=ctx,
             version="v2",
         ):
             for event in parse_event(raw_event):
@@ -74,23 +69,24 @@ class Agent:
         if references is not None:
             yield ReferencesReady(references=references)
 
+    async def forget(self, conversation_id: uuid.UUID) -> None:
+        await self._checkpointer.adelete_thread(str(conversation_id))
+
 
 class AgentService:
     """The only holder of the LLM, and the only place LangChain is used: single-shot
-    generation, the tools and agents built on the model, and the threads they save.
+    generation, and the agents built on the model.
     """
 
     def __init__(
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
-        store: BaseStore,
         trace_config: Callable[[str | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
         self._checkpointer = checkpointer
-        self._store = store
         self._trace_config = trace_config
         self._retry_attempts = retry_attempts
 
@@ -122,38 +118,9 @@ class AgentService:
                     spec,
                     self._classify,
                     self._checkpointer,
-                    self._store,
                     self._retry_attempts,
                 )
-        return Agent(graph, self._trace_config)
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        """The thread's messages as the user saw them; empty for an unknown thread."""
-        checkpoint = await self._checkpointer.aget(
-            {"configurable": {"thread_id": thread_id}}
-        )
-        messages: list[BaseMessage] = (
-            checkpoint["channel_values"].get("messages", []) if checkpoint else []
-        )
-        return to_history(messages)
-
-    async def delete_history(self, thread_id: str) -> None:
-        await self._checkpointer.adelete_thread(thread_id)
-
-    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
-        """What the user wants of every answer, oldest first."""
-        return await preferences.list_preferences(self._store, user_id)
-
-    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
-        """The saved preference, or the same one if the user already has it. Raises
-        InvalidPreferenceError or TooManyPreferencesError.
-        """
-        return await preferences.save_preference(self._store, user_id, text)
-
-    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
-        """Raises PreferenceNotFoundError if the user has no preference with that id."""
-        if not await preferences.delete_preference(self._store, user_id, preference_id):
-            raise PreferenceNotFoundError(preference_id)
+        return Agent(graph, self._checkpointer, self._trace_config)
 
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the

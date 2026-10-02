@@ -4,27 +4,24 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
-from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 
-from rag.domain.errors import IngestionInProgressError, PreferenceNotFoundError
+from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
     AgentSpec,
-    AssistantMessage,
     Conversation,
-    HistoryMessage,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
     Preference,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     TextDelta,
+    Turn,
     User,
-    UserMessage,
 )
 from rag.domain.ports import ChatAgentPort
-from rag.services.agent_service.middleware import preferences
 
 
 class FakeEmbeddings:
@@ -245,18 +242,13 @@ class FakeConversationRepository:
 
 class StubGeneration:
     """AgentServicePort without agents: answers every prompt with `reply`, or raises
-    `error`, and records the prompts. Its saved threads are `threads`, which a test
-    (or `StubRag`) fills in as an agent would. Preferences are the real ones, kept in an
-    in-memory store.
+    `error`, and records the prompts.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
-        self.store = InMemoryStore()
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -273,50 +265,63 @@ class StubGeneration:
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
 
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        return self.threads.get(thread_id, [])
 
-    async def delete_history(self, thread_id: str) -> None:
-        self.deleted_threads.append(thread_id)
-        self.threads.pop(thread_id, None)
+class FakePreferenceRepository:
+    """PreferenceRepositoryPort in memory: each user's preferences, oldest first."""
 
-    async def get_preferences(self, user_id: uuid.UUID) -> list[Preference]:
-        return await preferences.list_preferences(self.store, user_id)
+    def __init__(self):
+        self.rows: dict[uuid.UUID, list[Preference]] = {}
 
-    async def add_preference(self, user_id: uuid.UUID, text: str) -> Preference:
-        return await preferences.save_preference(self.store, user_id, text)
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Preference]:
+        return list(self.rows.get(user_id, []))
 
-    async def delete_preference(self, user_id: uuid.UUID, preference_id: str) -> None:
-        if not await preferences.delete_preference(self.store, user_id, preference_id):
-            raise PreferenceNotFoundError(preference_id)
+    async def add(self, user_id: uuid.UUID, preference: Preference) -> Preference:
+        self.rows.setdefault(user_id, []).append(preference)
+        return preference
+
+    async def delete(self, user_id: uuid.UUID, preference_id: str) -> bool:
+        kept = [p for p in self.rows.get(user_id, []) if p.id != preference_id]
+        if len(kept) == len(self.rows.get(user_id, [])):
+            return False
+        self.rows[user_id] = kept
+        return True
 
 
-class StubRag:
-    """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the `StubGeneration`'s, so it shows up in its history) with `references` on the answer.
+class FakeTranscriptRepository:
+    """TranscriptRepositoryPort in memory: each conversation's turns, in order."""
+
+    def __init__(self):
+        self.turns: dict[uuid.UUID, list[Turn]] = {}
+
+    async def append_turn(
+        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+    ) -> None:
+        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
+
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))
+
+
+class StubChatAgent:
+    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
+    `references` if given; records the conversations it was told to forget.
     """
 
     def __init__(
         self,
-        threads: dict[str, list[HistoryMessage]],
         extra_events: list[StreamEvent] | None = None,
         references: list[str] | None = None,
     ):
-        self.threads = threads
         self.extra_events = extra_events or []
         self.references = references
+        self.forgotten: list[uuid.UUID] = []
 
-    async def stream_chat(
-        self, message: str, thread_id: str, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        events: list[StreamEvent] = [
-            TextDelta(text=f"echo: {message}"),
-            *self.extra_events,
-        ]
-        if self.references is not None:
-            events.append(ReferencesReady(references=self.references))
-        self.threads.setdefault(thread_id, []).extend(
-            [UserMessage(text=message), AssistantMessage(events=events)]
-        )
-        for event in events:
+    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+        yield TextDelta(text=f"echo: {message}")
+        for event in self.extra_events:
             yield event
+        if self.references is not None:
+            yield ReferencesReady(references=self.references)
+
+    async def forget(self, conversation_id: uuid.UUID) -> None:
+        self.forgotten.append(conversation_id)

@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from rag.api.routers.agent import router as agent_router
 from rag.api.routers.auth import router as auth_router
 from rag.api.routers.conversation import router as conversation_router
 from rag.api.routers.health import router as health_router
@@ -63,7 +62,6 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(conversation_router)
-    app.include_router(agent_router)
     app.include_router(retrieval_router)
     app.include_router(ingestion_router)
     app.include_router(setting_router)

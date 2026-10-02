@@ -90,7 +90,8 @@ credentials as the chat model, always asked for 1536 dimensions to match the `ch
 |---|---|---|
 | `retrieval_service` | hybrid (vector + full-text) search, single-document lookup by `source_id`, readiness ping | `VectorStorePort` |
 | `ingestion_service` | load → hash → chunk and embed only new/changed docs → replace them and drop missing ones in one transaction, source-agnostic; stores uploaded zips and tracks each upload as a run | `ChunkerPort`, `DocumentIndexPort`, `ArchiveStorePort`, `IngestionRunRepositoryPort` |
-| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guard and preferences middleware), tool calls, streaming, tracing; reads/deletes a thread's history; each user's preferences (LangGraph store) | `BaseChatModel`, `SearchPort` (= `retrieval_service`), checkpointer, store |
+| `agent_service` | owns the `create_agent` graph (model ⇄ tools, topical/groundedness guards, capability instructions), tool calls, streaming, tracing; reads/deletes a thread's history | `BaseChatModel`, checkpointer |
+| `preference_service` | each user's preferences: their rules, the `/api/settings/preferences` operations, and the `Capability` (instructions + tools) the chat agent is given | `PreferenceRepositoryPort` |
 | `completion_service` | single-shot LLM completions outside any chat turn — currently conversation title generation, never raises | `BaseChatModel` |
 | `conversation_service` | conversation ownership, one empty draft per user, fallback and generated titles, paging, delete; runs each turn through the agent service, titles via the completion service | `ConversationRepositoryPort`, `GenerationPort` (= `agent_service`), `CompletionPort` (= `completion_service`) |
 | `auth_service` | password hashing, JWT issuance/verification, user creation | `UserRepositoryPort` |
@@ -151,18 +152,20 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   trimmed message). As it sends that message, the client also calls
   `POST /api/conversations/{id}/title` (not waiting for the answer), and an LLM call renames it
   from that message.
-- The server never reconstructs history from a request payload — the checkpointer loads/saves
-  it, and `GET /api/conversations/{id}/messages` reads it back: each question, then its answer
-  as the events its stream sent (see [Streaming](#streaming)). Nothing extra is saved for this:
-  the reasoning summary, the plan and the searches are all in the checkpointed messages.
+- A conversation is kept twice, for two readers. The chat agent's checkpointer keeps its
+  messages, the model's memory of it (rejected drafts and all), which the agent loads each turn.
+  `ConversationService.send_message` keeps what the user saw: each turn's question and the
+  events its answer streamed, in `conversation_turns` (see [Streaming](#streaming)), saved
+  however the stream ends. `GET /api/conversations/{id}/messages` reads that transcript back;
+  deleting a conversation has the agent forget its messages, and the transcript goes with the
+  row.
 
-The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
-context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
-`AsyncPostgresStore` (what outlives a thread, e.g. a user's preferences; no semantic index) sharing
-one connection pool of their own on the app's `DATABASE_URL` (required). It's a separate pool from
+The checkpointer is built by `adapters/lang_memory.py`'s `open_checkpointer()` (an async
+context manager, mirroring `adapters/postgres_db.py`'s `open_db_pool()`): an `AsyncPostgresSaver`
+on a connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from
 the repositories' because LangGraph needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
-so a Postgres restart doesn't need a backend restart; the saver's and the store's `setup()` run
+so a Postgres restart doesn't need a backend restart; the saver's `setup()` runs
 on connect (idempotent schema migrations). Its tables live in their own `langgraph` Postgres schema (the pool
 connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
 across restarts and safe for multiple backend replicas.
@@ -207,8 +210,9 @@ its own Postgres).
 `agent_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
 vocabulary (`TextDelta`, `ReasoningDelta` — the model's reasoning summary, only with
 `LLM__REASONING_EFFORT` set — `ToolCall` — `status` `pending` with its `query`, then `done` with
-its `output` — `TodosUpdated` — the whole plan, each time `write_todos` rewrites it — and
-`ReferencesReady`), filtered to the `model` node's chat
+its `output` — `TodosUpdated` — the whole plan, each time `write_todos` rewrites it —
+`AnswerRetracted` — the groundedness guard rejected the answer just streamed, so the client drops
+it before the revision — and `ReferencesReady`), filtered to the `model` node's chat
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
@@ -227,12 +231,11 @@ text stream too. Two consumers read the normalized stream:
   entry; leaving a conversation stops its answer and drops the entry, so opening it again loads
   it from the server.
 
-A saved conversation is shown the same way. `streaming.py`'s `replay()` rebuilds a past turn's
-events from its checkpointed messages (each reply's reasoning and text from its content blocks,
-each search `pending` then `done`, each `write_todos` call as its plan); `turn.py`'s
-`to_history()` drops the drafts the groundedness guard rejected and adds the references. The
+A saved conversation is shown the same way: its transcript is the events the live stream sent,
+as `TranscriptBuilder` (`conversation_service/transcript.py`) collected them — consecutive text
+or reasoning deltas merged, and a retracted draft's text dropped, as the client drops it. The
 frontend's `fromHistory` (`features/chat/model/transcript.ts`) replays those events through
-`applyEvent`, so a reloaded chat renders exactly as it did live.
+`applyEvent`, so a reloaded chat renders as it did live.
 
 ## Observability
 

@@ -54,11 +54,10 @@ class ChunkerPort(Protocol):
 
 - A new route joins the existing router for its area (`auth`, `conversation`, `ingestion`,
   `retrieval`, `setting`, `health`), even if it calls a service that router didn't use yet
-  (e.g. a user's preferences are `/api/settings/preferences`, on `AgentService`). A router's
+  (e.g. a user's preferences are `/api/settings/preferences`, on `PreferenceService`). A router's
   file, and its schema module, is named after its area in the singular (`setting.py` serves
   `/api/settings`). A new router means a new area of the API: decide it on its own, never as a
-  side effect of a feature. The one exception is `agent.py`: it shares `/api/conversations` to
-  stream a turn, which `RagService` runs, not `ConversationService`.
+  side effect of a feature.
 - Module-level `router = APIRouter(prefix="/api/x", tags=["x"])` in `rag/api/routers/`, each
   endpoint a plain `@router.get`/`post` function. A gate every route shares goes on the router
   itself, next to its routes: `dependencies=[Depends(get_current_user)]` (or
@@ -107,11 +106,14 @@ class ChunkerPort(Protocol):
 
 Each event of `POST /api/conversations/{id}/messages` is one `data:` line of JSON, told apart by
 its `type`, and its shape is a Pydantic model, so it reaches the frontend through OpenAPI:
-1. a dataclass in `rag/domain/models/agent/stream.py`, added to the `StreamEvent` union and to
-   the re-exports in `rag/domain/models/__init__.py`;
-2. where it comes from in `rag/services/agent_service/streaming.py`: `parse_event` for the live
-   stream and, if it should survive a reload, `replay` for history (rebuilt from the saved
-   messages — anything not in them can't be replayed);
+1. a dataclass in `rag/domain/models/agent/stream.py` with its `type: Literal[...]` tag (which
+   is how the transcript stores and reads it back), added to the `StreamEvent` union and to the
+   re-exports in `rag/domain/models/__init__.py`;
+2. where it comes from in `rag/services/agent_service/streaming.py`'s `parse_event`; a
+   middleware that needs to say something to the client dispatches a custom event there
+   (`adispatch_custom_event`, as the groundedness guard does for `AnswerRetracted`). Every event
+   is saved in the turn's transcript as it was streamed, unless it changes what was already sent
+   (then `conversation_service/transcript.py`'s `TranscriptBuilder` applies it instead);
 3. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
 4. in the frontend (`frontend/src/features/chat/`), each step failing to compile until done:
@@ -203,6 +205,19 @@ if the frontend no longer matches them.
   built (example: `build_search_tool(knowledge_base)` in `tools.py`).
 - Never a module-level global (e.g. a module-level `@tool` function), and never a client
   re-instantiated per call.
+
+## Giving the chat agent a feature of its own: a `Capability`, not a middleware
+
+- A feature the agent should use (preferences today; feedback, memory, …) lives in its own
+  service and hands the agent a `Capability` (`rag.domain.models`): its `Tool`s, and
+  `instructions(ctx)` read fresh for every model call. Example: `PreferenceService.capability()`.
+- The container passes it to the agent's spec (`RagService(capabilities=[...])`); the agent
+  service never learns the feature's name, so nothing in `agent_service/` changes.
+- A tool that acts on the user rather than the product is `kind="user"`: the topical guard keeps
+  it off-topic, and the groundedness guard doesn't check answers against its output. A tool reads
+  whose turn it is from its `RunContext` argument, never from the model.
+- A new `Middleware` spec is only for changing how the agent itself runs (a guard, planning),
+  not for giving it a feature.
 
 ## Adding a new backend behind a `Settings`-driven choice: extend the discriminated union, don't branch downstream
 

@@ -104,6 +104,32 @@ describe('applyEvent', () => {
     ]).map((b) => b.type)).toEqual(['text', 'todos', 'text']);
   });
 
+  it('removes a retracted answer, and starts its revision in a new bubble', () => {
+    const t = applyEvents(emptyTranscript(), [
+      { type: 'tool', name: 'search', status: 'pending', query: 'pricing' },
+      { type: 'text', text: 'wro' },
+      { type: 'text', text: 'ng' },
+      { type: 'retracted' },
+      { type: 'reasoning', text: 'Again' },
+      { type: 'text', text: 'revised' },
+    ]);
+
+    expect(t.bubbles.map(({ type, content }) => ({ type, content }))).toEqual([
+      { type: 'tool', content: { name: 'search', query: 'pricing', status: 'pending' } },
+      { type: 'reasoning', content: { text: 'Again', streaming: false } },
+      { type: 'text', content: { text: 'revised' } },
+    ]);
+    // The revision's bubble is a new one, not the removed draft's.
+    expect(new Set(t.bubbles.map((b) => b.id)).size).toBe(3);
+  });
+
+  it('ignores a retraction with no answer to remove', () => {
+    expect(bubbles([
+      { type: 'reasoning', text: 'Thinking' },
+      { type: 'retracted' },
+    ])).toEqual([{ type: 'reasoning', content: { text: 'Thinking', streaming: false } }]);
+  });
+
   it('leaves the bubbles it did not change as they were', () => {
     const before = applyEvents(emptyTranscript(), [
       { type: 'tool', name: 'search', status: 'pending', query: 'a' },

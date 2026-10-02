@@ -1,25 +1,26 @@
 """The domain's data types, grouped by area; import them from here."""
 
 from rag.domain.models.agent.agent import (
-    MAX_PREFERENCE_LENGTH,
-    MAX_PREFERENCES,
     AgentSpec,
+    Capability,
     Middleware,
-    Preference,
+    RunContext,
     Tool,
     ToolAgentSpec,
+    ToolKind,
     ToolResult,
 )
 from rag.domain.models.agent.middleware import (
     GroundednessMiddleware,
     OffTopicMiddleware,
-    PreferenceMiddleware,
     TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
+    AnswerRetracted,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
+    TaggedStreamEvent,
     TextDelta,
     Todo,
     TodosUpdated,
@@ -31,6 +32,7 @@ from rag.domain.models.conversation import (
     Conversation,
     ConversationPage,
     HistoryMessage,
+    Turn,
     UserMessage,
 )
 from rag.domain.models.ingestion import (
@@ -40,13 +42,20 @@ from rag.domain.models.ingestion import (
     IngestionRunStatus,
     RawDocument,
 )
+from rag.domain.models.preference import (
+    MAX_PREFERENCE_LENGTH,
+    MAX_PREFERENCES,
+    Preference,
+)
 from rag.domain.models.retrieval import Chunk
 
 __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
+    "AnswerRetracted",
     "AssistantMessage",
+    "Capability",
     "Chunk",
     "Conversation",
     "ConversationPage",
@@ -59,11 +68,12 @@ __all__ = [
     "Middleware",
     "OffTopicMiddleware",
     "Preference",
-    "PreferenceMiddleware",
     "RawDocument",
     "ReasoningDelta",
     "ReferencesReady",
+    "RunContext",
     "StreamEvent",
+    "TaggedStreamEvent",
     "TextDelta",
     "Todo",
     "TodolistMiddleware",
@@ -71,7 +81,9 @@ __all__ = [
     "Tool",
     "ToolAgentSpec",
     "ToolCall",
+    "ToolKind",
     "ToolResult",
+    "Turn",
     "User",
     "UserMessage",
 ]

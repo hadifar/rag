@@ -49,7 +49,8 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * One streamed event into the answer's bubbles: text deltas grow a single assistant
  * bubble, reasoning deltas a single reasoning bubble (until the model answers or calls a
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
- * in place each time the agent updates it, and references get their own.
+ * in place each time the agent updates it, and references get their own. A retracted
+ * answer's bubble is removed; its revision starts a new one.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
   const t = draft(transcript);
@@ -99,6 +100,15 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
       }
       break;
     }
+    case 'retracted':
+      // The answer streamed since the last tool call or plan was rejected (unsupported by
+      // the searches): drop it before its revision streams.
+      if (turn.textId !== null) {
+        const textId = turn.textId;
+        t.bubbles = t.bubbles.filter((b) => b.id !== textId);
+      }
+      turn.textId = null;
+      break;
     case 'references':
       // Sent only when the answer searched; an empty list still gets its bubble.
       push(t, { type: 'references', content: { references: event.references } });

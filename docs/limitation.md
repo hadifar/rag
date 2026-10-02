@@ -38,9 +38,11 @@
 - The sidebar paginates by `(updated_at, id)`, and using a conversation moves it to the top, so a
   conversation can reappear in a later page while scrolling; the frontend drops such duplicates,
   but a conversation used on another device meanwhile won't show up until a reload.
-- Deleting a user cascades to their `conversations` rows but not to their LangGraph checkpoint
-  threads or their preferences in the store, which live in separate tables with no user link — a full user deletion (GDPR) still
-  has to delete each conversation's thread first.
+- Deleting a user cascades to their `conversations` and `user_preferences` rows but not to their
+  LangGraph checkpoint threads, which live in separate tables with no user link — a full user
+  deletion (GDPR) still has to delete each conversation's thread first.
+- Migration 0009 copied preferences out of LangGraph's store and left its rows in place (for a
+  rollback); `langgraph.store` is no longer used, and can be dropped once that's not needed.
 - A thread whose conversation row was removed outside the app (e.g. a user deleted in SQL) is
   unreachable and stays in the checkpoint tables; nothing cleans these up.
 - One database, two schema owners: Alembic owns the tables in `public`
@@ -50,8 +52,10 @@
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.
 - The groundedness check runs after the answer has already streamed. When it asks for a
-  revision, the user sees the rejected draft and the revision in the same bubble; reopening the
-  conversation later shows only the revision.
+  revision, the user sees the rejected draft until it's retracted (`AnswerRetracted`) and the
+  revision streams in its place; the reasoning that led to the draft stays.
+- Migration 0010 deleted every conversation from before the transcript existed, with its
+  checkpointed messages: their history was never recorded in a form that could be carried over.
 
 ## Frontend
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write

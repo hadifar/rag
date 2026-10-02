@@ -1,11 +1,16 @@
-from typing import Literal
+from typing import Annotated, Literal
 
+from pydantic import Field
 from pydantic.dataclasses import dataclass
+
+# Each event carries its `type`, so a list of them can be stored and read back as it was
+# (the conversation transcript) without a mapping of its own.
 
 
 @dataclass
 class TextDelta:
     text: str
+    type: Literal["text"] = "text"
 
 
 @dataclass
@@ -13,6 +18,7 @@ class ReasoningDelta:
     """A piece of the model's reasoning summary."""
 
     text: str
+    type: Literal["reasoning"] = "reasoning"
 
 
 @dataclass
@@ -21,6 +27,7 @@ class ToolCall:
     status: Literal["pending", "done"]
     query: str | None = None
     output: str | None = None
+    type: Literal["tool"] = "tool"
 
 
 @dataclass
@@ -34,6 +41,16 @@ class TodosUpdated:
     """The agent's whole plan, sent each time it rewrites it."""
 
     todos: list[Todo]
+    type: Literal["todos"] = "todos"
+
+
+@dataclass
+class AnswerRetracted:
+    """The answer text sent since the last tool call or plan was rejected (e.g. as
+    unsupported by what the turn's searches found) and is being rewritten: drop it.
+    """
+
+    type: Literal["retracted"] = "retracted"
 
 
 @dataclass
@@ -43,6 +60,17 @@ class ReferencesReady:
     """
 
     references: list[str]
+    type: Literal["references"] = "references"
 
 
-StreamEvent = TextDelta | ReasoningDelta | ToolCall | TodosUpdated | ReferencesReady
+StreamEvent = (
+    TextDelta
+    | ReasoningDelta
+    | ToolCall
+    | TodosUpdated
+    | AnswerRetracted
+    | ReferencesReady
+)
+
+# For reading a stored event back: its `type` says which one it is.
+TaggedStreamEvent = Annotated[StreamEvent, Field(discriminator="type")]

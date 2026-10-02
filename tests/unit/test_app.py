@@ -25,11 +25,11 @@ from rag.config import (
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Chunk, ToolCall
-from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
@@ -38,9 +38,11 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakePreferenceRepository,
+    FakeTranscriptRepository,
     FakeUserRepository,
+    StubChatAgent,
     StubGeneration,
-    StubRag,
 )
 
 _TEST_EMAIL = "test@example.com"
@@ -93,8 +95,7 @@ def client() -> Generator[TestClient]:
 
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
-    rag = StubRag(
-        generation.threads,
+    chat_agent = StubChatAgent(
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
@@ -103,8 +104,8 @@ def client() -> Generator[TestClient]:
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        agent_service=cast(AgentService, generation),
-        rag_service=cast(RagService, rag),
+        preference_service=PreferenceService(FakePreferenceRepository()),
+        rag_service=cast(RagService, chat_agent),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -114,6 +115,8 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
+            transcript=FakeTranscriptRepository(),
+            chat_agent=chat_agent,
             agent_service=generation,
         ),
     )
