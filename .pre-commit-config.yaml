@@ -84,14 +84,14 @@ repos:
         files: ^(rag|tests)/.*\.py$  # nothing to test when no Python changed
         stages: [pre-commit]
 
-      # Keeps frontend/src/types/api.generated.ts in sync with the backend's
+      # Keeps frontend/src/shared/types/api.generated.ts in sync with the backend's
       # Pydantic schemas
       - id: frontend-api-types
         name: frontend API types match backend schema
         entry: bash scripts/generate_frontend_types.sh
         language: system
         pass_filenames: false
-        files: ^(rag/api/schema/.*\.py|rag/api/routers/.*\.py|frontend/src/types/api\.generated\.ts)$
+        files: ^(rag/api/schema/.*\.py|rag/api/routers/.*\.py|frontend/src/shared/types/api\.generated\.ts)$
         stages: [pre-commit]
 
       # The generated types only catch drift if the frontend is checked against them:

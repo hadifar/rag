@@ -52,7 +52,7 @@ graph TD
     adapters[adapters]
     repository[repository]
 
-    api --> services
+    api --> | only via deps.py | services
     services --> domain
     services -.->|only via ports| adapters
     services -.->|only via ports| repository
@@ -72,48 +72,73 @@ diagram allows, since `domain` itself stays pure in the other direction.
 
 ## Frontend layering
 
+The frontend is split by feature first (`src/features/<name>/`), then by layer inside each
+feature. `app/` (router, shell) and `pages/` compose features; `shared/` is what every feature
+builds on.
+
 ```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
 graph TD
+    app["app<br/>router, shell"]
     pages[pages]
-    components[components]
-    hooks[hooks]
-    context[context]
-    api[api]
-    types[types]
-    utils[utils]
+    subgraph feature["features/&lt;name&gt; — reached only via its index.ts"]
+        components[components]
+        hooks[hooks / context]
+        model[model]
+        fapi[api]
+    end
+    subgraph shared[shared]
+        ui[ui]
+        client[api/client.ts]
+        types[types]
+    end
     backend[["backend<br/>/api/*"]]
     schema[["backend<br/>/api/schema/*.py"]]
 
-    pages --> components
-    pages --> hooks
+    app --> pages
+    app --> feature
+    pages --> feature
     components --> hooks
-    components -.->|the Provider, composed into the tree| context
-    hooks --> api
-    context --> api
-    hooks --> utils
-    api --> types
-    utils --> types
-    api --> backend
+    components --> ui
+    hooks --> fapi
+    hooks --> model
+    fapi --> client
+    client --> backend
+    feature --> types
     schema -.-> types
 ```
 
-* `components` and `pages` never import `api` — they present, and reach the server through a
-  hook or context.
-* `hooks` and `context` never import `components`/`pages` — the logic layer doesn't depend on
-  presentation.
-* `api` and `utils` are leaves on the frontend side: `api` only imports `types` (plus its own
-  `client.ts`) and calls the backend's `rag/api` routers directly (see
-  [System overview](#system-overview) for the network path — nginx proxying `/api/*` — between
-  them); `utils` is pure — no network, no framework state.
-* Hooks and context providers call `api` directly, and that's the intended shape: a hook is the
-  data-access layer, the same role a `useQuery` hook plays elsewhere. Only two contexts exist
-  (`AuthProvider`, `ConversationsProvider`) because only the session and the sidebar's
-  conversation list are genuinely app-wide; everything else is local to the hook that owns it.
-* `types` has two sources, not one: `rag/api/schema/*.py` (Pydantic models) generate it at build
-  time — a different relationship than `api`'s runtime calls to `backend`, and one-directional
-  (the schema is the source of truth; `types/api.ts` is generated, never hand-edited). See
-  [enforcement.md](enforcement.md#backendfrontend-schema-sync) for the full pipeline
-  (`openapi-typescript` → `api.generated.ts` → `api.ts`) and what keeps it from drifting.
+Across features:
+* A feature is used only through its public API, `@/features/<name>` (its `index.ts`) — never a
+  file inside it, and never a relative path climbing out of it (`../../other-feature/…`).
+* Features may use each other's public API (chat uses `conversations` and `knowledge-base`);
+  `shared/` never imports a feature, page or the app.
+* Only the lazily loaded `pages/ChatPage` imports `@/features/chat`, so the markdown renderer stays
+  out of the main bundle.
+
+Inside a feature (and `shared/`), the layers:
+* `components` (and `pages`, `app`) never import an `api/` — they present, and reach the server
+  through a hook or context.
+* `hooks` and `context` never import `components`/`pages`/`shared/ui` — the logic layer doesn't
+  depend on presentation.
+* `api` only talks to the backend through `shared/api/client.ts`; it imports no hook, context,
+  component or other feature.
+* `model` is pure — no network, no framework state, no presentation.
+* Server data lives in TanStack Query's cache (one `QueryClient`, created in `app/App.tsx`): a
+  feature's hooks wrap `useQuery`/`useMutation` around its `api` calls, under the keys in its
+  `api/queryKeys.ts`, and components only see what the hooks return. After a change the hooks
+  patch the cache (`setQueryData`) rather than refetch, e.g. chat moving a conversation to the top
+  of the sidebar list. The one context left, `AuthProvider`, holds the session, which isn't
+  server data to cache; logging out clears the cache, so the next user can't see it.
+* `shared/types` has two sources, not one: `rag/api/schema/*.py` (Pydantic models) generate it at
+  build time — a different relationship than `api`'s runtime calls to `backend`, and
+  one-directional (the schema is the source of truth; `api.generated.ts` is generated, never
+  hand-edited). See [enforcement.md](enforcement.md#backendfrontend-schema-sync) for the full
+  pipeline (`openapi-typescript` → `api.generated.ts` → `api.ts`) and what keeps it from drifting.
 
 All enforced by oxlint; see [enforcement.md](enforcement.md#frontend-code-quality).
 
@@ -144,9 +169,7 @@ graph TD;
 	__start__ --> TopicalGuard\2ebefore_agent;
 	model --> TodoListMiddleware\2eafter_model;
 	tools -.-> model;
-	classDef default fill:#f2f0ff,line-height:1.2
-	classDef first fill-opacity:0
-	classDef last fill:#bfb6fc
+
 ```
 
 Nodes are the steps that change the graph's state:

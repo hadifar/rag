@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import type { ConversationPageResponse, StreamEventResponse } from '../src/types';
+import type { ConversationPageResponse, StreamEventResponse } from '@/shared/types';
 
 /** A finished `text/event-stream` response, framed the way the backend sends it. */
 export function sse(events: StreamEventResponse[]) {

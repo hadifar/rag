@@ -1,12 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { ConversationsProvider } from '../../src/context/ConversationsProvider';
-import { ChatPage } from '../../src/pages/ChatPage';
-import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '../../src/types';
+import { ChatPage } from '@/pages/ChatPage';
+import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '@/shared/types';
+import { withQueryClient } from '../queryClient';
 import { server, sse } from '../server';
 
 // The real page, hook and API client; only the backend is faked (see ../server.ts).
@@ -15,16 +15,12 @@ function renderChat(path: string) {
     [
       {
         path: '/chat/:conversationId?',
-        element: (
-          <ConversationsProvider>
-            <ChatPage />
-          </ConversationsProvider>
-        ),
+        element: <ChatPage />,
       },
     ],
     { initialEntries: [path] },
   );
-  render(<RouterProvider router={router} />);
+  render(withQueryClient(<RouterProvider router={router} />));
   return { router, user: userEvent.setup() };
 }
 
@@ -141,6 +137,48 @@ describe('ChatPage', () => {
 
     expect(await screen.findByText("I don't know.")).toBeInTheDocument();
     expect(screen.getAllByText('— none found')).toHaveLength(1);
+  });
+
+  it('adds a follow-up to a saved conversation below its history', async () => {
+    let touched = false;
+    server.use(
+      http.get('/api/conversations/:id/messages', () =>
+        HttpResponse.json<HistoryMessageResponse[]>([
+          { role: 'user', text: 'hi' },
+          { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
+        ]),
+      ),
+      http.post('/api/conversations/:id/touch', () => {
+        touched = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Sure.' }])),
+    );
+    const { user } = renderChat('/chat/c1');
+    await screen.findByText('Hello!');
+
+    await ask(user, 'One more thing');
+
+    expect(await screen.findByText('Sure.')).toBeInTheDocument();
+    expect(screen.getByText('Hello!')).toBeInTheDocument();
+    expect(screen.getByText('One more thing')).toBeInTheDocument();
+    expect(touched).toBe(true);
+  });
+
+  it('starts the next new chat empty', async () => {
+    server.use(
+      http.post('/api/conversations', () => HttpResponse.json(newConversation)),
+      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Hi there.' }])),
+      http.post('/api/conversations/:id/title', () => HttpResponse.json(newConversation)),
+    );
+    const { router, user } = renderChat('/chat');
+    await ask(user, 'hello');
+    await screen.findByText('Hi there.');
+
+    await act(() => router.navigate('/chat'));
+
+    expect(screen.getByText(/ask me something/)).toBeInTheDocument();
+    expect(screen.queryByText('hello')).not.toBeInTheDocument();
   });
 
   it('explains when the conversation in the URL does not exist', async () => {

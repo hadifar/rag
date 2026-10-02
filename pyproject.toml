@@ -1,6 +1,6 @@
 [project]
 name = "RAG"
-version = "0.10.1"
+version = "0.12.0"
 description = "A prod ready RAG service"
 readme = "README.md"
 license = "MIT"
@@ -54,6 +54,7 @@ extend-select = [
 "fastapi.HTTPException".msg = "Raise a rag.domain.errors.RagError subclass (docs/conventions.md)."
 "os.environ".msg = "Read configuration through rag.config.Settings."
 "os.getenv".msg = "Read configuration through rag.config.Settings."
+"os.path".msg = "use Pathlib"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004", "TID251"]  # tests may read the environment (e.g. CI)
@@ -120,6 +121,7 @@ forbidden_modules = [
     "langchain_core", "langchain", "langchain_openai", "langchain_protocol",
     "langgraph", "langgraph_sdk", "langsmith",
 ]
+
 # Direct imports only: the api and entrypoints reach LangChain through the agent
 # service and the container's adapters, which is how it's meant to be.
 allow_indirect_imports = "true"

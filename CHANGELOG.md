@@ -1,3 +1,70 @@
+## v0.12.0 (2026-10-01)
+
+### Feat
+
+- **chat**: keep reasoning, plan and searches in a reloaded conversation
+- **chat**: show the agent's plan as a live todo list instead of raw tool output
+- **chat**: stream the model's reasoning summary (opt-in via LLM__REASONING_EFFORT)
+- **api**: let users list, add and delete their answer preferences
+- **agent**: remember each user's answer preferences in the LangGraph store
+- **agent**: open a LangGraph Postgres store alongside the checkpointer
+
+### Fix
+
+- raise the graph recursion limit to 75
+
+### Refactor
+
+- **frontend**: keep reasoning visible in a lighter colour
+- rename middleware to be consitent with langchain
+- **domain**: break down agent model for simplification
+- **agent**: fold checks, planning and preferences into ToolAgentSpec.middleware
+- clean up agent service
+- rename adapter & update docs
+- **agent**: make Agent's run config private; fix its docstring
+- call a turn's citations references end to end
+- **cli**: remove prune-threads command
+- **agent**: own chat history in AgentService; drop CheckpointHistoryStore
+- **config**: move constants to their users; split config into a package; make tuning values real settings
+- **domain**: move models.py into models/
+- move prompts out of domain into the services that use them
+- **domain**: split ports into a package named after the services
+
+## v0.11.0 (2026-10-01)
+
+### Feat
+
+- **frontend**: show a welcome placeholder on an empty new chat
+- **infra**: apply migrations automatically on docker compose up
+- **frontend**: confirm chat deletion in a modal instead of window.confirm
+
+### Fix
+
+- **frontend**: stop dropping the last streamed text update
+- title generation runs immediately after first message
+- reduce unit-test time
+
+### Refactor
+
+- **agent**: require trace_config instead of a silent no-op default
+- tool creation via agent
+- create agent service (langchain) and rag service (thin layer)
+- Planning spec replaces todo_list; planning prompt travels with its tool
+- general agent creation via AgentSpec
+- agent_service is the only LangChain user
+- port for external libs
+- generation service; not override everything
+- add structured output for title generation
+- generation service doesnt expose chat directly
+- drop ModelPort
+- consolidate const value in domain/constant.py
+- router kb to retrieval
+- implement touch functionality for conversations and update related methods and types
+- enhance ports and services with new streaming capabilities and improved type hints
+- remove redundant docstring from stream method
+- drop or refactor unused fiels & functions
+- rename packages
+
 ## v0.10.1 (2026-09-29)
 
 ### Refactor
