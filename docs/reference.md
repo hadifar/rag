@@ -153,13 +153,12 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   as the events its stream sent (see [Streaming](#streaming)). Nothing extra is saved for this:
   the reasoning summary, the plan and the searches are all in the checkpointed messages.
 
-The checkpointer is built by `adapters/langgraph_persistence.py`'s `open_langgraph()` (an async
-context manager, mirroring `adapters/db.py`'s `open_db_pool()`): an `AsyncPostgresSaver` and an
-`AsyncPostgresStore` (what outlives a thread, e.g. a user's preferences; no semantic index) sharing
-one connection pool of their own on the app's `DATABASE_URL` (required). It's a separate pool from
+The checkpointer is built by `adapters/lang_memory.py`'s `open_checkpointer()` (an async
+context manager, mirroring `adapters/postgres_db.py`'s `open_db_pool()`): an `AsyncPostgresSaver`
+on a connection pool of its own on the app's `DATABASE_URL` (required). It's a separate pool from
 the repositories' because LangGraph needs different connection settings (`dict_row`, autocommit, no
 prepared statements). Both pools test a connection before handing it out and replace dead ones,
-so a Postgres restart doesn't need a backend restart; the saver's and the store's `setup()` run
+so a Postgres restart doesn't need a backend restart; the saver's `setup()` runs
 on connect (idempotent schema migrations). Its tables live in their own `langgraph` Postgres schema (the pool
 connects with `search_path=langgraph`), apart from the Alembic-owned tables in `public`. Durable
 across restarts and safe for multiple backend replicas.

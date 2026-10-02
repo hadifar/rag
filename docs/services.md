@@ -17,9 +17,10 @@
   (`preference_service/service.py`) — the saved preferences with their ids as instructions, plus
   `save_user_preference` and `forget_user_preference` as `kind="user"` tools. The user comes from
   the turn's `RunContext` (set from the access token), never from the model. The rules (at most
-  20 per user, 200 characters each, no case-insensitive duplicates) are the service's; the
-  storage is `PreferenceRepositoryPort` (today `adapters/lang_preference_store.py`, on the
-  LangGraph store under `("users", <id>, "preferences")`).
+  20 per user, 200 characters each, no case-insensitive duplicates) are the service's, and the
+  `user_preferences` table (`repository/preference_repository.py`) backs up the two a race could
+  slip past: `ux_user_preferences_text` and the `tr_user_preferences_cap` trigger. Its foreign
+  key to `users` cascades, so a user's preferences go with them.
 - **`ModelRetryMiddleware`** retries the model call, then ends the turn with a fixed apology.
 
 Guard instructions are never saved to the thread: the checkpoint holds only what the user and

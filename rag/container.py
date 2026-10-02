@@ -7,14 +7,14 @@ from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
 from rag.adapters.lang_llm_client import build_embeddings, build_llm
-from rag.adapters.lang_memory import open_langgraph
+from rag.adapters.lang_memory import open_checkpointer
 from rag.adapters.lang_observability import open_trace_config
-from rag.adapters.lang_preference_store import LangGraphPreferenceRepository
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.repository.preference_repository import PreferenceRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
@@ -41,7 +41,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
     """Opens connections and tears it down on exit."""
 
     async with (
-        open_langgraph(settings) as langgraph,
+        open_checkpointer(settings) as checkpointer,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
@@ -53,14 +53,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         agent_service = AgentService(
             llm=build_llm(settings),
-            checkpointer=langgraph.checkpointer,
+            checkpointer=checkpointer,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
 
-        preference_service = PreferenceService(
-            repository=LangGraphPreferenceRepository(langgraph.store)
-        )
+        preference_service = PreferenceService(repository=PreferenceRepository(db_pool))
 
         rag_service = RagService(
             retrieval_service=retrieval_service,

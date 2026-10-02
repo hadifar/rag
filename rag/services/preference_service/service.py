@@ -49,9 +49,9 @@ class PreferenceService:
         if len(preferences) >= MAX_PREFERENCES:
             raise TooManyPreferencesError(MAX_PREFERENCES)
 
-        preference = Preference(id=uuid.uuid4().hex, text=text)
-        await self._repository.add(user_id, preference)
-        return preference
+        return await self._repository.add(
+            user_id, Preference(id=uuid.uuid4().hex, text=text)
+        )
 
     async def delete(self, user_id: uuid.UUID, preference_id: str) -> None:
         """Raises PreferenceNotFoundError if the user has no preference with that id."""

@@ -1,9 +1,7 @@
 import uuid
 
 import pytest
-from langgraph.store.memory import InMemoryStore
 
-from rag.adapters.lang_preference_store import LangGraphPreferenceRepository
 from rag.domain.errors import (
     InvalidPreferenceError,
     PreferenceNotFoundError,
@@ -12,7 +10,6 @@ from rag.domain.errors import (
 from rag.domain.models import (
     MAX_PREFERENCE_LENGTH,
     MAX_PREFERENCES,
-    Preference,
     RunContext,
 )
 from rag.services.preference_service.service import PreferenceService
@@ -118,25 +115,3 @@ async def test_a_rejected_preference_is_reported_to_the_model_not_raised() -> No
     result = await save.run("   ", _ctx(ALICE))
 
     assert result.content.startswith("Not saved: Invalid preference")
-
-
-async def test_the_langgraph_repository_keeps_each_users_own_oldest_first() -> None:
-    repository = LangGraphPreferenceRepository(InMemoryStore())
-    first, second = Preference("a", "Answer in Dutch"), Preference("b", "Be brief")
-    await repository.add(ALICE, first)
-    await repository.add(ALICE, second)
-
-    assert await repository.list_for_user(ALICE) == [first, second]
-    assert await repository.list_for_user(BOB) == []
-    assert not await repository.delete(BOB, first.id)
-    assert await repository.delete(ALICE, first.id)
-    assert await repository.list_for_user(ALICE) == [second]
-
-
-async def test_the_langgraph_repository_lists_up_to_the_cap() -> None:
-    # The store's search returns 10 items by default; a user may have more.
-    repository = LangGraphPreferenceRepository(InMemoryStore())
-    for i in range(MAX_PREFERENCES):
-        await repository.add(ALICE, Preference(str(i), f"preference {i}"))
-
-    assert len(await repository.list_for_user(ALICE)) == MAX_PREFERENCES

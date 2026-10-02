@@ -286,8 +286,9 @@ class FakePreferenceRepository:
     async def list_for_user(self, user_id: uuid.UUID) -> list[Preference]:
         return list(self.rows.get(user_id, []))
 
-    async def add(self, user_id: uuid.UUID, preference: Preference) -> None:
+    async def add(self, user_id: uuid.UUID, preference: Preference) -> Preference:
         self.rows.setdefault(user_id, []).append(preference)
+        return preference
 
     async def delete(self, user_id: uuid.UUID, preference_id: str) -> bool:
         kept = [p for p in self.rows.get(user_id, []) if p.id != preference_id]
