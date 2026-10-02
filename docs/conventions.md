@@ -107,9 +107,14 @@ its `type`, and its shape is a Pydantic model, so it reaches the frontend throug
    messages — anything not in them can't be replayed);
 3. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
-4. its line in `frontend/src/shared/types/api.ts` and its case in `createBubbleHandler`
-   (`frontend/src/features/chat/model/chatStream.ts`) — whose `satisfies never` default fails to compile until
-   the new event is handled. History replays through the same handler, so it needs nothing more.
+4. in the frontend (`frontend/src/features/chat/`), each step failing to compile until done:
+   - its line in `frontend/src/shared/types/api.ts`;
+   - its case in `applyEvent` (`model/transcript.ts`), whose `satisfies never` default rejects an
+     unhandled event — a pure function, so test it in `tests/unit/utils/transcript.test.ts`;
+   - if it makes a new kind of bubble: its variant in `Bubble` (`types.ts`), a component, and its
+     entry in `bubbleViews` (`components/MessageList.tsx`), a map typed to need one per bubble type.
+
+   History replays through the same `applyEvent`, so it needs nothing more.
 
 The `frontend-api-types` pre-commit hook regenerates the types, and `frontend-typecheck` fails
 if the frontend no longer matches them.

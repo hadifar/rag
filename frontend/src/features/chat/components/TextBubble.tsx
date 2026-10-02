@@ -3,8 +3,6 @@ import remarkBreaks from 'remark-breaks';
 import type { TextContent } from '../types';
 import { isFencedCodeBlock } from '../model/markdown';
 
-type TextBubbleProps = TextContent & { position?: 'left' | 'right' };
-
 const Code: Components['code'] = ({ className, children }) => {
   if (isFencedCodeBlock(children)) {
     return (
@@ -25,16 +23,8 @@ const markdownComponents: Components = {
 };
 const remarkPlugins = [remarkBreaks];
 
-export function TextBubble({ text, position }: TextBubbleProps) {
-  // user
-  if (position === 'right') {
-    return (
-      <div className="max-w-[480px] rounded-2xl rounded-tr-sm bg-slate-100 px-4 py-3">
-        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{text}</p>
-      </div>
-    );
-  }
-  // assistant
+/** The assistant's answer, as markdown. */
+export function TextBubble({ text }: TextContent) {
   return (
     <div className="max-w-[480px] px-3 text-sm leading-6 text-slate-800">
       <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>

@@ -117,7 +117,7 @@ graph LR
   use it — the one manual step, and it can't drift silently
 - `frontend-typecheck` (pre-commit, and CI's `pre-commit` job) runs `tsc -b` over the frontend,
   so code that no longer matches the regenerated types fails instead of breaking at runtime;
-  `createBubbleHandler`'s `satisfies never` default makes a new stream event type one of those
+  `applyEvent`'s `satisfies never` default makes a new stream event type one of those
   failures (the stream union is a named root model, `StreamEventResponse`, so it's generated too)
 
 ## Tests

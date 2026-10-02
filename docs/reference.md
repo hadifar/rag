@@ -67,7 +67,7 @@ frontend/                              # repo root — separate Vite/React app
 │   ├── features/                     # one folder per feature, each with api/ hooks/ context/ model/ components/ + index.ts (its public API)
 │   │   ├── auth/                     # AuthProvider (session status + user), useAuth, useLogin, RequireAuth
 │   │   ├── conversations/            # ConversationList (sidebar list, paging, delete) + useConversationCache (keeps it in step with chat)
-│   │   ├── chat/                     # useChat (streaming + history loading), chatStream/history (events → bubbles), message list, composer, bubbles
+│   │   ├── chat/                     # useTranscript (history + live answer, in the query cache), useSendMessage (streaming), transcript.ts (events → bubbles), message list, bubbles
 │   │   ├── preferences/              # answer preferences
 │   │   ├── settings/                 # model settings form
 │   │   └── knowledge-base/           # upload + run polling (admin), opening cited documents
@@ -219,16 +219,20 @@ text stream too. Two consumers read the normalized stream:
   they're in the OpenAPI schema and the frontend's generated types. JSON also keeps a token
   containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`features/chat/api/chat.ts`); `createBubbleHandler` (`features/chat/model/chatStream.ts`) turns the events into bubbles —
-  reasoning via `ReasoningBubble`, tool calls via `ToolBubble`, the plan via `TodosBubble` and
-  citations via `ReferencesBubble` (which links to `/api/retrieval/{filename}`).
+  (`features/chat/api/chat.ts`); `applyEvent` (`features/chat/model/transcript.ts`), a pure
+  reducer, turns the events into bubbles, a batch per animation frame — reasoning via
+  `ReasoningBubble`, tool calls via `ToolBubble`, the plan via `TodosBubble` and citations via
+  `ReferencesBubble` (which links to `/api/retrieval/{filename}`). The transcript lives in the
+  query cache under the conversation's key, so the live answer and the loaded history are one
+  entry; leaving a conversation stops its answer and drops the entry, so opening it again loads
+  it from the server.
 
 A saved conversation is shown the same way. `streaming.py`'s `replay()` rebuilds a past turn's
 events from its checkpointed messages (each reply's reasoning and text from its content blocks,
 each search `pending` then `done`, each `write_todos` call as its plan); `turn.py`'s
 `to_history()` drops the drafts the groundedness guard rejected and adds the references. The
-frontend's `historyToMessages` (`features/chat/model/history.ts`) feeds those events through
-`createBubbleHandler`, so a reloaded chat renders exactly as it did live.
+frontend's `fromHistory` (`features/chat/model/transcript.ts`) replays those events through
+`applyEvent`, so a reloaded chat renders exactly as it did live.
 
 ## Observability
 
