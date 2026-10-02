@@ -1,11 +1,12 @@
 import {
   ApiError,
+  api,
+  apiError,
   apiUrl,
-  ensureOk,
   jsonPostInit,
   refreshSession,
-  requestJson,
   setAccessToken,
+  unwrap,
 } from '@/shared/api/client';
 import type { LoginRequest, TokenResponse, UserResponse } from '@/shared/types';
 
@@ -14,11 +15,11 @@ import type { LoginRequest, TokenResponse, UserResponse } from '@/shared/types';
  * `authFetch`: a 401 here means wrong credentials, not an expired session to refresh.
  */
 export async function login(email: string, password: string): Promise<void> {
-  const init: RequestInit = {
+  const res = await fetch(apiUrl('auth/login'), {
     ...jsonPostInit({ email, password } satisfies LoginRequest),
     credentials: 'include',
-  };
-  const res = ensureOk(await fetch(apiUrl('auth/login'), init), 'auth/login', init);
+  });
+  if (!res.ok) throw await apiError(res, 'POST /api/auth/login');
   const body: TokenResponse = await res.json();
   setAccessToken(body.access_token);
 }
@@ -45,5 +46,5 @@ export async function logout(): Promise<void> {
 }
 
 export function me(): Promise<UserResponse> {
-  return requestJson('auth/me');
+  return unwrap(api.GET('/api/auth/me'));
 }

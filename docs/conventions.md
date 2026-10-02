@@ -78,11 +78,18 @@ class ChunkerPort(Protocol):
   never `fastapi.HTTPException` (ruff bans it). No change to `app.py`'s `register_error_handlers`
   is needed.
 - Its frontend calls go in the `api/` folder of the feature that owns them
-  (`frontend/src/features/<feature>/api/x.ts`), through `authFetch`/`request`/`requestJson` from
-  `shared/api/client.ts` — never a bare `fetch` or a token passed in by the caller (only
-  `features/auth/api/auth.ts`'s login/logout, which run before or without a token, use plain
-  `fetch`; oxlint rejects `fetch` anywhere else). Components and pages never import an `api/`
-  (oxlint rejects that too): they get data and actions from a hook or context.
+  (`frontend/src/features/<feature>/api/x.ts`), through the typed `api` client from
+  `shared/api/client.ts`, wrapped in `unwrap`:
+  `unwrap(api.GET('/api/x/{x_id}', { params: { path: { x_id } }, signal }))`. The path, params,
+  body and response are checked against the generated OpenAPI `paths`, so once the types are
+  regenerated a renamed route or field fails `tsc`; `unwrap` returns the data or throws an
+  `ApiError` carrying the status and the backend's `detail`. Every call goes through
+  `authFetch` (token + one refresh-and-retry on a 401), never a bare `fetch` or a token passed
+  in by the caller. Only three calls use the untyped `authFetch`/`apiUrl` (oxlint rejects them
+  in any other `api/` file): the chat SSE stream, the multipart knowledge-base upload, and
+  `features/auth/api/auth.ts`'s login/logout, which run before or without a token on plain
+  `fetch`. Components and pages never import an `api/` (oxlint rejects that too): they get
+  data and actions from a hook or context.
   Request/response types are the named types in `frontend/src/shared/types/api.ts` (one per
   backend model, same name) — add the new model's line there, never a hand-written interface.
 
@@ -137,7 +144,8 @@ if the frontend no longer matches them.
   (oxlint rejects both a deep `@/features/<name>/…` import and a relative `../../…` one).
 - Inside the feature, import its own files by relative path; reach `shared/` through `@/shared/…`.
 - A page in `src/pages/` composes features and holds no logic; a new route goes in
-  `src/app/App.tsx`. A page that pulls in a heavy dependency is loaded with `lazy` (as `ChatPage`
+  `src/app/App.tsx`, its URL in `src/shared/routes.ts` (`routes.chat(id)`, `routePatterns.chat`),
+  which every link, redirect and `useMatch` uses — never a URL spelled out elsewhere. A page that pulls in a heavy dependency is loaded with `lazy` (as `ChatPage`
   is).
 - Something two features need that belongs to neither (a UI primitive, a generic hook) goes in
   `shared/`, which never imports a feature.
@@ -171,7 +179,11 @@ if the frontend no longer matches them.
   cache is changed through a hook it exports (`useConversationCache`), never by its keys.
 - Retries follow `shouldRetry` (`shared/api/queryClient.ts`): network errors and 5xx twice, never
   a 4xx. A query that needs otherwise (polling an ingestion run) sets its own `retry`.
-- A delete treats a 404 as done (it's idempotent), in the hook's `mutationFn`.
+- A delete treats a 404 as done (it's idempotent): `mutationFn: (id) => ignoreNotFound(deleteX(id))`.
+- Tell the user what failed with `errorMessage(err, { 404: '…' }, fallback)` from
+  `shared/api/errors.ts` — the feature words each message, the helper picks it by status — or
+  `errorDetail(err)` where the backend's own reason is fit to show (an upload's rejection).
+  Never `err instanceof ApiError && err.status === …` by hand.
 - Navigation after a change (deleting the open chat) belongs to the hook that runs the user's
   action, not to the cache.
 

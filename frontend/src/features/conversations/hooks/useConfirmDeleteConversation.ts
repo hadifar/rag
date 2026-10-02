@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useMatch, useNavigate } from 'react-router-dom';
 
-import { ApiError } from '@/shared/api/client';
+import { ignoreNotFound } from '@/shared/api/errors';
 import type { ConversationResponse } from '@/shared/types';
+import { routePatterns, routes } from '@/shared/routes';
 import { deleteConversation } from '../api/conversations';
 import { useConversationCache } from './useConversationCache';
 
@@ -20,30 +21,21 @@ type ConfirmDeleteConversation = {
   cancel: () => void;
 };
 
-async function deleteIfPresent(id: string): Promise<void> {
-  try {
-    await deleteConversation(id);
-  } catch (err) {
-    // A 404 means it's already gone — delete is idempotent, so that's success too,
-    // not a failure to surface (and without this, a retry would 404 forever).
-    if (!(err instanceof ApiError && err.status === 404)) throw err;
-  }
-}
-
 /** Holds a delete until the user confirms it; a failure stays in the dialog so they can retry. */
 export function useConfirmDeleteConversation(): ConfirmDeleteConversation {
   const { remove } = useConversationCache();
   const navigate = useNavigate();
-  const openConversation = useMatch('/chat/:conversationId')?.params.conversationId;
+  const openConversation = useMatch(routePatterns.chat)?.params.conversationId;
   const [pending, setPending] = useState<ConversationResponse | null>(null);
 
   const { mutate, reset, isPending, isError } = useMutation({
-    mutationFn: deleteIfPresent,
+    // Already gone is success too; without this, a retry would 404 forever.
+    mutationFn: (id: string) => ignoreNotFound(deleteConversation(id)),
     onSuccess: (_, id) => {
       remove(id);
       setPending(null);
       // Its page would show a chat that no longer exists.
-      if (openConversation === id) navigate('/chat', { replace: true });
+      if (openConversation === id) navigate(routes.newChat, { replace: true });
     },
   });
 

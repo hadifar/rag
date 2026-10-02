@@ -13,13 +13,14 @@ import { useAuth } from '@/features/auth';
 import { ConversationList } from '@/features/conversations';
 import { APP_NAME, BrandMark } from '@/shared/ui/Brand';
 import { IconButton } from '@/shared/ui/IconButton';
+import { routes } from '@/shared/routes';
 
 type Icon = typeof HomeIcon;
 type NavItem = { to: string; label: string; Icon: Icon };
 
-const topLinks: NavItem[] = [{ to: '/', label: 'Home', Icon: HomeIcon }];
+const topLinks: NavItem[] = [{ to: routes.home, label: 'Home', Icon: HomeIcon }];
 
-const footerLinks: NavItem[] = [{ to: '/settings', label: 'Settings', Icon: Cog6ToothIcon }];
+const footerLinks: NavItem[] = [{ to: routes.settings, label: 'Settings', Icon: Cog6ToothIcon }];
 
 // One look for every sidebar row, link or button; collapsed, only its icon shows.
 function itemCls(isCollapsed: boolean, isActive = false) {
@@ -40,7 +41,7 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      end={to === routes.home}
       title={isCollapsed ? label : undefined}
       className={({ isActive }) => itemCls(isCollapsed, isActive)}
     >
@@ -78,7 +79,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  const startNewChat = () => navigate('/chat');
+  const startNewChat = () => navigate(routes.newChat);
 
   const collapseToggle = (
     <IconButton
@@ -91,7 +92,7 @@ export function Sidebar() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate(routes.login);
   };
 
   return (

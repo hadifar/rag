@@ -6,9 +6,9 @@ import { ConfirmDeleteModal } from '@/shared/ui/ConfirmDeleteModal';
 import { IconButton } from '@/shared/ui/IconButton';
 import { StatusLine } from '@/shared/ui/StatusLine';
 import type { ConversationResponse } from '@/shared/types';
+import { routes } from '@/shared/routes';
 import { useConversationList } from '../hooks/useConversationList';
 import { useConfirmDeleteConversation } from '../hooks/useConfirmDeleteConversation';
-import { conversationPath } from '../model/conversations';
 
 // Shown until the conversation's first answer names it.
 const NEW_CHAT_TITLE = 'New chat';
@@ -23,7 +23,7 @@ const ConversationLink = memo(function ConversationLink({
   return (
     <div className="group flex items-center gap-1">
       <NavLink
-        to={conversationPath(conversation.id)}
+        to={routes.chat(conversation.id)}
         title={conversation.title ?? NEW_CHAT_TITLE}
         className={({ isActive }) =>
           `min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${

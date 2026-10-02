@@ -77,6 +77,9 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
     `shared/types/api.ts` imports the generated `api.generated.ts`
   - no bare `fetch` outside `shared/api/client.ts` and `features/auth/api/auth.ts`, so every call
     goes through the client that adds the token and refreshes it (`no-restricted-globals`)
+  - a feature's `api/` calls the backend through the typed `api` client (checked against the
+    generated OpenAPI `paths`), never the untyped `authFetch`/`apiUrl`/`jsonPostInit` — except
+    the three calls that can't be typed: the chat SSE stream, the multipart upload, and login
   - tests may import a file inside a feature, to test a unit on its own
   - hooks and context providers routinely call their feature's `api/` directly (e.g. `useChat`,
     `useSettings`, `AuthProvider`) — that's the intended shape, not a gap: a hook *is* the

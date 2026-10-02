@@ -183,7 +183,7 @@ its own Postgres).
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
   and kept in memory only (`shared/api/client.ts`, never `localStorage`). Every API call goes through
-  `authFetch`, which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
+  `authFetch` (the typed `api` client sends through it too), which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
   if the refresh fails too, `AuthProvider` switches to unauthenticated and `RequireAuth`
   redirects to `/login`.
 - **Refresh token** — a longer-lived JWT (`AUTH__REFRESH_TOKEN_EXPIRE_DAYS`, default 7d), set as an

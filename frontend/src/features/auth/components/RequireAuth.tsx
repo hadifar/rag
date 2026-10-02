@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
+import { routes } from '@/shared/routes';
 import { useAuth } from '../hooks/useAuth';
 import type { LoginRedirectState } from '../types';
 
@@ -15,7 +16,7 @@ export function RequireAuth() {
     const state: LoginRedirectState = {
       from: location.pathname + location.search + location.hash,
     };
-    return <Navigate to="/login" state={state} replace />;
+    return <Navigate to={routes.login} state={state} replace />;
   }
 
   return <Outlet />;

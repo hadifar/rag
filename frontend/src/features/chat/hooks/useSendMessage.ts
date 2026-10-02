@@ -3,13 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import {
-  conversationPath,
   createConversation,
   generateTitle,
   touchConversation,
   useConversationCache,
 } from '@/features/conversations';
 import type { StreamEventResponse } from '@/shared/types';
+import { routes } from '@/shared/routes';
 import { streamChat } from '../api/chat';
 import { chatKeys } from '../api/queryKeys';
 import { applyEvents, emptyTranscript, endTurn, startTurn } from '../model/transcript';
@@ -90,7 +90,7 @@ export function useSendMessage(conversationId: string | undefined) {
           const shown = queryClient.getQueryData<Transcript>(chatKeys.transcript(undefined));
           queryClient.setQueryData(chatKeys.transcript(conversation.id), shown);
           stream.conversationId = conversation.id;
-          navigate(conversationPath(conversation.id), { replace: true });
+          navigate(routes.chat(conversation.id), { replace: true });
         }
         await streamChat({
           conversationId: stream.conversationId!,

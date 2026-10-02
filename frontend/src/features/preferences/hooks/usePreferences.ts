@@ -1,21 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ApiError } from '@/shared/api/client';
+import { errorStatus, ignoreNotFound } from '@/shared/api/errors';
 import { loadStatus } from '@/shared/api/queryClient';
 import type { PreferenceResponse } from '@/shared/types';
 import { addPreference, deletePreference, fetchPreferences } from '../api/preferences';
 import { preferenceKeys } from '../api/queryKeys';
 import { addPreferenceError, withPreference } from '../model/preferences';
-
-async function deleteIfPresent(id: string): Promise<void> {
-  try {
-    await deletePreference(id);
-  } catch (e) {
-    // A 404: already gone, e.g. the assistant forgot it in a chat since the page loaded.
-    if (!(e instanceof ApiError && e.status === 404)) throw e;
-  }
-}
 
 /**
  * The user's answer preferences, added to and removed from here. The chat agent saves to
@@ -46,11 +37,12 @@ export function usePreferences() {
       updateList((list) => withPreference(list, saved));
       setDraft('');
     },
-    onError: (e) => setError(addPreferenceError(e instanceof ApiError ? e.status : null)),
+    onError: (e) => setError(addPreferenceError(errorStatus(e))),
   });
 
   const removing = useMutation({
-    mutationFn: deleteIfPresent,
+    // A 404: already gone, e.g. the assistant forgot it in a chat since the page loaded.
+    mutationFn: (id: string) => ignoreNotFound(deletePreference(id)),
     onMutate: () => setError(null),
     onSuccess: (_, id) => updateList((list) => list.filter((p) => p.id !== id)),
     onError: () => setError("Couldn't remove the preference; try again."),

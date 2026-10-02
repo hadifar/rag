@@ -1,8 +1,8 @@
-import { request } from '@/shared/api/client';
+import { api, unwrap } from '@/shared/api/client';
 
-export async function openKbSource(name: string): Promise<void> {
-  const blob = await (await request(`retrieval/${encodeURIComponent(name)}`)).blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noreferrer');
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+/** A knowledge-base document's file, e.g. one an answer cites. */
+export function fetchKbSource(name: string): Promise<Blob> {
+  return unwrap(
+    api.GET('/api/retrieval/{filename}', { params: { path: { filename: name } }, parseAs: 'blob' })
+  );
 }

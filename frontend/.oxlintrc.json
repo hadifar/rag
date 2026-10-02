@@ -265,6 +265,74 @@
                 ],
                 "message": "api/ only talks to the backend: no framework state, no presentation, no other feature."
               }
+            ],
+            "paths": [
+              {
+                "name": "@/shared/api/client",
+                "importNames": [
+                  "authFetch",
+                  "apiUrl",
+                  "jsonPostInit"
+                ],
+                "message": "Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream, the multipart upload and login need the untyped calls."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/chat/api/chat.ts",
+        "src/features/knowledge-base/api/ingestions.ts",
+        "src/features/auth/api/auth.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/hooks/**",
+                  "**/context/**",
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**",
+                  "**/features/**"
+                ],
+                "message": "api/ only talks to the backend: no framework state, no presentation, no other feature."
+              }
             ]
           }
         ]

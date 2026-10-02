@@ -2,15 +2,17 @@ import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetchConversationMessages } from '@/features/conversations';
-import { ApiError } from '@/shared/api/client';
+import { errorMessage } from '@/shared/api/errors';
 import { chatKeys } from '../api/queryKeys';
 import { emptyTranscript, errorTranscript, fromHistory } from '../model/transcript';
 import type { Transcript } from '../types';
 
 function historyErrorText(err: unknown): string {
-  return err instanceof ApiError && err.status === 404
-    ? "This conversation doesn't exist or was deleted."
-    : "Couldn't load this conversation. Please try again.";
+  return errorMessage(
+    err,
+    { 404: "This conversation doesn't exist or was deleted." },
+    "Couldn't load this conversation. Please try again."
+  );
 }
 
 /**

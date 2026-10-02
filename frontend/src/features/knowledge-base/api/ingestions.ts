@@ -1,40 +1,27 @@
-import { ApiError, apiUrl, authFetch, requestJson } from '@/shared/api/client';
+import { api, apiError, apiUrl, authFetch, unwrap } from '@/shared/api/client';
 import type { IngestionRunResponse } from '@/shared/types';
-
-// nginx answers these itself (as HTML), before the backend's JSON `detail` exists.
-const FALLBACK_MESSAGES: Record<number, string> = {
-  413: 'The file is larger than 20 MB.',
-  429: 'Too many requests; wait a moment and try again.',
-};
 
 /**
  * Uploads a knowledge-base .zip; resolves with the new `running` run. A rejected upload
- * throws an `ApiError` whose message is the backend's reason (e.g. not a zip, another
- * upload still running), fit to show as is.
+ * throws an `ApiError` whose `detail` is the backend's reason (e.g. not a zip, another
+ * upload still running), fit to show as is. Sent as form data, so through `authFetch`:
+ * the schema describes the file as a string, which the typed client would send as JSON.
  */
 export async function uploadKnowledgeBase(file: File): Promise<IngestionRunResponse> {
   const body = new FormData();
   body.append('file', file);
   const res = await authFetch(apiUrl('ingestions'), { method: 'POST', body });
-  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  if (!res.ok) throw await apiError(res, 'POST /api/ingestions');
   return res.json();
 }
 
 export function fetchIngestionRun(id: string): Promise<IngestionRunResponse> {
-  return requestJson(`ingestions/${encodeURIComponent(id)}`);
+  return unwrap(api.GET('/api/ingestions/{run_id}', { params: { path: { run_id: id } } }));
 }
 
 /** The most recent run, or null if nothing was ever uploaded. */
 export function fetchLatestIngestionRun(
   signal?: AbortSignal
 ): Promise<IngestionRunResponse | null> {
-  return requestJson('ingestions/latest', { signal });
-}
-
-async function errorMessage(res: Response): Promise<string> {
-  const body: unknown = await res.json().catch(() => null);
-  if (body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string') {
-    return body.detail;
-  }
-  return FALLBACK_MESSAGES[res.status] ?? `Upload failed (${res.status}).`;
+  return unwrap(api.GET('/api/ingestions/latest', { signal }));
 }

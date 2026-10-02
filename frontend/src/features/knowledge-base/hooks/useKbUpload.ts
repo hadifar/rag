@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ApiError } from '@/shared/api/client';
+import { errorDetail, errorMessage, errorStatus } from '@/shared/api/errors';
 import type { IngestionRunResponse } from '@/shared/types';
 import {
   fetchIngestionRun,
@@ -16,6 +16,18 @@ const POLL_INTERVAL_MS = 2000;
 // Consecutive failed status checks (network blips) tolerated before giving up.
 const MAX_POLL_FAILURES = 5;
 const LOST_CONTACT = 'Lost contact with the server; check back here in a while.';
+// nginx answers these itself (as HTML), before the backend's JSON `detail` exists.
+const PROXY_ERRORS = {
+  413: 'The file is larger than 20 MB.',
+  429: 'Too many requests; wait a moment and try again.',
+};
+
+/** Why an upload was rejected: the backend's reason (e.g. not a zip), else the proxy's. */
+function uploadErrorText(err: unknown): string {
+  const status = errorStatus(err);
+  const fallback = status === null ? "Couldn't reach the server." : `Upload failed (${status}).`;
+  return errorDetail(err) ?? errorMessage(err, PROXY_ERRORS, fallback);
+}
 
 /**
  * Uploading a knowledge-base zip and following its ingestion run until it ends. The
@@ -63,7 +75,7 @@ export function useKbUpload() {
     phase = 'uploading';
   } else if (uploading.isError) {
     phase = 'failed';
-    error = uploading.error instanceof ApiError ? uploading.error.message : "Couldn't reach the server.";
+    error = uploadErrorText(uploading.error);
   } else if (isRunning) {
     phase = poll.isError ? 'failed' : 'running';
     error = poll.isError ? LOST_CONTACT : null;

@@ -63,7 +63,3 @@ export function patchPages(
   const list = update(flattenPages(data));
   return { ...data, pages: data.pages.map((page, i) => ({ ...page, items: i === 0 ? list : [] })) };
 }
-
-export function conversationPath(id: string): string {
-  return `/chat/${encodeURIComponent(id)}`;
-}
