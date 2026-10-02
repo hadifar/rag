@@ -1,7 +1,7 @@
 [project]
 name = "RAG"
 version = "0.12.0"
-description = "A prod ready RAG service"
+description = "A ready to use RAG!"
 readme = "README.md"
 license = "MIT"
 
@@ -51,7 +51,7 @@ extend-select = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"fastapi.HTTPException".msg = "Raise a rag.domain.errors.RagError subclass (docs/conventions.md)."
+"fastapi.HTTPException".msg = "Raise a rag.domain.errors.AppError subclass"
 "os.environ".msg = "Read configuration through rag.config.Settings."
 "os.getenv".msg = "Read configuration through rag.config.Settings."
 "os.path".msg = "use Pathlib"
