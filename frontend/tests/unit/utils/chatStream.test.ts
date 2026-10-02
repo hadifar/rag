@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { assistantText, createBubbleHandler } from '../../../src/utils/chatStream';
+import { assistantText, createBubbleHandler } from '@/features/chat/model/chatStream';
 
 function setup() {
   let nextId = 0;

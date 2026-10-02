@@ -1,4 +1,4 @@
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '@/features/auth';
 
 export function HomePage() {
   const { user } = useAuth();

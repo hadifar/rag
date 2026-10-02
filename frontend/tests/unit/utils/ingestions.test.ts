@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { IngestionRunResponse } from '../../../src/types';
-import { describeRun } from '../../../src/utils/ingestions';
+import type { IngestionRunResponse } from '@/shared/types';
+import { describeRun } from '@/features/knowledge-base/model/ingestions';
 
 function run(overrides: Partial<IngestionRunResponse>): IngestionRunResponse {
   return {

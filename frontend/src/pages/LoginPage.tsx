@@ -1,7 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 
-import { useLogin } from '../hooks/useLogin';
+import { useLogin } from '@/features/auth';
 
 export function LoginPage() {
   const { submit, error, isPending } = useLogin();

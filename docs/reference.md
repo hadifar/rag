@@ -62,12 +62,16 @@ rag/
 migrations/                            # Alembic — `users`, `conversations`, `chunks` (+ `vector` extension), `documents`, no ORM models elsewhere
 frontend/                              # repo root — separate Vite/React app
 ├── src/
-│   ├── api/                          # chat.ts (SSE client), conversations.ts, settings.ts, auth.ts, kb.ts, ingestions.ts
-│   ├── components/                   # layout/ (shell, sidebar, auth guard), chat/ (message list, composer, bubbles), settings/ (knowledge-base upload)
-│   ├── context/                      # AuthProvider (session status + user), ConversationsProvider (sidebar list)
-│   ├── hooks/                        # useChat (streaming + history loading), useAuth/useConversations (read the providers), useKbUpload (upload + run polling)
-│   ├── utils/                        # pure helpers (conversation list updates, history → bubbles)
-│   └── pages/                        # ui pages, incl. LoginPage
+│   ├── app/                          # App.tsx (router), layout/ (shell, sidebar)
+│   ├── pages/                        # thin route pages composing features, incl. LoginPage
+│   ├── features/                     # one folder per feature, each with api/ hooks/ context/ model/ components/ + index.ts (its public API)
+│   │   ├── auth/                     # AuthProvider (session status + user), useAuth, useLogin, RequireAuth
+│   │   ├── conversations/            # ConversationsProvider + ConversationList (sidebar list, paging, delete)
+│   │   ├── chat/                     # useChat (streaming + history loading), chatStream/history (events → bubbles), message list, composer, bubbles
+│   │   ├── preferences/              # answer preferences
+│   │   ├── settings/                 # model settings form
+│   │   └── knowledge-base/           # upload + run polling (admin), opening cited documents
+│   └── shared/                       # api/client.ts (token + refresh), types/ (backend shapes, LoadStatus), ui/ (Modal), hooks/
 └── (Vite build served by nginx in Docker)
 
 infra/                                 # Docker + Azure, no Python
@@ -178,7 +182,7 @@ its own Postgres).
   frontend shows it only when `GET /api/auth/me` says `is_admin`.
 - **Access token** — a short-lived JWT (`AUTH__ACCESS_TOKEN_EXPIRE_MINUTES`, default 15m), returned
   in the `POST /api/auth/login` response body, sent by the frontend as `Authorization: Bearer`
-  and kept in memory only (`api/client.ts`, never `localStorage`). Every API call goes through
+  and kept in memory only (`shared/api/client.ts`, never `localStorage`). Every API call goes through
   `authFetch`, which on a 401 refreshes once (concurrent 401s share one refresh) and retries;
   if the refresh fails too, `AuthProvider` switches to unauthenticated and `RequireAuth`
   redirects to `/login`.
@@ -215,7 +219,7 @@ text stream too. Two consumers read the normalized stream:
   they're in the OpenAPI schema and the frontend's generated types. JSON also keeps a token
   containing `\n\n` from ending the SSE event early.
 - The React frontend consumes that SSE stream with `@microsoft/fetch-event-source`
-  (`api/chat.ts`); `createBubbleHandler` (`utils/chatStream.ts`) turns the events into bubbles —
+  (`features/chat/api/chat.ts`); `createBubbleHandler` (`features/chat/model/chatStream.ts`) turns the events into bubbles —
   reasoning via `ReasoningBubble`, tool calls via `ToolBubble`, the plan via `TodosBubble` and
   citations via `ReferencesBubble` (which links to `/api/retrieval/{filename}`).
 
@@ -223,7 +227,7 @@ A saved conversation is shown the same way. `streaming.py`'s `replay()` rebuilds
 events from its checkpointed messages (each reply's reasoning and text from its content blocks,
 each search `pending` then `done`, each `write_todos` call as its plan); `turn.py`'s
 `to_history()` drops the drafts the groundedness guard rejected and adds the references. The
-frontend's `historyToMessages` (`utils/history.ts`) feeds those events through
+frontend's `historyToMessages` (`features/chat/model/history.ts`) feeds those events through
 `createBubbleHandler`, so a reloaded chat renders exactly as it did live.
 
 ## Observability

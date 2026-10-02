@@ -51,23 +51,31 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
 ## Frontend code quality
 - `frontend-lint` runs oxlint (`frontend/.oxlintrc.json`) on every commit with
   `--deny-warnings`, so CI's `pre-commit` job gates on it. Besides the React hooks rules, it
-  enforces the frontend's layering end to end (`no-restricted-imports`, scoped per directory via
-  `overrides`):
-  - components and pages never import `api/`: they only present, and reach the server through
-    a hook or context
-  - hooks and context never import `components/` or `pages/` — the logic layer doesn't depend on
-    presentation (guards against the backward-dependency direction: nothing stops a hook from
-    importing a component otherwise)
-  - `api/` never imports `hooks/`, `context/`, `components/`, or `pages/` — it only talks to the
-    backend (`client.ts` + `types/`), so it stays usable from anywhere
-  - `utils/` never imports `api/`, `hooks/`, `context/`, `components/`, or `pages/` — pure
-    helpers, no network, no framework state, no presentation
-  - types come from the `types` index, never a single file inside `types/`; only
-    `types/api.ts` imports the generated `api.generated.ts`
-  - no bare `fetch` outside `api/client.ts` and `api/auth.ts`, so every call goes through the
-    client that adds the token and refreshes it (`no-restricted-globals`)
-  - hooks and context providers routinely call `api/` directly (e.g. `useChat`, `useSettings`,
-    `AuthProvider`) — that's the intended shape, not a gap: a hook/provider *is* the data-access
+  enforces the frontend's structure end to end (`no-restricted-imports`, scoped per directory via
+  `overrides`; see [architecture.md](architecture.md#frontend-layering)):
+  - a feature is reached only through its public API, `@/features/<name>` (its `index.ts`):
+    importing a file inside another feature (`@/features/x/…`) or climbing out of one with a
+    relative path (`../../…` from a layer folder, `../…` from the feature root) is rejected, so
+    every cross-feature dependency is visible in an `index.ts`
+  - only the lazily loaded `pages/ChatPage.tsx` may import `@/features/chat`, which pulls in the
+    markdown renderer — anywhere else it would land in the main bundle
+  - `shared/` never imports `features/`, `pages/` or `app/`
+  - components, pages and the app shell never import an `api/`: they only present, and reach the
+    server through a hook or context
+  - hooks and context never import `components/`, `pages/` or `shared/ui/` — the logic layer
+    doesn't depend on presentation
+  - `api/` never imports `hooks/`, `context/`, `components/`, `pages/`, `shared/ui/` or another
+    feature — it only talks to the backend (`shared/api/client.ts` + `shared/types`), so it stays
+    usable from anywhere
+  - `model/` never imports `api/`, `hooks/`, `context/`, `components/`, `pages/`, `shared/ui/`
+    or `shared/hooks/` — pure helpers, no network, no framework state, no presentation
+  - shared types come from the `@/shared/types` index, never a single file inside it; only
+    `shared/types/api.ts` imports the generated `api.generated.ts`
+  - no bare `fetch` outside `shared/api/client.ts` and `features/auth/api/auth.ts`, so every call
+    goes through the client that adds the token and refreshes it (`no-restricted-globals`)
+  - tests may import a file inside a feature, to test a unit on its own
+  - hooks and context providers routinely call their feature's `api/` directly (e.g. `useChat`,
+    `useSettings`, `AuthProvider`) — that's the intended shape, not a gap: a hook/provider *is* the data-access
     layer, the same role a `useQuery` hook plays in TanStack Query. Only two contexts exist
     (`AuthProvider`, `ConversationsProvider`) because only session and the sidebar's conversation
     list are genuinely app-wide state; everything else is correctly local to the hook that owns
@@ -86,19 +94,19 @@ A build-time connection, not a runtime one:
 graph LR
     schema["rag/api/schema/"]
     genscript["openapi-typescript<br/>(generate:types)"]
-    generated[types/api.generated.ts]
-    idx["types/api.ts<br/>one named type per backend model"]
-    apiclient[api/chat.ts, api/conversations.ts, api/settings.ts, api/auth.ts]
+    generated[shared/types/api.generated.ts]
+    idx["shared/types/api.ts<br/>one named type per backend model"]
+    apiclient["features/*/api/*.ts"]
 
     schema --> genscript --> generated --> idx --> apiclient
 ```
 
 - The `frontend-api-types` pre-commit hook regenerates
-  `frontend/src/types/api.generated.ts` from the backend's OpenAPI schema whenever
+  `frontend/src/shared/types/api.generated.ts` from the backend's OpenAPI schema whenever
   `rag/api/schema/*.py` or `rag/api/routers/*.py` change (`scripts/generate_frontend_types.sh`) —
   auto-fixes locally like `uv-lock`, and re-runs in CI so a stale generated file fails the
   `pre-commit` job
-- `frontend/src/types/api.ts` is the one place backend shapes enter the frontend: one named
+- `frontend/src/shared/types/api.ts` is the one place backend shapes enter the frontend: one named
   type per model in `rag/api/schema/`, same name, grouped by module (`ConversationResponse`,
   `ToolEvent`, …); the generated `components` map isn't exported, so nothing else can reach
   around it. A backend model renamed or removed breaks its line there (`tsc`, via the

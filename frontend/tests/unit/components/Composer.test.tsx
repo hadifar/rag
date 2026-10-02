@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Composer } from '../../../src/components/chat/Composer';
+import { Composer } from '@/features/chat/components/Composer';
 
 function renderComposer() {
   const onSend = vi.fn();

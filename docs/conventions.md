@@ -77,13 +77,14 @@ class ChunkerPort(Protocol):
 - On failure, raise a `rag.domain.errors.AppError` subclass with a `status_code: ClassVar[int]`,
   never `fastapi.HTTPException` (ruff bans it). No change to `app.py`'s `register_error_handlers`
   is needed.
-- Its frontend calls go in the matching `frontend/src/api/x.ts` (one module per router), through
-  `authFetch` from `api/client.ts` — never a bare `fetch` or a token passed in by the caller
-  (only `auth.ts`'s login/logout, which run before or without a token, use plain `fetch`; oxlint
-  rejects `fetch` anywhere else). Components and pages never import `api/` (oxlint rejects that
-  too): they get data and actions from a hook or context.
-  Request/response types are the named types in `frontend/src/types/api.ts` (one per backend
-  model, same name) — add the new model's line there, never a hand-written interface.
+- Its frontend calls go in the `api/` folder of the feature that owns them
+  (`frontend/src/features/<feature>/api/x.ts`), through `authFetch`/`request`/`requestJson` from
+  `shared/api/client.ts` — never a bare `fetch` or a token passed in by the caller (only
+  `features/auth/api/auth.ts`'s login/logout, which run before or without a token, use plain
+  `fetch`; oxlint rejects `fetch` anywhere else). Components and pages never import an `api/`
+  (oxlint rejects that too): they get data and actions from a hook or context.
+  Request/response types are the named types in `frontend/src/shared/types/api.ts` (one per
+  backend model, same name) — add the new model's line there, never a hand-written interface.
 
 ## Adding a user-owned resource: check ownership in the service, answer 404
 
@@ -106,8 +107,8 @@ its `type`, and its shape is a Pydantic model, so it reaches the frontend throug
    messages — anything not in them can't be replayed);
 3. a Pydantic model with a `type: Literal[...]` in `rag/api/schema/agent.py`, added to
    the `StreamEventResponse` root model's union, and its case in `_payload`;
-4. its line in `frontend/src/types/api.ts` and its case in `createBubbleHandler`
-   (`frontend/src/utils/chatStream.ts`) — whose `satisfies never` default fails to compile until
+4. its line in `frontend/src/shared/types/api.ts` and its case in `createBubbleHandler`
+   (`frontend/src/features/chat/model/chatStream.ts`) — whose `satisfies never` default fails to compile until
    the new event is handled. History replays through the same handler, so it needs nothing more.
 
 The `frontend-api-types` pre-commit hook regenerates the types, and `frontend-typecheck` fails
@@ -120,14 +121,31 @@ if the frontend no longer matches them.
 - Keep request/response DTOs under `rag/api/`, never in `rag.domain` or a top-level
   `rag/schema/`.
 
-## Adding a frontend type: shared ones in `types/`, private ones where they're used
+## Adding a frontend feature: one folder, one public API
 
-- A type another file uses lives in `frontend/src/types/<feature>.ts` (`auth.ts`,
-  `conversations.ts`, …), re-exported from `types/index.ts`, and is imported from `'../types'` —
-  never from a hook or component file, nor from a single file inside `types/` (oxlint rejects
-  both). Backend shapes go only in `types/api.ts` (see above).
+- A feature is a folder in `frontend/src/features/<name>/`, with only the layer folders it needs:
+  `api/` (backend calls), `model/` (pure helpers), `hooks/` and `context/` (state + data access),
+  `components/` (presentation), plus `types.ts` and `index.ts`. Keep the layer folders flat (no
+  sub-folders): the lint's "don't climb out of a feature" rule relies on it.
+- `index.ts` is the feature's public API: export only what another feature, a page or the app
+  uses. Everything outside the feature imports `@/features/<name>`, never a file inside it
+  (oxlint rejects both a deep `@/features/<name>/…` import and a relative `../../…` one).
+- Inside the feature, import its own files by relative path; reach `shared/` through `@/shared/…`.
+- A page in `src/pages/` composes features and holds no logic; a new route goes in
+  `src/app/App.tsx`. A page that pulls in a heavy dependency is loaded with `lazy` (as `ChatPage`
+  is).
+- Something two features need that belongs to neither (a UI primitive, a generic hook) goes in
+  `shared/`, which never imports a feature.
+
+## Adding a frontend type: shared ones in `shared/types/`, feature ones in the feature
+
+- A type several features use lives in `frontend/src/shared/types/` (e.g. `LoadStatus`),
+  re-exported from its `index.ts` and imported from `'@/shared/types'` — never from a single file
+  inside it (oxlint rejects that). Backend shapes go only in `shared/types/api.ts` (see above).
+- A type used across one feature's files lives in that feature's `types.ts`; another feature gets
+  it through the feature's `index.ts` (`export type …`).
 - A type only one file uses (a component's props, a local helper signature) stays in that file.
-- Before adding one, check `types/` for an equal type to reuse (e.g. `LoadStatus`).
+- Before adding one, check `shared/types/` for an equal type to reuse.
 
 ## Adding a new closure-based dependency (a tool, a callback, any injected callable): close over it, don't reach for a global
 

@@ -4,9 +4,9 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { ConversationsProvider } from '../../src/context/ConversationsProvider';
-import { ChatPage } from '../../src/pages/ChatPage';
-import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '../../src/types';
+import { ConversationsProvider } from '@/features/conversations';
+import { ChatPage } from '@/pages/ChatPage';
+import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '@/shared/types';
 import { server, sse } from '../server';
 
 // The real page, hook and API client; only the backend is faked (see ../server.ts).

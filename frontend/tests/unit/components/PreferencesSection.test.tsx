@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { PreferencesSection } from '../../../src/components/settings/PreferencesSection';
-import type { PreferenceRequest, PreferenceResponse } from '../../../src/types';
+import { PreferencesSection } from '@/features/preferences';
+import type { PreferenceRequest, PreferenceResponse } from '@/shared/types';
 import { server } from '../../server';
 
 const URL = '/api/settings/preferences';

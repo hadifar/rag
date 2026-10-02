@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthContext } from '../../src/hooks/useAuth';
-import { SettingsPage } from '../../src/pages/SettingsPage';
-import type { IngestionRunResponse, SettingsResponse } from '../../src/types';
+import { AuthContext } from '@/features/auth/hooks/useAuth';
+import { SettingsPage } from '@/pages/SettingsPage';
+import type { IngestionRunResponse, SettingsResponse } from '@/shared/types';
 import { server } from '../server';
 
 const running: IngestionRunResponse = {
