@@ -76,5 +76,5 @@ export function useMessageList() {
     [withId]
   );
 
-  return { messages, append, update, showTyping, replace };
+  return { messages, append, update, remove, showTyping, replace };
 }

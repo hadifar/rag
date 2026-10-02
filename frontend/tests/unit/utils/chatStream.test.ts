@@ -6,7 +6,8 @@ function setup() {
   let nextId = 0;
   const append = vi.fn(() => `m${++nextId}`);
   const update = vi.fn();
-  return { append, update, handle: createBubbleHandler(append, update) };
+  const remove = vi.fn();
+  return { append, update, remove, handle: createBubbleHandler(append, update, remove) };
 }
 
 describe('createBubbleHandler', () => {
@@ -132,5 +133,27 @@ describe('createBubbleHandler', () => {
     handle({ type: 'text', text: 'Here is the answer.' });
 
     expect(append).toHaveBeenNthCalledWith(3, assistantText('Here is the answer.'));
+  });
+
+  it('removes a retracted answer, and starts its revision in a new bubble', () => {
+    const { append, update, remove, handle } = setup();
+
+    handle({ type: 'tool', name: 'search_kb', status: 'pending', query: 'pricing' });
+    handle({ type: 'text', text: 'wro' });
+    handle({ type: 'text', text: 'ng' });
+    handle({ type: 'retracted' });
+    handle({ type: 'text', text: 'revised' });
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith('m2');
+    expect(append).toHaveBeenLastCalledWith(assistantText('revised'));
+    expect(update).not.toHaveBeenCalledWith('m3', expect.anything());
+  });
+
+  it('ignores a retraction with no answer bubble to remove', () => {
+    const { remove, handle } = setup();
+
+    handle({ type: 'retracted' });
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });

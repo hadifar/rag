@@ -16,9 +16,11 @@ from rag.domain.models.agent.middleware import (
     TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
+    AnswerRetracted,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
+    TaggedStreamEvent,
     TextDelta,
     Todo,
     TodosUpdated,
@@ -30,6 +32,7 @@ from rag.domain.models.conversation import (
     Conversation,
     ConversationPage,
     HistoryMessage,
+    Turn,
     UserMessage,
 )
 from rag.domain.models.ingestion import (
@@ -50,6 +53,7 @@ __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
+    "AnswerRetracted",
     "AssistantMessage",
     "Capability",
     "Chunk",
@@ -69,6 +73,7 @@ __all__ = [
     "ReferencesReady",
     "RunContext",
     "StreamEvent",
+    "TaggedStreamEvent",
     "TextDelta",
     "Todo",
     "TodolistMiddleware",
@@ -78,6 +83,7 @@ __all__ = [
     "ToolCall",
     "ToolKind",
     "ToolResult",
+    "Turn",
     "User",
     "UserMessage",
 ]

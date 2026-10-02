@@ -22,7 +22,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
 from rag.domain.models import (
-    AssistantMessage,
+    AnswerRetracted,
     Chunk,
     OffTopicMiddleware,
     ReferencesReady,
@@ -33,12 +33,10 @@ from rag.domain.models import (
     ToolAgentSpec,
     ToolCall,
     ToolResult,
-    UserMessage,
 )
 from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import Agent, AgentService
-from rag.services.agent_service.turn import to_history
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
@@ -178,9 +176,8 @@ class _Chat:
         }
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [
-            event async for event in self.rag.stream_chat(text, _CONVERSATION, _USER)
-        ]
+        ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
+        return [event async for event in self.rag.stream(text, ctx)]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -275,6 +272,26 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
     assert _text(events).endswith("still wrong")
 
 
+async def test_a_rejected_answer_is_retracted_before_its_revision_streams() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
+        groundedness_verdicts=["UNGROUNDED"],
+    )
+
+    events = await _Chat(model).send("first")
+
+    texts = [e for e in events if isinstance(e, TextDelta | AnswerRetracted)]
+    assert texts == [TextDelta("wrong"), AnswerRetracted(), TextDelta("revised")]
+
+
+async def test_a_grounded_answer_is_never_retracted() -> None:
+    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("right")])
+
+    events = await _Chat(model).send("first")
+
+    assert not any(isinstance(e, AnswerRetracted) for e in events)
+
+
 async def test_revision_instruction_is_not_saved_to_the_thread() -> None:
     model = _ScriptedChatModel(
         answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
@@ -338,56 +355,6 @@ async def test_verifier_only_sees_the_current_turns_context(
     if second_turn_searches:
         assert "facts about security" in model.verifier_calls[1]
         assert "facts about pricing" not in model.verifier_calls[1]
-
-
-async def test_history_replays_each_turn_without_its_rejected_drafts() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _search("pricing"),
-            _answer("wrong"),
-            _answer("revised"),
-            _answer("You're welcome!"),
-            _search(_NO_RESULTS_QUERY),
-            _answer("I don't know."),
-        ],
-        groundedness_verdicts=["UNGROUNDED"],
-    )
-    chat = _Chat(model)
-    await chat.send("How much?")
-    await chat.send("thanks")
-    await chat.send("Who won the cup?")
-
-    history = to_history(await chat.saved_messages())
-
-    assert [m.role for m in history] == ["user", "assistant"] * 3
-    questions = [m.text for m in history if isinstance(m, UserMessage)]
-    answers = [m.events for m in history if isinstance(m, AssistantMessage)]
-    assert questions == ["How much?", "thanks", "Who won the cup?"]
-    # The rejected draft ("wrong") is dropped.
-    assert [_text(events) for events in answers] == [
-        "revised",
-        "You're welcome!",
-        "I don't know.",
-    ]
-    assert [
-        [(e.status, e.query) for e in events if isinstance(e, ToolCall)]
-        for events in answers
-    ] == [
-        [("pending", "pricing"), ("done", None)],
-        [],
-        [("pending", _NO_RESULTS_QUERY), ("done", None)],
-    ]
-    # None: didn't search; []: searched, found nothing.
-    assert [
-        next((e.references for e in events if isinstance(e, ReferencesReady)), None)
-        for events in answers
-    ] == [["pricing"], None, []]
-
-
-def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
-    # A thread the checkpointer doesn't have (e.g. a conversation whose messages were
-    # never saved) reads back as no messages; that used to crash with a zip() ValueError.
-    assert to_history([]) == []
 
 
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:

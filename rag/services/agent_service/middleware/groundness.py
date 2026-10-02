@@ -8,6 +8,7 @@ from langchain.agents.middleware import (
     ModelResponse,
     hook_config,
 )
+from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.runtime import Runtime
 
@@ -16,6 +17,7 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
+from rag.services.agent_service.streaming import ANSWER_RETRACTED
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
@@ -63,8 +65,8 @@ class GroundednessGuard(AgentMiddleware):
     supported, sends the model back to revise, up to `max_revisions` times per turn.
     The results of `unverified_tools` (ones about the user, not the product, e.g.
     saving a preference) aren't context to check against.
-    The revision instruction is added to that model call only, never saved to the
-    thread. Revisions are counted from this turn's messages, so no state carries over
+    A rejected answer is retracted from the stream (`AnswerRetracted`). The revision
+    instruction is added to that model call only, never saved to the thread. Revisions are counted from this turn's messages, so no state carries over
     between turns.
     """
 
@@ -94,6 +96,8 @@ class GroundednessGuard(AgentMiddleware):
         if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
             return None
 
+        # The answer was already streamed: the client drops it before its revision.
+        await adispatch_custom_event(ANSWER_RETRACTED, {})
         return {"jump_to": "model"}
 
     async def awrap_model_call(

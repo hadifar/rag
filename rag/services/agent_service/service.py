@@ -1,8 +1,9 @@
+import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
@@ -10,7 +11,6 @@ from pydantic import BaseModel
 
 from rag.domain.models import (
     AgentSpec,
-    HistoryMessage,
     ReferencesReady,
     RunContext,
     StreamEvent,
@@ -19,7 +19,7 @@ from rag.domain.models import (
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 from rag.services.agent_service.streaming import parse_event
-from rag.services.agent_service.turn import to_history, turn_references
+from rag.services.agent_service.turn import turn_references
 from rag.shared.resilience import or_default
 
 # TODO: error hanlding -> Something went wrong: Unexpected end of JSON input
@@ -31,16 +31,18 @@ RECURSION_LIMIT = 75
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its
-    tools cited. The graph saves the turn's messages through its checkpointer; the agent
-    service reads them back (`AgentService.get_history`).
+    tools cited. The graph keeps each conversation's messages, the model's memory of it,
+    through its checkpointer; what the user saw is the conversation service's to keep.
     """
 
     def __init__(
         self,
         graph: CompiledStateGraph,
+        checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None], RunnableConfig],
     ):
         self._graph = graph
+        self._checkpointer = checkpointer
         self._trace_config = trace_config
 
     def _config(self, thread_id: str) -> RunnableConfig:
@@ -67,10 +69,13 @@ class Agent:
         if references is not None:
             yield ReferencesReady(references=references)
 
+    async def forget(self, conversation_id: uuid.UUID) -> None:
+        await self._checkpointer.adelete_thread(str(conversation_id))
+
 
 class AgentService:
     """The only holder of the LLM, and the only place LangChain is used: single-shot
-    generation, the tools and agents built on the model, and the threads they save.
+    generation, and the agents built on the model.
     """
 
     def __init__(
@@ -115,20 +120,7 @@ class AgentService:
                     self._checkpointer,
                     self._retry_attempts,
                 )
-        return Agent(graph, self._trace_config)
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        """The thread's messages as the user saw them; empty for an unknown thread."""
-        checkpoint = await self._checkpointer.aget(
-            {"configurable": {"thread_id": thread_id}}
-        )
-        messages: list[BaseMessage] = (
-            checkpoint["channel_values"].get("messages", []) if checkpoint else []
-        )
-        return to_history(messages)
-
-    async def delete_history(self, thread_id: str) -> None:
-        await self._checkpointer.adelete_thread(thread_id)
+        return Agent(graph, self._checkpointer, self._trace_config)
 
     async def _classify(self, prompt: str) -> str:
         """The guards' LLM call: retried, and if it still fails, answers with the

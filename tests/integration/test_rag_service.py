@@ -1,7 +1,7 @@
 import uuid
 
 from rag.container import build_container
-from rag.domain.models import TextDelta, ToolCall
+from rag.domain.models import RunContext, TextDelta, ToolCall
 
 
 async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
@@ -9,9 +9,8 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         answer = ""
         tool_calls = []
 
-        async for event in container.rag_service.stream_chat(
-            message, conversation_id=uuid.uuid4(), user_id=uuid.uuid4()
-        ):
+        ctx = RunContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4())
+        async for event in container.rag_service.stream(message, ctx):
             if isinstance(event, TextDelta):
                 answer += event.text
             elif isinstance(event, ToolCall) and event.status == "pending":

@@ -39,9 +39,10 @@ from tests.unit.fakes import (
     FakeIngestionRunRepository,
     FakePasswordHasher,
     FakePreferenceRepository,
+    FakeTranscriptRepository,
     FakeUserRepository,
+    StubChatAgent,
     StubGeneration,
-    StubRag,
 )
 
 _TEST_EMAIL = "test@example.com"
@@ -94,8 +95,7 @@ def client() -> Generator[TestClient]:
 
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
-    rag = StubRag(
-        generation.threads,
+    chat_agent = StubChatAgent(
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
@@ -105,7 +105,7 @@ def client() -> Generator[TestClient]:
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
         preference_service=PreferenceService(FakePreferenceRepository()),
-        rag_service=cast(RagService, rag),
+        rag_service=cast(RagService, chat_agent),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -115,6 +115,8 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
+            transcript=FakeTranscriptRepository(),
+            chat_agent=chat_agent,
             agent_service=generation,
         ),
     )

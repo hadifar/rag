@@ -2,6 +2,7 @@ import type { ChatMessageInput, StreamEventResponse } from '../types';
 
 type AppendMessage = (msg: ChatMessageInput) => string;
 type UpdateMessage = (id: string, msg: ChatMessageInput) => void;
+type RemoveMessage = (id: string) => void;
 
 export function assistantText(text: string): ChatMessageInput {
   return { type: 'text', content: { text } };
@@ -15,10 +16,15 @@ function reasoning(text: string, streaming: boolean): ChatMessageInput {
  * Turns one answer's stream into bubbles: text deltas grow a single assistant bubble,
  * reasoning deltas a single reasoning bubble (until the model answers or calls a tool),
  * a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten in place
- * each time the agent updates it, and references get their own.
+ * each time the agent updates it, and references get their own. A retracted answer's
+ * bubble is removed; its revision starts a new one.
  * Create one per answer.
  */
-export function createBubbleHandler(append: AppendMessage, update: UpdateMessage) {
+export function createBubbleHandler(
+  append: AppendMessage,
+  update: UpdateMessage,
+  remove: RemoveMessage
+) {
   let assistantMsgId: string | null = null;
   let assistantMsgText = '';
   let reasoningMsgId: string | null = null;
@@ -84,6 +90,15 @@ export function createBubbleHandler(append: AppendMessage, update: UpdateMessage
         }
         break;
       }
+      case 'retracted':
+        // The answer streamed since the last tool call or plan was rejected (not supported
+        // by the searches): drop it before its revision streams.
+        if (assistantMsgId !== null) {
+          remove(assistantMsgId);
+        }
+        assistantMsgId = null;
+        assistantMsgText = '';
+        break;
       case 'references':
         // Sent only when the answer searched; an empty list still gets its bubble.
         append({ type: 'references', content: { references: event.references } });

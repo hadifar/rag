@@ -26,7 +26,7 @@ function historyErrorText(err: unknown): string {
 export function useChat(conversationId: string | undefined) {
   const { upsert, bump, rename } = useConversations();
   const navigate = useNavigate();
-  const { messages, append, update, showTyping, replace } = useMessageList();
+  const { messages, append, update, remove, showTyping, replace } = useMessageList();
 
   const abortRef = useRef<AbortController | null>(null);
   // The conversation on screen, which new messages go to. Ahead of the URL for a
@@ -100,7 +100,7 @@ export function useChat(conversationId: string | undefined) {
 
       append({ type: 'text', content: { text }, position: 'right' });
       const hideTyping = showTyping();
-      const showBubble = createBubbleHandler(append, update);
+      const showBubble = createBubbleHandler(append, update, remove);
 
       try {
         const { id, isNew } = await openConversation(controller.signal);
@@ -124,7 +124,7 @@ export function useChat(conversationId: string | undefined) {
         if (abortRef.current === controller) abortRef.current = null;
       }
     },
-    [append, update, showTyping, openConversation, nameConversation]
+    [append, update, remove, showTyping, openConversation, nameConversation]
   );
 
   /** Opens a cited knowledge-base document in a new tab. */

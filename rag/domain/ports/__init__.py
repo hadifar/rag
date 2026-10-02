@@ -2,7 +2,10 @@
 
 from rag.domain.ports.agent import AgentServicePort, ChatAgentPort
 from rag.domain.ports.auth import PasswordHasherPort, TokenCodecPort, UserRepositoryPort
-from rag.domain.ports.conversation import ConversationRepositoryPort
+from rag.domain.ports.conversation import (
+    ConversationRepositoryPort,
+    TranscriptRepositoryPort,
+)
 from rag.domain.ports.ingestion import (
     ArchiveStorePort,
     ChunkerPort,
@@ -25,6 +28,7 @@ __all__ = [
     "PreferenceRepositoryPort",
     "SearchPort",
     "TokenCodecPort",
+    "TranscriptRepositoryPort",
     "UserRepositoryPort",
     "VectorStorePort",
 ]

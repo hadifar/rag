@@ -9,18 +9,17 @@ from pydantic import BaseModel
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
     AgentSpec,
-    AssistantMessage,
     Conversation,
-    HistoryMessage,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
     Preference,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     TextDelta,
+    Turn,
     User,
-    UserMessage,
 )
 from rag.domain.ports import ChatAgentPort
 
@@ -243,16 +242,13 @@ class FakeConversationRepository:
 
 class StubGeneration:
     """AgentServicePort without agents: answers every prompt with `reply`, or raises
-    `error`, and records the prompts. Its saved threads are `threads`, which a test
-    (or `StubRag`) fills in as an agent would.
+    `error`, and records the prompts.
     """
 
     def __init__(self, reply: str = "Generated title", error: Exception | None = None):
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
-        self.threads: dict[str, list[HistoryMessage]] = {}
-        self.deleted_threads: list[str] = []
 
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         self.prompts.append(prompt)
@@ -268,13 +264,6 @@ class StubGeneration:
 
     def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
-
-    async def get_history(self, thread_id: str) -> list[HistoryMessage]:
-        return self.threads.get(thread_id, [])
-
-    async def delete_history(self, thread_id: str) -> None:
-        self.deleted_threads.append(thread_id)
-        self.threads.pop(thread_id, None)
 
 
 class FakePreferenceRepository:
@@ -298,33 +287,41 @@ class FakePreferenceRepository:
         return True
 
 
-class StubRag:
-    """Stands in for RagService: echoes the message, and saves the turn to `threads` (pass
-    the `StubGeneration`'s, so it shows up in its history) with `references` on the answer.
+class FakeTranscriptRepository:
+    """TranscriptRepositoryPort in memory: each conversation's turns, in order."""
+
+    def __init__(self):
+        self.turns: dict[uuid.UUID, list[Turn]] = {}
+
+    async def append_turn(
+        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+    ) -> None:
+        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
+
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))
+
+
+class StubChatAgent:
+    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
+    `references` if given; records the conversations it was told to forget.
     """
 
     def __init__(
         self,
-        threads: dict[str, list[HistoryMessage]],
         extra_events: list[StreamEvent] | None = None,
         references: list[str] | None = None,
     ):
-        self.threads = threads
         self.extra_events = extra_events or []
         self.references = references
+        self.forgotten: list[uuid.UUID] = []
 
-    async def stream_chat(
-        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        thread_id = str(conversation_id)
-        events: list[StreamEvent] = [
-            TextDelta(text=f"echo: {message}"),
-            *self.extra_events,
-        ]
-        if self.references is not None:
-            events.append(ReferencesReady(references=self.references))
-        self.threads.setdefault(thread_id, []).extend(
-            [UserMessage(text=message), AssistantMessage(events=events)]
-        )
-        for event in events:
+    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+        yield TextDelta(text=f"echo: {message}")
+        for event in self.extra_events:
             yield event
+        if self.references is not None:
+            yield ReferencesReady(references=self.references)
+
+    async def forget(self, conversation_id: uuid.UUID) -> None:
+        self.forgotten.append(conversation_id)

@@ -16,7 +16,7 @@ from rag.services.rag_service.tools import search_tool
 
 
 class RagService:
-    """A chat turn grounded in the knowledge base: a tool-calling agent that searches
+    """The chat agent (a ChatAgentPort), grounded in the knowledge base: it searches
     `retrieval_service`, declines off-topic questions, and revises answers its searches
     don't support, up to `max_revisions` times per turn. `capabilities` are what other
     features give it (e.g. the user's preferences).
@@ -43,9 +43,9 @@ class RagService:
         # create agent
         self._agent = agent_service.create_agent(agent_spec)
 
-    async def stream_chat(
-        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
+    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         async for event in self._agent.stream(message, ctx):
             yield event
+
+    async def forget(self, conversation_id: uuid.UUID) -> None:
+        await self._agent.forget(conversation_id)

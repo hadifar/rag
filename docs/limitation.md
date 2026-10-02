@@ -52,8 +52,10 @@
 - The whole thread is sent to the LLM every turn — no trimming or summarization — so long
   conversations get slower and costlier per turn and can eventually exceed the context window.
 - The groundedness check runs after the answer has already streamed. When it asks for a
-  revision, the user sees the rejected draft and the revision in the same bubble; reopening the
-  conversation later shows only the revision.
+  revision, the user sees the rejected draft until it's retracted (`AnswerRetracted`) and the
+  revision streams in its place; the reasoning that led to the draft stays.
+- Migration 0010 deleted every conversation from before the transcript existed, with its
+  checkpointed messages: their history was never recorded in a form that could be carried over.
 
 ## Frontend
 - The Settings page's Save button only shows "Saved" — nothing is persisted (there's no write

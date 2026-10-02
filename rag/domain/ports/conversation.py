@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import Conversation
+from rag.domain.models import Conversation, StreamEvent, Turn
 
 
 class ConversationRepositoryPort(Protocol):
@@ -25,3 +25,16 @@ class ConversationRepositoryPort(Protocol):
     async def touch(self, conversation_id: uuid.UUID) -> Conversation | None: ...
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...
     async def delete(self, conversation_id: uuid.UUID) -> None: ...
+
+
+class TranscriptRepositoryPort(Protocol):
+    """What the user saw of each conversation, turn by turn. Separate from what the
+    chat agent remembers of it (its own messages, kept by the agent).
+    """
+
+    async def append_turn(
+        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+    ) -> None: ...
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        """Oldest first; empty for a conversation without any."""
+        ...

@@ -148,10 +148,13 @@ the LangGraph checkpointer, whose thread id is the conversation's id:
   trimmed message). As it sends that message, the client also calls
   `POST /api/conversations/{id}/title` (not waiting for the answer), and an LLM call renames it
   from that message.
-- The server never reconstructs history from a request payload — the checkpointer loads/saves
-  it, and `GET /api/conversations/{id}/messages` reads it back: each question, then its answer
-  as the events its stream sent (see [Streaming](#streaming)). Nothing extra is saved for this:
-  the reasoning summary, the plan and the searches are all in the checkpointed messages.
+- A conversation is kept twice, for two readers. The chat agent's checkpointer keeps its
+  messages, the model's memory of it (rejected drafts and all), which the agent loads each turn.
+  `ConversationService.send_message` keeps what the user saw: each turn's question and the
+  events its answer streamed, in `conversation_turns` (see [Streaming](#streaming)), saved
+  however the stream ends. `GET /api/conversations/{id}/messages` reads that transcript back;
+  deleting a conversation has the agent forget its messages, and the transcript goes with the
+  row.
 
 The checkpointer is built by `adapters/lang_memory.py`'s `open_checkpointer()` (an async
 context manager, mirroring `adapters/postgres_db.py`'s `open_db_pool()`): an `AsyncPostgresSaver`
@@ -203,8 +206,9 @@ its own Postgres).
 `agent_service/streaming.py` normalizes LangGraph's `astream_events` into one small event
 vocabulary (`TextDelta`, `ReasoningDelta` — the model's reasoning summary, only with
 `LLM__REASONING_EFFORT` set — `ToolCall` — `status` `pending` with its `query`, then `done` with
-its `output` — `TodosUpdated` — the whole plan, each time `write_todos` rewrites it — and
-`ReferencesReady`), filtered to the `model` node's chat
+its `output` — `TodosUpdated` — the whole plan, each time `write_todos` rewrites it —
+`AnswerRetracted` — the groundedness guard rejected the answer just streamed, so the client drops
+it before the revision — and `ReferencesReady`), filtered to the `model` node's chat
 model calls only — the guard middleware runs its own LLM calls (classification, not an
 answer) through the same graph, and `astream_events` would otherwise leak those tokens into the
 text stream too. Two consumers read the normalized stream:
@@ -219,12 +223,11 @@ text stream too. Two consumers read the normalized stream:
   reasoning via `ReasoningBubble`, tool calls via `ToolBubble`, the plan via `TodosBubble` and
   citations via `ReferencesBubble` (which links to `/api/retrieval/{filename}`).
 
-A saved conversation is shown the same way. `streaming.py`'s `replay()` rebuilds a past turn's
-events from its checkpointed messages (each reply's reasoning and text from its content blocks,
-each search `pending` then `done`, each `write_todos` call as its plan); `turn.py`'s
-`to_history()` drops the drafts the groundedness guard rejected and adds the references. The
+A saved conversation is shown the same way: its transcript is the events the live stream sent,
+as `TranscriptBuilder` (`conversation_service/transcript.py`) collected them — consecutive text
+or reasoning deltas merged, and a retracted draft's text dropped, as the client drops it. The
 frontend's `historyToMessages` (`utils/history.ts`) feeds those events through
-`createBubbleHandler`, so a reloaded chat renders exactly as it did live.
+`createBubbleHandler`, so a reloaded chat renders as it did live.
 
 ## Observability
 
