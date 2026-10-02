@@ -35,7 +35,7 @@ async def _chat(
     involved in a turn, only in reading what it saved.
     """
     rag = StubRag(generation.threads)
-    _ = [e async for e in rag.stream_chat(message, str(conversation_id), ALICE)]
+    _ = [e async for e in rag.stream_chat(message, conversation_id, ALICE)]
 
 
 async def test_create_returns_the_users_one_empty_conversation() -> None:

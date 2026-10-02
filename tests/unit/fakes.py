@@ -307,8 +307,9 @@ class StubRag:
         self.references = references
 
     async def stream_chat(
-        self, message: str, thread_id: str, user_id: uuid.UUID
+        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID
     ) -> AsyncIterator[StreamEvent]:
+        thread_id = str(conversation_id)
         events: list[StreamEvent] = [
             TextDelta(text=f"echo: {message}"),
             *self.extra_events,

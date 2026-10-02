@@ -4,16 +4,20 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, HistoryMessage, Preference, StreamEvent
+from rag.domain.models import (
+    AgentSpec,
+    HistoryMessage,
+    Preference,
+    RunContext,
+    StreamEvent,
+)
 
 
 class ChatAgentPort(Protocol):
-    def stream(
-        self, message: str, thread_id: str, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        """Answers `message` in the thread for `user_id` (whose preferences apply),
-        saving the turn to it: the answer's events as they happen, then the turn's
-        references if it searched.
+    def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+        """Answers `message` in `ctx`'s conversation for its user (whose preferences
+        apply), saving the turn to it: the answer's events as they happen, then the
+        turn's references if it searched.
         """
         ...
 

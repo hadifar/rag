@@ -7,6 +7,7 @@ from langchain.agents.middleware import (
     TodoListMiddleware,
 )
 from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
+from langchain.tools import ToolRuntime
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -18,6 +19,7 @@ from rag.domain.models import (
     Middleware,
     OffTopicMiddleware,
     PreferenceMiddleware,
+    RunContext,
     TodolistMiddleware,
     Tool,
     ToolAgentSpec,
@@ -25,7 +27,6 @@ from rag.domain.models import (
 from rag.services.agent_service.middleware.groundness import GroundednessGuard
 from rag.services.agent_service.middleware.preferences import (
     PREFERENCE_TOOL_NAMES,
-    ChatContext,
     PreferencesMiddleware,
 )
 from rag.services.agent_service.middleware.topical import Classify, TopicalGuard
@@ -38,11 +39,14 @@ def _fallback_message(_exc: Exception) -> str:
 
 def _to_langchain_tool(tool: Tool) -> BaseTool:
     """The model reads the result's content; its references ride along as the
-    ToolMessage's artifact, where the turn's references are collected from.
+    ToolMessage's artifact, where the turn's references are collected from. The turn's
+    RunContext is injected by LangChain, so the model never sees it as an argument.
     """
 
-    async def run(query: str) -> tuple[str, list[str] | None]:
-        result = await tool.run(query)
+    async def run(
+        query: str, runtime: ToolRuntime[RunContext]
+    ) -> tuple[str, list[str] | None]:
+        result = await tool.run(query, runtime.context)
         return result.content, result.references
 
     return StructuredTool.from_function(
@@ -103,8 +107,9 @@ def build_tool_agent(
         isinstance(m, PreferenceMiddleware) for m in spec.middleware
     )
 
-    user_tools = PREFERENCE_TOOL_NAMES if remember_preferences else frozenset()
-    tools = _to_langchain_tools(spec.tools, reserved=user_tools)
+    middleware_tools = PREFERENCE_TOOL_NAMES if remember_preferences else frozenset()
+    tools = _to_langchain_tools(spec.tools, reserved=middleware_tools)
+    user_tools = middleware_tools | {t.name for t in spec.tools if t.kind == "user"}
 
     middleware = [
         _to_langchain_middleware(m, classify, user_tools) for m in spec.middleware
@@ -114,7 +119,8 @@ def build_tool_agent(
             max_retries=retry_attempts - 1, on_failure=_fallback_message
         )
     )
-    # TODO: why we have context_schema!?
+    # context_schema: each turn is run with its RunContext, which tools and middleware
+    # read from their runtime (e.g. whose preferences to apply).
     return create_agent(
         llm,
         tools,
@@ -122,5 +128,5 @@ def build_tool_agent(
         middleware=middleware,
         checkpointer=checkpointer,
         store=store,
-        context_schema=ChatContext,
+        context_schema=RunContext,
     )

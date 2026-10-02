@@ -25,13 +25,16 @@ from pydantic import Field
 from rag.domain.models import (
     AssistantMessage,
     Chunk,
+    OffTopicMiddleware,
     PreferenceMiddleware,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     TextDelta,
     Tool,
     ToolAgentSpec,
     ToolCall,
+    ToolResult,
     UserMessage,
 )
 from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
@@ -158,6 +161,7 @@ def _no_tracing(name: str | None) -> RunnableConfig:
 
 
 _USER = uuid.uuid4()
+_CONVERSATION = uuid.uuid4()
 
 
 class _Chat:
@@ -170,10 +174,14 @@ class _Chat:
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
-        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
+        self.config: RunnableConfig = {
+            "configurable": {"thread_id": str(_CONVERSATION)}
+        }
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.rag.stream_chat(text, "t1", _USER)]
+        return [
+            event async for event in self.rag.stream_chat(text, _CONVERSATION, _USER)
+        ]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -500,3 +508,36 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
                 system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
             )
         )
+
+
+async def test_a_user_tool_gets_the_turns_context_and_is_kept_off_topic() -> None:
+    model = _ScriptedChatModel(
+        answers=[_call("whoami", query="me"), _answer("You're you.")],
+        off_topic_messages={"who am I?"},
+    )
+    agents = AgentService(
+        model, InMemorySaver(), InMemoryStore(), _no_tracing, retry_attempts=3
+    )
+    seen: list[RunContext] = []
+
+    async def whoami(query: str, ctx: RunContext) -> ToolResult:
+        seen.append(ctx)
+        return ToolResult(str(ctx.user_id))
+
+    agent = agents.create_agent(
+        ToolAgentSpec(
+            system_prompt="",
+            tools=[
+                search_tool(_StubRetrievalService()),
+                Tool("whoami", "Who the user is.", whoami, kind="user"),
+            ],
+            middleware=[OffTopicMiddleware()],
+        )
+    )
+    ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
+
+    _ = [event async for event in agent.stream("who am I?", ctx)]
+
+    assert seen == [ctx]
+    # Off-topic, the product's search is withheld but the user tool stays.
+    assert model.agent_calls[0]["tools"] == ["whoami"]

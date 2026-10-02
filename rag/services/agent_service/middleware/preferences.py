@@ -1,6 +1,5 @@
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Any
 
 from langchain.agents.middleware import (
@@ -14,14 +13,13 @@ from langchain_core.messages import SystemMessage
 from langgraph.store.base import BaseStore
 
 from rag.domain.errors import InvalidPreferenceError, TooManyPreferencesError
-from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Preference
+from rag.domain.models import (
+    MAX_PREFERENCE_LENGTH,
+    MAX_PREFERENCES,
+    Preference,
+    RunContext,
+)
 from rag.services.agent_service.prompts import PREFERENCES_INSTRUCTION
-
-
-# TODO: must move to somewhere else
-@dataclass(frozen=True)
-class ChatContext:
-    user_id: uuid.UUID
 
 
 def _namespace(user_id: uuid.UUID) -> tuple[str, ...]:
@@ -84,14 +82,14 @@ async def delete_preference(
     return True
 
 
-def _store(runtime: ToolRuntime[ChatContext]) -> BaseStore:
+def _store(runtime: ToolRuntime[RunContext]) -> BaseStore:
     if runtime.store is None:
         raise RuntimeError("the agent was built without a store")
     return runtime.store
 
 
 @tool
-async def save_user_preference(text: str, runtime: ToolRuntime[ChatContext]) -> str:
+async def save_user_preference(text: str, runtime: ToolRuntime[RunContext]) -> str:
     """Remember a lasting preference the user stated outright about how you answer
     (e.g. language, tone, length, format), in a short sentence. Never save one you only
     inferred.
@@ -107,7 +105,7 @@ async def save_user_preference(text: str, runtime: ToolRuntime[ChatContext]) -> 
 
 @tool
 async def forget_user_preference(
-    preference_id: str, runtime: ToolRuntime[ChatContext]
+    preference_id: str, runtime: ToolRuntime[RunContext]
 ) -> str:
     """Forget one of the user's saved preferences, by its id, when they ask you to."""
     if await delete_preference(_store(runtime), runtime.context.user_id, preference_id):
@@ -119,7 +117,7 @@ PREFERENCE_TOOLS = (save_user_preference, forget_user_preference)
 PREFERENCE_TOOL_NAMES = frozenset(t.name for t in PREFERENCE_TOOLS)
 
 
-class PreferencesMiddleware(AgentMiddleware[AgentState, ChatContext]):
+class PreferencesMiddleware(AgentMiddleware[AgentState, RunContext]):
     """Gives the model the user's saved preferences on every call, read fresh from the
     store, so one saved mid-turn applies from the next call on, plus the tools to save
     and forget them. Added to the call only, never saved to the thread.
@@ -131,8 +129,8 @@ class PreferencesMiddleware(AgentMiddleware[AgentState, ChatContext]):
 
     async def awrap_model_call(
         self,
-        request: ModelRequest[ChatContext],
-        handler: Callable[[ModelRequest[ChatContext]], Awaitable[ModelResponse[Any]]],
+        request: ModelRequest[RunContext],
+        handler: Callable[[ModelRequest[RunContext]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
 
         store = request.runtime.store

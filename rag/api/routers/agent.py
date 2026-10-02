@@ -44,6 +44,6 @@ async def send_message(
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
     async for event in rag_service.stream_chat(
-        message_request.message, str(conversation_id), current_user.id
+        message_request.message, conversation_id, current_user.id
     ):
         yield to_stream_event(event)

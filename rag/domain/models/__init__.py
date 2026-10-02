@@ -6,8 +6,10 @@ from rag.domain.models.agent.agent import (
     AgentSpec,
     Middleware,
     Preference,
+    RunContext,
     Tool,
     ToolAgentSpec,
+    ToolKind,
     ToolResult,
 )
 from rag.domain.models.agent.middleware import (
@@ -63,6 +65,7 @@ __all__ = [
     "RawDocument",
     "ReasoningDelta",
     "ReferencesReady",
+    "RunContext",
     "StreamEvent",
     "TextDelta",
     "Todo",
@@ -71,6 +74,7 @@ __all__ = [
     "Tool",
     "ToolAgentSpec",
     "ToolCall",
+    "ToolKind",
     "ToolResult",
     "User",
     "UserMessage",

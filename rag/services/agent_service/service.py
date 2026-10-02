@@ -16,12 +16,12 @@ from rag.domain.models import (
     HistoryMessage,
     Preference,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     ToolAgentSpec,
 )
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
 from rag.services.agent_service.middleware import preferences
-from rag.services.agent_service.middleware.preferences import ChatContext
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
 from rag.services.agent_service.streaming import parse_event
 from rag.services.agent_service.turn import to_history, turn_references
@@ -55,15 +55,13 @@ class Agent:
             **self._trace_config("chat"),
         }
 
-    async def stream(
-        self, message: str, thread_id: str, user_id: uuid.UUID
-    ) -> AsyncIterator[StreamEvent]:
-        config = self._config(thread_id)
+    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+        config = self._config(str(ctx.conversation_id))
 
         async for raw_event in self._graph.astream_events(
             {"messages": [HumanMessage(content=message)]},
             config=config,
-            context=ChatContext(user_id=user_id),
+            context=ctx,
             version="v2",
         ):
             for event in parse_event(raw_event):
