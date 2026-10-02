@@ -1,31 +1,30 @@
 # Contributing
 
-## Setup
+## Before you start
 
-See [docs/setup.md](docs/setup.md) for setup and running the app (uv, docker compose or azure).
+Read:
 
-## Conventions & architecture
+* [Project documentation](docs/README.md)
+* [Git workflow](docs/how-to/git/)
+* [Development setup](docs/tutorials/local-development.md)
 
-See [docs/conventions.md](docs/conventions.md) for coding style and the patterns to follow when
-extending `rag/`.
+## Development
 
-## What's enforced automatically
+Follow the documented workflows:
 
-Hooks run on every commit/push; See [docs/enforcement.md](docs/enforcement.md) for
-the full list — linting, type checking, `import-linter` layering, Conventional Commits, gitflow
-branch rules, and which test suite runs where.
+* [Backend](docs/how-to/backend/)
+* [Frontend](docs/how-to/frontend/)
+* [Infrastructure](docs/how-to/infra/)
 
-## Test
+## Pull requests
 
-```
-uv run pytest                    # both suites
-uv run pytest tests/unit         # fast, no external dependencies
-uv run pytest tests/integration  # real OpenAI + Postgres (pgvector) — needs a filled .env and `alembic upgrade head`
-```
+Before you open a pull request:
 
-See [docs/enforcement.md#tests](docs/enforcement.md#tests) for what runs automatically vs. only
-on manual dispatch.
+1. Follow [Run validation](docs/how-to/run-validation.md).
+2. Follow the [branch](docs/how-to/git/create-branch.md) and [commit](docs/how-to/git/write-commits.md) conventions.
 
-## Frontend
+See [Open a pull request](docs/how-to/git/open-pull-request.md) and the [CI/CD guides](docs/how-to/ci-cd/).
 
-See [frontend/README.md](frontend/README.md) for setup, dev server, lint and test commands (Vitest unit/integration, Playwright e2e).
+## Questions
+
+Read the [documentation](docs/README.md) before you open an issue or ask for help.
