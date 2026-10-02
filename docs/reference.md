@@ -71,7 +71,7 @@ frontend/                              # repo root — separate Vite/React app
 │   │   ├── preferences/              # answer preferences
 │   │   ├── settings/                 # model settings form
 │   │   └── knowledge-base/           # upload + run polling (admin), opening cited documents
-│   └── shared/                       # api/client.ts (token + refresh), api/queryClient.ts (cache + retry policy), types/ (backend shapes, LoadStatus), ui/ (Modal)
+│   └── shared/                       # api/client.ts (token + refresh), api/queryClient.ts (cache + retry policy), types/ (backend shapes, LoadStatus), ui/ (Button, IconButton, Input/TextField, StatusLine, Modal, ConfirmDeleteModal, Brand)
 └── (Vite build served by nginx in Docker)
 
 infra/                                 # Docker + Azure, no Python

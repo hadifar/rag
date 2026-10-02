@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { Button } from '@/shared/ui/Button';
+import { StatusLine } from '@/shared/ui/StatusLine';
 import { useKbUpload } from '../hooks/useKbUpload';
 import { KbUploadModal } from './KbUploadModal';
 
@@ -21,21 +23,17 @@ export function KnowledgeBaseSection() {
       {summary && lastRunAt ? (
         <p className="m-0 text-sm text-slate-600">
           Last upload ({lastRunAt}):{' '}
-          <span className={lastRunStatus === 'failed' ? 'text-red-600' : undefined}>
+          <span className={lastRunStatus === 'failed' ? 'text-danger-600' : undefined}>
             {summary}
           </span>
         </p>
       ) : (
-        <p className="m-0 text-sm text-slate-500">Nothing uploaded from here yet.</p>
+        <StatusLine>Nothing uploaded from here yet.</StatusLine>
       )}
 
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="self-start rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-      >
+      <Button variant="secondary" onClick={() => setOpen(true)} className="self-start">
         {busy ? 'Show upload progress' : 'Upload knowledge base'}
-      </button>
+      </Button>
 
       {open && (
         <KbUploadModal

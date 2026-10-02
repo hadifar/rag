@@ -142,6 +142,22 @@ if the frontend no longer matches them.
 - Something two features need that belongs to neither (a UI primitive, a generic hook) goes in
   `shared/`, which never imports a feature.
 
+## Building frontend UI: shared primitives, colours by role
+
+- Reach for `shared/ui` first: `Button` (`primary`/`secondary`/`danger`/`ghost`, or
+  `size="icon"`), `IconButton` (a quiet icon-only action; its `label` is its accessible name),
+  `Input`/`TextField`, `StatusLine` (loading, empty, saved, error — by `tone`), `Modal` /
+  `ConfirmDeleteModal` for dialogs, and `BrandMark`/`APP_NAME`. Chat bubbles sit in the chat
+  feature's `BubbleFrame`.
+- A primitive's `className` is for layout only (margin, alignment, width, `flex-1`): its look
+  comes from its props, so every button and field stays alike. A new look is a new variant in
+  the primitive, not a class at the call site.
+- Colours go by role — `primary-*`, `danger-*`, `success-*`, `warning-*`, defined once in
+  `src/index.css`'s `@theme` — with Tailwind's `slate` for neutrals. Any other palette
+  (`indigo-600`, `red-500`, …) fails `tests/unit/architecture/colors.test.ts`.
+- Tailwind's preflight isn't loaded, so boxes are `content-box`: a full-width element with
+  padding needs `box-border` (as `Input` has) to fit its container.
+
 ## Loading server data in the frontend: a query hook, never a fetch in an effect
 
 - Read server data with `useQuery` (`useInfiniteQuery` for a paged list), change it with

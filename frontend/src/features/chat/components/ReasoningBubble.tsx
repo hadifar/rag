@@ -2,13 +2,14 @@ import { useState } from 'react';
 import Markdown from 'react-markdown';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { ReasoningContent } from '../types';
+import { BubbleFrame } from './BubbleFrame';
 
 // Shown in full, lighter than the answer so it reads as an aside; the user can fold it.
 export function ReasoningBubble({ text, streaming }: ReasoningContent) {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="max-w-[480px] px-3 text-sm">
+    <BubbleFrame>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -25,6 +26,6 @@ export function ReasoningBubble({ text, streaming }: ReasoningContent) {
           <Markdown>{text}</Markdown>
         </div>
       )}
-    </div>
+    </BubbleFrame>
   );
 }

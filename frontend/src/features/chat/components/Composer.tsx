@@ -1,6 +1,8 @@
 import { useState, type SubmitEvent, type KeyboardEvent } from 'react';
 import { PaperAirplaneIcon } from '@heroicons/react/24/outline';
 
+import { Button } from '@/shared/ui/Button';
+
 export function Composer({ onSend }: { onSend: (text: string) => void }) {
   const [value, setValue] = useState('');
 
@@ -36,13 +38,9 @@ export function Composer({ onSend }: { onSend: (text: string) => void }) {
           placeholder="Type a message..."
           className="h-11 max-h-40 flex-1 resize-none border-none bg-transparent p-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
         />
-        <button
-          type="submit"
-          disabled={!value.trim()}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:opacity-40"
-        >
+        <Button type="submit" size="icon" aria-label="Send" disabled={!value.trim()}>
           <PaperAirplaneIcon className="size-4" />
-        </button>
+        </Button>
       </div>
     </form>
   );

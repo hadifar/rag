@@ -11,7 +11,7 @@ function renderComposer() {
     onSend,
     user: userEvent.setup(),
     box: screen.getByPlaceholderText('Type a message...'),
-    send: screen.getByRole('button'),
+    send: screen.getByRole('button', { name: 'Send' }),
   };
 }
 

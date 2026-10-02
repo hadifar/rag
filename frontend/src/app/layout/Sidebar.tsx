@@ -6,18 +6,35 @@ import {
   Cog6ToothIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  SparklesIcon,
   ArrowRightStartOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
 import { useAuth } from '@/features/auth';
 import { ConversationList } from '@/features/conversations';
+import { APP_NAME, BrandMark } from '@/shared/ui/Brand';
+import { IconButton } from '@/shared/ui/IconButton';
 
-type NavItem = { to: string; label: string; Icon: typeof SparklesIcon };
+type Icon = typeof HomeIcon;
+type NavItem = { to: string; label: string; Icon: Icon };
 
 const topLinks: NavItem[] = [{ to: '/', label: 'Home', Icon: HomeIcon }];
 
 const footerLinks: NavItem[] = [{ to: '/settings', label: 'Settings', Icon: Cog6ToothIcon }];
+
+// One look for every sidebar row, link or button; collapsed, only its icon shows.
+function itemCls(isCollapsed: boolean, isActive = false) {
+  return `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+    isCollapsed ? 'justify-center' : ''
+  } ${
+    isActive
+      ? 'bg-primary-50 text-primary-700'
+      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+  }`;
+}
+
+function itemIconCls(isActive = false) {
+  return `size-4.5 shrink-0 ${isActive ? 'text-primary-600' : 'text-slate-400'}`;
+}
 
 function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: boolean }) {
   return (
@@ -25,25 +42,34 @@ function SidebarLink({ to, label, Icon, isCollapsed }: NavItem & { isCollapsed: 
       to={to}
       end={to === '/'}
       title={isCollapsed ? label : undefined}
-      className={({ isActive }) =>
-        `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          isCollapsed ? 'justify-center' : ''
-        } ${
-          isActive
-            ? 'bg-indigo-50 text-indigo-700'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-        }`
-      }
+      className={({ isActive }) => itemCls(isCollapsed, isActive)}
     >
       {({ isActive }) => (
         <>
-          <Icon
-            className={`size-4.5 shrink-0 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}
-          />
+          <Icon className={itemIconCls(isActive)} />
           {!isCollapsed && label}
         </>
       )}
     </NavLink>
+  );
+}
+
+function SidebarButton({
+  label,
+  Icon,
+  isCollapsed,
+  onClick,
+}: { label: string; Icon: Icon; isCollapsed: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={isCollapsed ? label : undefined}
+      className={`w-full ${itemCls(isCollapsed)}`}
+    >
+      <Icon className={itemIconCls()} />
+      {!isCollapsed && label}
+    </button>
   );
 }
 
@@ -55,17 +81,12 @@ export function Sidebar() {
   const startNewChat = () => navigate('/chat');
 
   const collapseToggle = (
-    <button
+    <IconButton
+      label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       onClick={() => setIsCollapsed((collapsed) => !collapsed)}
-      className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-      title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     >
-      {isCollapsed ? (
-        <ChevronRightIcon className="h-4 w-4" />
-      ) : (
-        <ChevronLeftIcon className="h-4 w-4" />
-      )}
-    </button>
+      {isCollapsed ? <ChevronRightIcon className="size-4" /> : <ChevronLeftIcon className="size-4" />}
+    </IconButton>
   );
 
   const handleLogout = async () => {
@@ -84,12 +105,10 @@ export function Sidebar() {
         <div
           className={`flex items-center gap-2.5 flex-1 min-w-0 ${isCollapsed ? 'justify-center' : ''}`}
         >
-          <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-            <SparklesIcon className="h-4 w-4 text-white" />
-          </div>
+          <BrandMark />
           {!isCollapsed && (
             <span className="text-sm font-semibold text-slate-900 tracking-tight truncate">
-              RAG Chat
+              {APP_NAME}
             </span>
           )}
         </div>
@@ -112,18 +131,12 @@ export function Sidebar() {
 
       {/* New chat */}
       <div className="px-2 pt-2 shrink-0">
-        <button
+        <SidebarButton
+          label="New chat"
+          Icon={PencilSquareIcon}
+          isCollapsed={isCollapsed}
           onClick={startNewChat}
-          title={isCollapsed ? 'New chat' : undefined}
-          className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
-        >
-          <PencilSquareIcon
-            className="size-4.5 shrink-0 text-slate-400"
-          />
-          {!isCollapsed && 'New chat'}
-        </button>
+        />
       </div>
 
       <div className="mx-3 my-3 border-t border-slate-100 shrink-0" />
@@ -138,18 +151,12 @@ export function Sidebar() {
         {footerLinks.map((link) => (
           <SidebarLink key={link.to} {...link} isCollapsed={isCollapsed} />
         ))}
-        <button
-          onClick={handleLogout}
-          title={isCollapsed ? 'Log out' : undefined}
-          className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
-        >
-          <ArrowRightStartOnRectangleIcon
-            className="size-4.5 shrink-0 text-slate-400"
-          />
-          {!isCollapsed && 'Log out'}
-        </button>
+        <SidebarButton
+          label="Log out"
+          Icon={ArrowRightStartOnRectangleIcon}
+          isCollapsed={isCollapsed}
+          onClick={() => void handleLogout()}
+        />
       </div>
     </aside>
   );

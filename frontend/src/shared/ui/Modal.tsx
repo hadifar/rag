@@ -67,7 +67,7 @@ export function Modal({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+            className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
           >
             <XMarkIcon className="size-5" />
           </button>

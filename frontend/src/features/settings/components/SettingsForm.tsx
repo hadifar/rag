@@ -1,10 +1,9 @@
 import type { SubmitEvent } from 'react';
 
+import { Button } from '@/shared/ui/Button';
+import { TextField } from '@/shared/ui/Input';
+import { StatusLine } from '@/shared/ui/StatusLine';
 import { useSettings } from '../hooks/useSettings';
-
-const inputCls =
-  'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-normal text-slate-900 placeholder-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition';
-const labelCls = 'flex flex-col gap-1.5 text-sm font-medium text-slate-700';
 
 /** The model settings: loaded from the server, edited locally, and saved. */
 export function SettingsForm() {
@@ -16,7 +15,7 @@ export function SettingsForm() {
   };
 
   if (status === 'loading') {
-    return <p className="p-8 text-sm text-slate-500">Loading settings…</p>;
+    return <StatusLine className="p-8">Loading settings…</StatusLine>;
   }
 
   return (
@@ -24,42 +23,26 @@ export function SettingsForm() {
       <h1 className="mb-2 text-xl font-semibold text-slate-900">Settings</h1>
 
       {status === 'error' && (
-        <p className="text-sm text-amber-600">
+        <StatusLine tone="warning">
           Couldn't load defaults from the server — showing blank fields.
-        </p>
+        </StatusLine>
       )}
 
-      <label className={labelCls}>
-        Model
-        <input className={inputCls} value={form.model} onChange={(e) => update('model', e.target.value)} />
-      </label>
-
-      <label className={labelCls}>
-        Temperature
-        <input
-          className={inputCls}
-          type="number" min={0} max={2} step={0.1} value={form.temperature}
-          onChange={(e) => update('temperature', Number(e.target.value))}
-        />
-      </label>
-
-      <label className={labelCls}>
-        Top K (retrieved chunks)
-        <input
-          className={inputCls}
-          type="number" min={1} step={1} value={form.top_k}
-          onChange={(e) => update('top_k', Number(e.target.value))}
-        />
-      </label>
+      <TextField label="Model" value={form.model} onChange={(e) => update('model', e.target.value)} />
+      <TextField
+        label="Temperature"
+        type="number" min={0} max={2} step={0.1} value={form.temperature}
+        onChange={(e) => update('temperature', Number(e.target.value))}
+      />
+      <TextField
+        label="Top K (retrieved chunks)"
+        type="number" min={1} step={1} value={form.top_k}
+        onChange={(e) => update('top_k', Number(e.target.value))}
+      />
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Save
-        </button>
-        {saved && <span className="text-sm text-green-600">Saved</span>}
+        <Button type="submit">Save</Button>
+        {saved && <StatusLine tone="success">Saved</StatusLine>}
       </div>
     </form>
   );

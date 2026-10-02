@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { ToolContent } from '../types';
+import { BubbleFrame } from './BubbleFrame';
 
 export function ToolBubble({ name, query, output, status }: ToolContent) {
   const [collapsed, setCollapsed] = useState(true);
 
   return (
-    <div
-      className={`max-w-[480px] rounded-xl bg-slate-50 px-3 py-2 text-sm ${status === 'pending' ? 'opacity-70' : ''}`}
-    >
+    <BubbleFrame look="card" className={status === 'pending' ? 'opacity-70' : ''}>
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
@@ -25,6 +24,6 @@ export function ToolBubble({ name, query, output, status }: ToolContent) {
           {status === 'pending' ? `Searching for: ${query ?? ''}` : output}
         </div>
       )}
-    </div>
+    </BubbleFrame>
   );
 }

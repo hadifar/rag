@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@heroicons/react/16/solid';
 import type { TodoItem } from '@/shared/types';
 import type { TodosContent } from '../types';
+import { BubbleFrame } from './BubbleFrame';
 
 const STATUS_LABEL: Record<TodoItem['status'], string> = {
   pending: 'Pending',
@@ -17,11 +18,11 @@ const TEXT_STYLE: Record<TodoItem['status'], string> = {
 function StatusIcon({ status }: Pick<TodoItem, 'status'>) {
   switch (status) {
     case 'completed':
-      return <CheckCircleIcon className="size-4 text-emerald-500" />;
+      return <CheckCircleIcon className="size-4 text-success-500" />;
     case 'in_progress':
       return (
-        <span className="flex size-4 items-center justify-center rounded-full border-[1.5px] border-indigo-500">
-          <span className="size-1.5 animate-pulse rounded-full bg-indigo-500" />
+        <span className="flex size-4 items-center justify-center rounded-full border-[1.5px] border-primary-500">
+          <span className="size-1.5 animate-pulse rounded-full bg-primary-500" />
         </span>
       );
     case 'pending':
@@ -31,7 +32,7 @@ function StatusIcon({ status }: Pick<TodoItem, 'status'>) {
 
 export function TodosBubble({ todos }: TodosContent) {
   return (
-    <div className="w-full max-w-[480px] px-3 text-sm">
+    <BubbleFrame className="w-full">
       <div className="mb-1.5 font-medium text-slate-700">📋 Plan</div>
       <ul aria-label="Plan" className="rounded-lg border border-slate-200 bg-white">
         {todos.map(({ content, status }, index) => (
@@ -48,6 +49,6 @@ export function TodosBubble({ todos }: TodosContent) {
           </li>
         ))}
       </ul>
-    </div>
+    </BubbleFrame>
   );
 }

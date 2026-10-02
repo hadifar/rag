@@ -86,6 +86,10 @@ Generally, we prefer make the wrong thing fail to build instead of relying on re
     round) is deliberate too: it keeps the Context object (non-component export) out of the
     Provider's file, which is what `react/only-export-components` is already guarding against
     (mixing component and non-component exports breaks React Fast Refresh)
+- `tests/unit/architecture/colors.test.ts` fails if a source file names a Tailwind colour palette
+  other than `slate` (e.g. `bg-indigo-600`): colours go through the role tokens in
+  `src/index.css` (`primary`, `danger`, `success`, `warning`), so a rebrand is one edit. A lint
+  rule can't see inside class strings, so a test reads the sources instead
 - `tsc` runs strict (the TypeScript 6 default) plus `noUncheckedIndexedAccess`, so `list[i]` is
   `T | undefined` and has to be checked (`frontend-typecheck`, below)
 

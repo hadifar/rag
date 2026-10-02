@@ -2,6 +2,7 @@ import Markdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import type { TextContent } from '../types';
 import { isFencedCodeBlock } from '../model/markdown';
+import { BubbleFrame } from './BubbleFrame';
 
 const Code: Components['code'] = ({ className, children }) => {
   if (isFencedCodeBlock(children)) {
@@ -26,10 +27,10 @@ const remarkPlugins = [remarkBreaks];
 /** The assistant's answer, as markdown. */
 export function TextBubble({ text }: TextContent) {
   return (
-    <div className="max-w-[480px] px-3 text-sm leading-6 text-slate-800">
+    <BubbleFrame className="leading-6 text-slate-800">
       <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>
         {text}
       </Markdown>
-    </div>
+    </BubbleFrame>
   );
 }
