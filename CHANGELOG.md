@@ -1,3 +1,21 @@
+## v0.12.1 (2026-10-03)
+
+### Fix
+
+- **frontend**: align todo bubble with reset of the bubbles
+
+### Refactor
+
+- **conversations**: keep a transcript of what the user saw
+- **preferences**: store preferences in Postgres, not LangGraph's store
+- move preferences out of the agent service into a capability
+- **agent**: pass a RunContext to tools and add Tool.kind
+- **frontend**: typed API client, shared error helpers, route constants
+- import { useCallback } from 'react';
+- **frontend**: chat transcript as a pure reducer in the query cache
+- **frontend**: move server state to TanStack Query
+- **frontend**: organize src by feature with lint-enforced boundaries
+
 ## v0.12.0 (2026-10-01)
 
 ### Feat
