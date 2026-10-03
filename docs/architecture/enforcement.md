@@ -6,7 +6,7 @@ The project prefers a failing build over a review comment. This page lists what 
 
 `uv run pre-commit run --all-files` runs every hook in `.pre-commit-config.yaml`. CI runs the same hooks.
 
-* `ruff`: lint and format. Bans `fastapi.HTTPException`, `os.environ`, `os.getenv`, `os.path`, `print()`. Max complexity 5.
+* `ruff`: lint and format. Bans `fastapi.HTTPException`, `os.environ`, `os.getenv`, `os.path`, `print()`. Bans blind `except Exception`, unreferenced `create_task()`, and mutable class attributes. Max complexity 5, nesting 3, 20 statements, 8 locals, 5 arguments, 5 returns, 12 public methods per class.
 * `pyright`: type check. Strict everywhere except `rag/services/`.
 * `import-linter`: the backend layer rules in [Backend](backend.md#layers).
 * `pytest tests/unit`: unit tests. `tests/unit/test_app.py` fails when a route outside `_PUBLIC_ROUTES` has no auth dependency.

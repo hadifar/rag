@@ -43,11 +43,21 @@ build-backend = "hatchling.build"
 packages = ["rag"]
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true  # only the preview rules named below
+select = ["E4", "E7", "E9", "F"]  # the stable defaults; preview would otherwise widen them
 extend-select = [
     "C901", "B", "SIM", "C4", "RET", "UP", "ERA", "PLR2004", "PTH", "ASYNC",
     "FAST",  # FastAPI: Annotated dependencies, no redundant response_model
     "T20",   # no print(); the CLI talks through typer.echo
     "TID251",  # banned APIs, below
+    "RUF006",  # keep a reference to create_task(), or the task can be GC'd mid-flight
+    "RUF012",  # mutable class attributes are shared by every instance
+    "BLE001", "S110",  # no blind `except Exception`, no try/except/pass
+    "PERF",  # slow loop patterns
+    "PT",  # pytest style: raises() with match, one condition per assert
+    "PLR0911", "PLR0913", "PLR0915",  # complexity: returns, arguments, statements
+    "PLR0904", "PLR0914", "PLR0916", "PLR1702",  # preview: public methods, locals, bool-expr, nesting
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
@@ -62,6 +72,15 @@ extend-select = [
 
 [tool.ruff.lint.mccabe]
 max-complexity = 5
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-returns = 5
+max-statements = 20
+max-nested-blocks = 3
+max-locals = 8
+max-bool-expr = 3
+max-public-methods = 12  # AuthService has 12: split a service before it grows past this
 
 [tool.commitizen]
 name = "cz_conventional_commits"
