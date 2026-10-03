@@ -1,14 +1,23 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": [
+    "react",
+    "typescript",
+    "oxc"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ],
     "no-restricted-globals": [
       "error",
       {
         "name": "fetch",
-        "message": "Call the backend through api/client.ts (request, requestJson, authFetch): it adds the token and refreshes it."
+        "message": "Call the backend through shared/api/client.ts (request, requestJson, authFetch): it adds the token and refreshes it."
       }
     ],
     "no-restricted-imports": [
@@ -16,12 +25,28 @@
       {
         "patterns": [
           {
-            "group": ["**/types/*"],
-            "message": "Import types from the types index ('../types'), not a single file in it."
+            "group": [
+              "**/api.generated"
+            ],
+            "message": "Backend shapes come from shared/types/api.ts, which names each one."
           },
           {
-            "group": ["**/api.generated"],
-            "message": "Backend shapes come from types/api.ts, which names each one."
+            "group": [
+              "**/shared/types/*"
+            ],
+            "message": "Import shared types from '@/shared/types', not a single file in it."
+          },
+          {
+            "group": [
+              "**/features/*/**"
+            ],
+            "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+          },
+          {
+            "group": [
+              "**/features/chat"
+            ],
+            "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
           }
         ]
       }
@@ -29,27 +54,52 @@
   },
   "overrides": [
     {
-      "files": ["src/api/client.ts", "src/api/auth.ts"],
-      "rules": { "no-restricted-globals": "off" }
+      "files": [
+        "src/shared/api/client.ts",
+        "src/features/auth/api/auth.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": "off"
+      }
     },
     {
-      "files": ["src/components/**", "src/pages/**"],
+      "files": [
+        "src/features/*/*.ts"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["**/api/*"],
-                "message": "Components and pages only present: reach the server through a hook or context."
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
               },
               {
-                "group": ["**/types/*"],
-                "message": "Import types from the types index ('../types'), not a single file in it."
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
               },
               {
-                "group": ["**/api.generated"],
-                "message": "Backend shapes come from types/api.ts, which names each one."
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
               }
             ]
           }
@@ -57,18 +107,107 @@
       }
     },
     {
-      "files": ["src/types/api.ts"],
-      "rules": { "no-restricted-imports": "off" }
-    },
-    {
-      "files": ["src/hooks/**", "src/context/**"],
+      "files": [
+        "src/features/*/components/**"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["**/components/**", "**/pages/**"],
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/*/hooks/**",
+        "src/features/*/context/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**"
+                ],
                 "message": "Hooks and context are the logic layer: they don't render or depend on presentation."
               }
             ]
@@ -77,15 +216,65 @@
       }
     },
     {
-      "files": ["src/api/**"],
+      "files": [
+        "src/features/*/api/**"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["**/hooks/**", "**/context/**", "**/components/**", "**/pages/**"],
-                "message": "api/ only talks to the backend: no framework state, no presentation."
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/hooks/**",
+                  "**/context/**",
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**",
+                  "**/features/**"
+                ],
+                "message": "api/ only talks to the backend: no framework state, no presentation, no other feature."
+              }
+            ],
+            "paths": [
+              {
+                "name": "@/shared/api/client",
+                "importNames": [
+                  "authFetch",
+                  "apiUrl",
+                  "jsonPostInit"
+                ],
+                "message": "Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream, the multipart upload and login need the untyped calls."
               }
             ]
           }
@@ -93,15 +282,449 @@
       }
     },
     {
-      "files": ["src/utils/**"],
+      "files": [
+        "src/features/chat/api/chat.ts",
+        "src/features/knowledge-base/api/ingestions.ts",
+        "src/features/auth/api/auth.ts"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["**/api/**", "**/hooks/**", "**/context/**", "**/components/**", "**/pages/**"],
-                "message": "utils/ is pure helpers: no network, no framework state, no presentation."
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/hooks/**",
+                  "**/context/**",
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**",
+                  "**/features/**"
+                ],
+                "message": "api/ only talks to the backend: no framework state, no presentation, no other feature."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/features/*/model/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "../../**"
+                ],
+                "message": "Leave a feature only through '@/…' imports, so a reach into another feature's files is caught."
+              },
+              {
+                "group": [
+                  "**/api/**",
+                  "**/hooks/**",
+                  "**/context/**",
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**",
+                  "**/shared/hooks/**"
+                ],
+                "message": "model/ is pure helpers: no network, no framework state, no presentation."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/app/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/app/App.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/pages/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/features/chat"
+                ],
+                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/pages/ChatPage.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/*/**"
+                ],
+                "message": "Use another feature only through its public API ('@/features/<name>'), never a file inside it."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/shared/ui/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/**",
+                  "**/pages/**",
+                  "**/app/**"
+                ],
+                "message": "shared/ is used by features, never the other way round."
+              },
+              {
+                "group": [
+                  "**/api/**"
+                ],
+                "message": "Components and pages only present: reach the server through a hook or context."
+              },
+              {
+                "group": [
+                  "@tanstack/react-query"
+                ],
+                "message": "Components and pages only present: server data comes through a feature's hook."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/shared/hooks/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/**",
+                  "**/pages/**",
+                  "**/app/**"
+                ],
+                "message": "shared/ is used by features, never the other way round."
+              },
+              {
+                "group": [
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**"
+                ],
+                "message": "Hooks and context are the logic layer: they don't render or depend on presentation."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/shared/api/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
+              },
+              {
+                "group": [
+                  "**/shared/types/*"
+                ],
+                "message": "Import shared types from '@/shared/types', not a single file in it."
+              },
+              {
+                "group": [
+                  "**/features/**",
+                  "**/pages/**",
+                  "**/app/**"
+                ],
+                "message": "shared/ is used by features, never the other way round."
+              },
+              {
+                "group": [
+                  "**/hooks/**",
+                  "**/context/**",
+                  "**/components/**",
+                  "**/pages/**",
+                  "**/shared/ui/**",
+                  "**/features/**"
+                ],
+                "message": "api/ only talks to the backend: no framework state, no presentation, no other feature."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/shared/types/api.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": [
+        "tests/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/api.generated"
+                ],
+                "message": "Backend shapes come from shared/types/api.ts, which names each one."
               }
             ]
           }

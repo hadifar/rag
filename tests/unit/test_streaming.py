@@ -1,14 +1,14 @@
-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessageChunk
 from langgraph.types import Command
 
 from rag.domain.models import (
+    AnswerRetracted,
     ReasoningDelta,
     TextDelta,
     Todo,
     TodosUpdated,
-    ToolCall,
 )
-from rag.services.agent_service.streaming import parse_event, replay
+from rag.services.agent_service.streaming import parse_event
 
 
 def _model_stream(chunk: AIMessageChunk, node: str = "model") -> dict:
@@ -86,39 +86,11 @@ def test_planning_tool_start_is_not_a_tool_call():
     assert parse_event(event) == []
 
 
-def test_replay_shows_saved_messages_as_they_streamed():
-    todos = [{"content": "Find the release note", "status": "in_progress"}]
-    planning = AIMessage(
-        content=[
-            {
-                "type": "reasoning",
-                "summary": [
-                    {"index": 0, "type": "summary_text", "text": "First"},
-                    {"index": 1, "type": "summary_text", "text": "Second"},
-                ],
-                "index": 0,
-            }
-        ],
-        response_metadata={"model_provider": "openai"},
-        tool_calls=[
-            {"name": "write_todos", "args": {"todos": todos}, "id": "c1"},
-            {"name": "search_kb", "args": {"query": "release"}, "id": "c2"},
-        ],
-    )
-    messages = [
-        planning,
-        ToolMessage(content="Updated todo list", name="write_todos", tool_call_id="c1"),
-        ToolMessage(content="2 chunks", name="search_kb", tool_call_id="c2"),
-        AIMessage(content="It shipped."),
-    ]
+def test_a_retraction_is_sent_as_its_own_event():
+    event = {"event": "on_custom_event", "name": "answer_retracted", "data": {}}
+    assert parse_event(event) == [AnswerRetracted()]
 
-    assert replay(messages) == [
-        ReasoningDelta(text="\n\nFirst"),
-        ReasoningDelta(text="\n\nSecond"),
-        TodosUpdated(
-            todos=[Todo(content="Find the release note", status="in_progress")]
-        ),
-        ToolCall(name="search_kb", status="pending", query="release"),
-        ToolCall(name="search_kb", status="done", output="2 chunks"),
-        TextDelta(text="It shipped."),
-    ]
+
+def test_other_custom_events_are_not_streamed():
+    event = {"event": "on_custom_event", "name": "something_else", "data": {}}
+    assert parse_event(event) == []

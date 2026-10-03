@@ -3,9 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AuthContext } from '../../src/hooks/useAuth';
-import { SettingsPage } from '../../src/pages/SettingsPage';
-import type { IngestionRunResponse, SettingsResponse } from '../../src/types';
+import { AuthContext } from '@/features/auth/hooks/useAuth';
+import { SettingsPage } from '@/pages/SettingsPage';
+import type { IngestionRunResponse, SettingsResponse } from '@/shared/types';
+import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
 const running: IngestionRunResponse = {
@@ -60,6 +61,7 @@ function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse 
     http.get('/api/ingestions/latest', () => HttpResponse.json(latest)),
   );
   render(
+    withQueryClient(
     <AuthContext
       value={{
         status: 'authenticated',
@@ -70,6 +72,7 @@ function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse 
     >
       <SettingsPage />
     </AuthContext>,
+    ),
   );
   return userEvent.setup();
 }

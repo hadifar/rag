@@ -304,7 +304,8 @@ async def test_a_failing_run_records_the_error_and_frees_the_slot() -> None:
 
     failed = await ingestion.get_run(run.id)
     assert failed.status == "failed"
-    assert failed.error is not None and "unexpectedly" in failed.error
+    assert failed.error is not None
+    assert "unexpectedly" in failed.error
     await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)  # slot is free
 
 

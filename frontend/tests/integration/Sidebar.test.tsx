@@ -4,10 +4,10 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { Sidebar } from '../../src/components/layout/Sidebar';
-import { ConversationsProvider } from '../../src/context/ConversationsProvider';
-import { AuthContext } from '../../src/hooks/useAuth';
-import type { ConversationPageResponse } from '../../src/types';
+import { Sidebar } from '@/app/layout/Sidebar';
+import { AuthContext } from '@/features/auth/hooks/useAuth';
+import type { ConversationPageResponse } from '@/shared/types';
+import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
 const page: ConversationPageResponse = {
@@ -38,16 +38,14 @@ function renderSidebar() {
               logout: async () => {},
             }}
           >
-            <ConversationsProvider>
-              <Sidebar />
-            </ConversationsProvider>
+            <Sidebar />
           </AuthContext>
         ),
       },
     ],
     { initialEntries: ['/chat'] },
   );
-  render(<RouterProvider router={router} />);
+  render(withQueryClient(<RouterProvider router={router} />));
   return userEvent.setup();
 }
 

@@ -1,10 +1,10 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, ToolMessage
-from langchain_core.messages import ToolCall as ToolCallRequest
+from langchain_core.messages import AIMessageChunk, ToolMessage
 
 from rag.domain.models import (
+    AnswerRetracted,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
@@ -22,6 +22,9 @@ _USER_FACING_NODE = "model"
 # as the plan itself; it returns a Command whose state update holds the new todos.
 _PLANNING_TOOL = "write_todos"
 
+# Dispatched (as a custom event) by a guard that rejects the answer it just streamed.
+ANSWER_RETRACTED = "answer_retracted"
+
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     """The user-facing events a raw graph event stands for; none if it isn't one."""
@@ -34,6 +37,9 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
 
     if kind in ("on_tool_start", "on_tool_end"):
         return _tool_events(raw_event)
+
+    if kind == "on_custom_event" and raw_event["name"] == ANSWER_RETRACTED:
+        return [AnswerRetracted()]
 
     return []
 
@@ -78,48 +84,6 @@ def _chunk_events(chunk: AIMessageChunk) -> list[StreamEvent]:
             # part's last sentence from running into the next part's heading.
             events.append(ReasoningDelta(text=block["reasoning"] or "\n\n"))
     return events
-
-
-def replay(messages: Sequence[BaseMessage]) -> list[StreamEvent]:
-    """The events saved messages stand for, in the order they were streamed, so a past
-    turn shows as it did live: each reply's reasoning and text, each search `pending`
-    then `done`, and each plan the agent wrote.
-    """
-    events: list[StreamEvent] = []
-    for message in messages:
-        if isinstance(message, AIMessage):
-            events.extend(_reply_events(message))
-        elif isinstance(message, ToolMessage) and message.name != _PLANNING_TOOL:
-            events.append(
-                ToolCall(
-                    name=message.name or "",
-                    status="done",
-                    output=_tool_output_text(message),
-                )
-            )
-    return events
-
-
-def _reply_events(message: AIMessage) -> list[StreamEvent]:
-    events: list[StreamEvent] = []
-    for block in message.content_blocks:
-        if block["type"] == "text" and block["text"]:
-            events.append(TextDelta(text=block["text"]))
-        elif block["type"] == "reasoning" and (reasoning := block.get("reasoning")):
-            # One block per summary part; live, each part opened with this break.
-            events.append(ReasoningDelta(text="\n\n" + reasoning))
-    return events + [_call_event(call) for call in message.tool_calls]
-
-
-def _call_event(call: ToolCallRequest) -> StreamEvent:
-    """A search as it started, `pending` with its query; the planning tool's call as
-    the plan it wrote.
-    """
-    if call["name"] == _PLANNING_TOOL:
-        return TodosUpdated(todos=call["args"]["todos"])
-    return ToolCall(
-        name=call["name"], status="pending", query=call["args"].get("query", "")
-    )
 
 
 def _tool_output_text(output: Any) -> str:

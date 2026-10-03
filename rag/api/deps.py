@@ -5,11 +5,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.config import Settings
 from rag.container import Container
-from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
-from rag.services.rag_service.service import RagService
+from rag.services.preference_service.service import PreferenceService
 from rag.services.retrieval_service.service import RetrievalService
 
 # A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
@@ -33,8 +32,8 @@ def get_app_settings(request: Request) -> Settings:
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
-def get_agent_service(container: ContainerDep) -> AgentService:
-    return container.agent_service
+def get_preference_service(container: ContainerDep) -> PreferenceService:
+    return container.preference_service
 
 
 def get_retrieval_service(container: ContainerDep) -> RetrievalService:
@@ -53,14 +52,7 @@ def get_conversation_service(container: ContainerDep) -> ConversationService:
     return container.conversation_service
 
 
-def get_rag_service(container: ContainerDep) -> RagService:
-    return container.rag_service
-
-
-RagServiceDep = Annotated[RagService, Depends(get_rag_service)]
-
-
-AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
+PreferenceServiceDep = Annotated[PreferenceService, Depends(get_preference_service)]
 
 
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]

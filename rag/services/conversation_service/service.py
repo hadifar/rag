@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import binascii
 import json
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
@@ -12,8 +14,22 @@ from rag.domain.errors import (
     ConversationNotFoundError,
     InvalidCursorError,
 )
-from rag.domain.models import Conversation, ConversationPage, HistoryMessage
-from rag.domain.ports import AgentServicePort, ConversationRepositoryPort
+from rag.domain.models import (
+    AssistantMessage,
+    Conversation,
+    ConversationPage,
+    HistoryMessage,
+    RunContext,
+    StreamEvent,
+    UserMessage,
+)
+from rag.domain.ports import (
+    AgentServicePort,
+    ChatAgentPort,
+    ConversationRepositoryPort,
+    TranscriptRepositoryPort,
+)
+from rag.services.conversation_service.transcript import TranscriptBuilder
 from rag.shared.resilience import or_default
 
 TITLE_PROMPT = (
@@ -45,12 +61,20 @@ class TitleOutput(BaseModel):
 
 
 class ConversationService:
+    """A user's conversations: each one's turns, run by `chat_agent` and kept as the
+    user saw them (`transcript`), and its title, written by `agent_service`'s LLM.
+    """
+
     def __init__(
         self,
         repository: ConversationRepositoryPort,
+        transcript: TranscriptRepositoryPort,
+        chat_agent: ChatAgentPort,
         agent_service: AgentServicePort,
     ):
         self._repository = repository
+        self._transcript = transcript
+        self._chat_agent = chat_agent
         self._agent_service = agent_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
@@ -92,17 +116,47 @@ class ConversationService:
         next_cursor = _encode_cursor(items[-1]) if len(rows) > limit else None
         return ConversationPage(items=items, next_cursor=next_cursor)
 
+    async def send_message(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
+    ) -> AsyncIterator[StreamEvent]:
+        """The answer's events as the chat agent streams them. The turn is saved to the
+        transcript however the stream ends, so a failed or abandoned answer still
+        shows what the user saw of it.
+        """
+        await self.get_owned(user_id, conversation_id)
+        ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
+        transcript = TranscriptBuilder()
+        try:
+            async for event in self._chat_agent.stream(message, ctx):
+                transcript.add(event)
+                yield event
+        finally:
+            # Shielded: a client hanging up cancels the stream, not the save.
+            await asyncio.shield(
+                self._transcript.append_turn(
+                    conversation_id, message, transcript.events
+                )
+            )
+
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
+        """Each question, then its answer's events, if it sent any."""
         await self.get_owned(user_id, conversation_id)
-        return await self._agent_service.get_history(str(conversation_id))
+        history: list[HistoryMessage] = []
+        for turn in await self._transcript.list_turns(conversation_id):
+            history.append(UserMessage(text=turn.question))
+            if turn.answer:
+                history.append(AssistantMessage(events=turn.answer))
+        return history
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+        """The transcript goes with the row; the agent's memory of it first: if that
+        fails, the row is still there to retry the delete, rather than a row-less
+        thread nobody can reach (or erase) anymore.
+        """
         await self.get_owned(user_id, conversation_id)
-        # Messages first: if this fails, the row is still there to retry the delete,
-        # rather than a row-less thread nobody can reach (or erase) anymore.
-        await self._agent_service.delete_history(str(conversation_id))
+        await self._chat_agent.forget(conversation_id)
         await self._repository.delete(conversation_id)
 
     async def get_owned(

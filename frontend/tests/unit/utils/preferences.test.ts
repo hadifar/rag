@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { addPreferenceError, withPreference } from '../../../src/utils/preferences';
+import { addPreferenceError, withPreference } from '@/features/preferences/model/preferences';
 
 const dutch = { id: 'a', text: 'Answer in Dutch' };
 const short = { id: 'b', text: 'Keep it short' };

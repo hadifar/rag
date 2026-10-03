@@ -19,33 +19,29 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.store.memory import InMemoryStore
 from pydantic import Field
 
 from rag.domain.models import (
-    AssistantMessage,
+    AnswerRetracted,
     Chunk,
-    PreferenceMiddleware,
+    OffTopicMiddleware,
     ReferencesReady,
+    RunContext,
     StreamEvent,
     TextDelta,
     Tool,
     ToolAgentSpec,
     ToolCall,
-    UserMessage,
+    ToolResult,
 )
 from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
-from rag.services.agent_service.middleware.preferences import (
-    PREFERENCE_TOOL_NAMES,
-    list_preferences,
-    save_preference,
-)
 from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
 from rag.services.agent_service.service import Agent, AgentService
-from rag.services.agent_service.turn import to_history
+from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService
 from rag.services.rag_service.tools import search_tool
+from tests.unit.fakes import FakePreferenceRepository
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -158,22 +154,30 @@ def _no_tracing(name: str | None) -> RunnableConfig:
 
 
 _USER = uuid.uuid4()
+_CONVERSATION = uuid.uuid4()
+_PREFERENCE_TOOLS = ["forget_user_preference", "save_user_preference"]
 
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel):
-        self.store = InMemoryStore()
-        agents = AgentService(
-            model, InMemorySaver(), self.store, _no_tracing, retry_attempts=3
+        self.preferences = PreferenceService(FakePreferenceRepository())
+        agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+        self.rag = RagService(
+            _StubRetrievalService(),
+            agents,
+            max_revisions=1,
+            capabilities=[self.preferences.capability()],
         )
-        self.rag = RagService(_StubRetrievalService(), agents, max_revisions=1)
         agent = self.rag._agent
         assert isinstance(agent, Agent)
         self.graph: CompiledStateGraph = agent._graph
-        self.config: RunnableConfig = {"configurable": {"thread_id": "t1"}}
+        self.config: RunnableConfig = {
+            "configurable": {"thread_id": str(_CONVERSATION)}
+        }
 
     async def send(self, text: str) -> list[StreamEvent]:
-        return [event async for event in self.rag.stream_chat(text, "t1", _USER)]
+        ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
+        return [event async for event in self.rag.stream(text, ctx)]
 
     async def saved_messages(self) -> list[BaseMessage]:
         return (await self.graph.aget_state(self.config)).values["messages"]
@@ -268,6 +272,26 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
     assert _text(events).endswith("still wrong")
 
 
+async def test_a_rejected_answer_is_retracted_before_its_revision_streams() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
+        groundedness_verdicts=["UNGROUNDED"],
+    )
+
+    events = await _Chat(model).send("first")
+
+    texts = [e for e in events if isinstance(e, TextDelta | AnswerRetracted)]
+    assert texts == [TextDelta("wrong"), AnswerRetracted(), TextDelta("revised")]
+
+
+async def test_a_grounded_answer_is_never_retracted() -> None:
+    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("right")])
+
+    events = await _Chat(model).send("first")
+
+    assert not any(isinstance(e, AnswerRetracted) for e in events)
+
+
 async def test_revision_instruction_is_not_saved_to_the_thread() -> None:
     model = _ScriptedChatModel(
         answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
@@ -301,10 +325,10 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
     assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
     # Off-topic, the model keeps only the tools about the user, not the product.
-    assert sorted(off_topic_call["tools"]) == sorted(PREFERENCE_TOOL_NAMES)
+    assert sorted(off_topic_call["tools"]) == _PREFERENCE_TOOLS
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == sorted(
-        ["search_kb", "write_todos", *PREFERENCE_TOOL_NAMES]
+        ["search_kb", "write_todos", *_PREFERENCE_TOOLS]
     )
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
@@ -333,61 +357,10 @@ async def test_verifier_only_sees_the_current_turns_context(
         assert "facts about pricing" not in model.verifier_calls[1]
 
 
-async def test_history_replays_each_turn_without_its_rejected_drafts() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _search("pricing"),
-            _answer("wrong"),
-            _answer("revised"),
-            _answer("You're welcome!"),
-            _search(_NO_RESULTS_QUERY),
-            _answer("I don't know."),
-        ],
-        groundedness_verdicts=["UNGROUNDED"],
-    )
-    chat = _Chat(model)
-    await chat.send("How much?")
-    await chat.send("thanks")
-    await chat.send("Who won the cup?")
-
-    history = to_history(await chat.saved_messages())
-
-    assert [m.role for m in history] == ["user", "assistant"] * 3
-    questions = [m.text for m in history if isinstance(m, UserMessage)]
-    answers = [m.events for m in history if isinstance(m, AssistantMessage)]
-    assert questions == ["How much?", "thanks", "Who won the cup?"]
-    # The rejected draft ("wrong") is dropped.
-    assert [_text(events) for events in answers] == [
-        "revised",
-        "You're welcome!",
-        "I don't know.",
-    ]
-    assert [
-        [(e.status, e.query) for e in events if isinstance(e, ToolCall)]
-        for events in answers
-    ] == [
-        [("pending", "pricing"), ("done", None)],
-        [],
-        [("pending", _NO_RESULTS_QUERY), ("done", None)],
-    ]
-    # None: didn't search; []: searched, found nothing.
-    assert [
-        next((e.references for e in events if isinstance(e, ReferencesReady)), None)
-        for events in answers
-    ] == [["pricing"], None, []]
-
-
-def test_history_of_an_empty_or_missing_thread_is_empty() -> None:
-    # A thread the checkpointer doesn't have (e.g. a conversation whose messages were
-    # never saved) reads back as no messages; that used to crash with a zip() ValueError.
-    assert to_history([]) == []
-
-
 def test_tools_with_the_same_name_are_rejected_up_front() -> None:
     agents = AgentService(
         _ScriptedChatModel(answers=[]),
         InMemorySaver(),
-        InMemoryStore(),
         _no_tracing,
         retry_attempts=3,
     )
@@ -408,7 +381,7 @@ async def test_saved_preferences_are_in_every_model_calls_prompt_not_the_thread(
 ):
     model = _ScriptedChatModel(answers=[_search("pricing"), _answer("Het kost 10.")])
     chat = _Chat(model)
-    await save_preference(chat.store, _USER, "Answer in Dutch")
+    await chat.preferences.add(_USER, "Answer in Dutch")
 
     await chat.send("How much?")
 
@@ -430,7 +403,7 @@ async def test_a_preference_saved_in_one_turn_applies_from_the_next_call_on() ->
     events = await chat.send("Please always keep answers short")
     await chat.send("How much?")
 
-    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
         "Keep answers short"
     ]
     assert "Keep answers short" not in model.agent_calls[0]["messages"][0].text
@@ -452,7 +425,7 @@ async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
 
     await chat.send("Always answer in Dutch")
 
-    assert [p.text for p in await list_preferences(chat.store, _USER)] == [
+    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
         "Answer in Dutch"
     ]
 
@@ -460,8 +433,8 @@ async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
 async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
     model = _ScriptedChatModel(answers=[])
     chat = _Chat(model)
-    mine = await save_preference(chat.store, _USER, "Answer in Dutch")
-    theirs = await save_preference(chat.store, uuid.uuid4(), "Answer in French")
+    mine = await chat.preferences.add(_USER, "Answer in Dutch")
+    theirs = await chat.preferences.add(uuid.uuid4(), "Answer in French")
     model.answers.extend(
         [
             _call("forget_user_preference", preference_id=theirs.id),
@@ -477,14 +450,13 @@ async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
         f"No saved preference has the id {theirs.id}.",
         f"Forgot preference {mine.id}.",
     ]
-    assert await list_preferences(chat.store, _USER) == []
+    assert await chat.preferences.list_for_user(_USER) == []
 
 
 def test_a_tool_cant_take_a_preference_tools_name() -> None:
     agents = AgentService(
         _ScriptedChatModel(answers=[]),
         InMemorySaver(),
-        InMemoryStore(),
         _no_tracing,
         retry_attempts=3,
     )
@@ -493,10 +465,40 @@ def test_a_tool_cant_take_a_preference_tools_name() -> None:
         description="",
         run=search_tool(_StubRetrievalService()).run,
     )
+    preferences = PreferenceService(FakePreferenceRepository()).capability()
 
     with pytest.raises(ValueError, match="save_user_preference"):
         agents.create_agent(
-            ToolAgentSpec(
-                system_prompt="", tools=[clash], middleware=[PreferenceMiddleware()]
-            )
+            ToolAgentSpec(system_prompt="", tools=[clash], capabilities=[preferences])
         )
+
+
+async def test_a_user_tool_gets_the_turns_context_and_is_kept_off_topic() -> None:
+    model = _ScriptedChatModel(
+        answers=[_call("whoami", query="me"), _answer("You're you.")],
+        off_topic_messages={"who am I?"},
+    )
+    agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+    seen: list[RunContext] = []
+
+    async def whoami(query: str, ctx: RunContext) -> ToolResult:
+        seen.append(ctx)
+        return ToolResult(str(ctx.user_id))
+
+    agent = agents.create_agent(
+        ToolAgentSpec(
+            system_prompt="",
+            tools=[
+                search_tool(_StubRetrievalService()),
+                Tool("whoami", "Who the user is.", whoami, kind="user"),
+            ],
+            middleware=[OffTopicMiddleware()],
+        )
+    )
+    ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
+
+    _ = [event async for event in agent.stream("who am I?", ctx)]
+
+    assert seen == [ctx]
+    # Off-topic, the product's search is withheld but the user tool stays.
+    assert model.agent_calls[0]["tools"] == ["whoami"]

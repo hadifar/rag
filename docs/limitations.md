@@ -1,0 +1,83 @@
+# Limitations
+
+Known gaps. None of these is addressed yet.
+
+## Ingestion
+
+* Uploads run as an in-process background task. A restart kills the run. Startup marks it failed.
+* The startup sweep assumes a single backend instance.
+* `rag ingest` ignores the one-run-at-a-time rule.
+* `rag ingest --latest` uses the newest valid zip, not the newest successful one.
+* `WholeDocumentChunker` stores a whole file as one chunk.
+* Only markdown sources exist.
+* Embeddings have no model version. Changing the embedding model mixes old and new vectors until `rag ingest --force`.
+* The vector size is fixed at 1536 (migration `0003`). Only `text-embedding-3-*` fits.
+
+## Retrieval
+
+* Full-text search uses the `english` configuration and `ts_rank_cd`, not BM25.
+* No reranker.
+* Reciprocal rank fusion uses `k=5`, untuned.
+* No retrieval evaluation set.
+
+## Guardrails
+
+* `TopicalGuard` only instructs the model to decline. Nothing blocks the request.
+* `TopicalGuard` reads only the latest message.
+* `GroundednessGuard` passes an answer with no `search_kb` call.
+* Past `RAG__MAX_REVISIONS`, an ungrounded answer ships.
+* Both guards parse free text with a substring check.
+* Saved preferences enter the system prompt in the user's own words.
+
+## Conversations
+
+* A failed title request leaves the conversation untitled. The next new chat reopens it.
+* Paging by `(updated_at, id)` can repeat a conversation across pages.
+* Deleting a user does not delete the user's checkpoint threads.
+* `langgraph.store` is unused since migration `0009` and can be dropped.
+* The whole thread goes to the LLM every turn. Long threads can exceed the context window.
+* The user sees an ungrounded draft until `AnswerRetracted` arrives.
+
+## Frontend
+
+* The Settings page Save button persists nothing.
+* A preference saved in another tab shows only after a reload.
+
+## Security
+
+* No password reset and no email verification.
+* No token rotation or revocation.
+* Login rate limiting is per IP only (nginx).
+* The backend image runs as root on a floating base image.
+
+## Reliability
+
+* `search_kb` has no retry and no error handling.
+* The SSE stream has no `error` or `done` event.
+* `ChatOpenAI` has no request timeout.
+* `/api/health/ready` does not check the embedding API.
+
+## Observability
+
+* Only `AppError` has a handler. Other exceptions become a bare 500.
+* No error tracking or alerting.
+
+## Scalability
+
+* `rag serve` runs one uvicorn worker.
+* `AsyncPostgresSaver` serializes checkpoint queries per process.
+* The App Service Plan has no autoscale rule.
+* nginx rate limits are per replica.
+
+## CI/CD
+
+* No CI job runs the frontend tests.
+* Integration tests, image builds and deploys are manual.
+* A pushed image needs `az webapp restart`.
+
+## Infrastructure
+
+* The knowledge-base Storage Account keeps a public endpoint.
+* `AzureBlobArchiveStore` has no automated test.
+* Bicep does not provision Postgres.
+* No Azure deploy step runs `alembic upgrade head`.

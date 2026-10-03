@@ -1,13 +1,14 @@
-from rag.domain.models import Tool, ToolResult
+from rag.domain.models import RunContext, Tool, ToolResult
 from rag.domain.ports import SearchPort
 
 
 def search_tool(knowledge_base: SearchPort) -> Tool:
     """search_kb: the passages the knowledge base finds, each tagged with its source
-    id, which the turn cites as its references.
+    id, which the turn cites as its references. The knowledge base is the same for
+    every user, so the turn's context isn't used.
     """
 
-    async def search(query: str) -> ToolResult:
+    async def search(query: str, _ctx: RunContext) -> ToolResult:
         results = await knowledge_base.search(query)
         if not results:
             return ToolResult("No relevant documentation found.", references=[])
