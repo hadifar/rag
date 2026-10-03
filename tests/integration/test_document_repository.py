@@ -83,7 +83,8 @@ async def test_replacing_a_document_drops_its_old_chunks(
     )
 
     document = await fake_kb.aget_document(source_id)
-    assert document is not None and document.text == "# Replaced"
+    assert document is not None
+    assert document.text == "# Replaced"
     assert (await fake_kb.alist_content_hashes())[source_id] == "new-hash"
 
 

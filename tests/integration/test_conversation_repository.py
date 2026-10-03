@@ -51,11 +51,13 @@ async def test_create_get_touch_title_delete(
     assert (await repository.get_or_create_empty(user_id)).id == created.id
 
     touched = await repository.touch(created.id)
-    assert touched is not None and touched.updated_at > created.updated_at
+    assert touched is not None
+    assert touched.updated_at > created.updated_at
 
     await repository.set_title(created.id, "renamed")
     fetched = await repository.get(created.id)
-    assert fetched is not None and fetched.title == "renamed"
+    assert fetched is not None
+    assert fetched.title == "renamed"
 
     await repository.delete(created.id)
     assert await repository.get(created.id) is None

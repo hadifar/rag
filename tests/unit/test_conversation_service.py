@@ -100,7 +100,8 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
     await service.generate_title(ALICE, conversation_id, "word " * 50)
 
     title = repository.rows[conversation_id].title
-    assert title is not None and len(title) == 60
+    assert title is not None
+    assert len(title) == 60
     assert title.endswith("…")
 
 
