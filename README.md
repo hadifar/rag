@@ -12,10 +12,14 @@ A ready to use RAG implementation! built on FastAPI + LangGraph + Postgress(pgve
 ## Quick start
 ```bash
 git clone https://github.com/hadifar/rag.git && cd rag && bash scripts/setup.sh
+# fill in .env (see .example.env), then:
 docker compose up --build
+# once it's up, create a login (no public signup):
+docker compose exec backend rag create-user you@example.com --admin
 ```
-Then create a login and load the knowledge base: see [docs/setup.md](docs/setup.md), which also
-covers the other ways to run it.
+Then sign in at http://localhost:3000 and load the knowledge base: upload `data/data.zip` under
+**Settings → Knowledge base**. See [Run the local stack](docs/how-to/infra/run-local-stack.md) for
+details, or [Local development](docs/tutorials/local-development.md) to run without Docker.
 
 ## Docs
 See [docs/README.md](docs/README.md) & [docs/](docs/)
