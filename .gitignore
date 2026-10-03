@@ -230,7 +230,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-.claude/
+
 .zerotrace/
 bin/__pycache__/
 
@@ -241,3 +241,6 @@ data/*.md
 
 # Uploaded knowledge-base zips (KB_STORAGE__BACKEND=local)
 data/uploads/
+
+.claude/settings.local.json
+.claude/settings.json

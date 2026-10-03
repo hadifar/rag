@@ -1,6 +1,20 @@
 # Agent Instructions
 
-## Before you change code
+A production ready RAG application.
+
+## Repository map
+
+- `rag/`: backend: `api/`, `services/`, `domain/`, `adapters/`, `repository/`, `config/`
+- `frontend/`: React app, one folder per feature in `src/features/`
+- `migrations/`: Alembic schema migrations
+- `tests/`: backend tests: `unit/` , `integration/`
+- `infra/`: Dockerfiles, nginx, Azure Bicep.
+- `.github/workflows/`: CI.
+- `scripts/`: setup and code-generation scripts.
+- `data/`: sample knowledge base (zip format).
+- `docs/`: documentation.
+
+## Before code change
 
 1. Open the how-to guide for the task from the [docs index](docs/README.md). Follow its steps.
 2. If no guide covers the task, read the matching page in [docs/architecture/](docs/architecture/).
@@ -16,10 +30,9 @@
 ## Never do
 
 - Edit `frontend/src/shared/types/api.generated.ts` by hand.
-- Edit a committed migration in `migrations/versions/`.
 - Run `az` or `gh` commands that change live Azure or GitHub state.
 
-## After you change code
+## After code change
 
 1. Follow [Run validation](docs/how-to/run-validation.md).
 2. Write a short report: what changed, which checks ran and their results, and anything left undone.

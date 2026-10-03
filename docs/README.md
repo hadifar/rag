@@ -1,8 +1,5 @@
 # Documentation
 
-Find your task under "How-to guides". Open that guide and follow its steps.
-Every change ends with [Run validation](how-to/run-validation.md).
-
 ## How-to guides
 
 ### Git
@@ -68,10 +65,10 @@ Every change ends with [Run validation](how-to/run-validation.md).
 
 * [Local development tutorial](tutorials/local-development.md)
 * [Contributing](../CONTRIBUTING.md)
-* Diagrams:
-  * [Architecture](diagrams/architecture.md): system overview, backend layers, frontend layers
+* Visual diagrams:
+  * [Architecture diagrams](diagrams/architecture.md): system overview, backend layers, frontend layers
   * [Agent graph](diagrams/agent-graph.md)
-  * [Chat turn](diagrams/chat-turn.md)
+  * [Chat flow](diagrams/chat-turn.md)
   * [Auth flow](diagrams/auth-flow.md)
   * [Schema sync](diagrams/schema-sync.md)
   * [Azure deployment](diagrams/azure-deployment.md)
