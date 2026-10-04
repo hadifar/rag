@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from rag.domain.models import AgentSpec, Chunk, RunContext
 from rag.domain.ports import ChatAgentPort
+from rag.services.retrieval_service.expansion import NoQueryExpander
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -145,7 +146,9 @@ async def test_a_single_candidate_needs_no_llm_call() -> None:
 async def test_search_reranks_all_top_k_candidates() -> None:
     store = _VectorStore(_candidates("a", "b", "c", "d"))
     agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 8)])
-    service = RetrievalService(store, LlmReranker(agent, attempts=1), top_k=3)
+    service = RetrievalService(
+        store, NoQueryExpander(), LlmReranker(agent, attempts=1), top_k=3
+    )
 
     results = await service.search("q")
 
@@ -154,6 +157,8 @@ async def test_search_reranks_all_top_k_candidates() -> None:
 
 async def test_search_without_reranking_keeps_the_vector_order() -> None:
     candidates = _candidates("a", "b")
-    service = RetrievalService(_VectorStore(candidates), NoReranker(), top_k=3)
+    service = RetrievalService(
+        _VectorStore(candidates), NoQueryExpander(), NoReranker(), top_k=3
+    )
 
     assert await service.search("q") == candidates

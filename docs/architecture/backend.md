@@ -24,7 +24,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 `agent_service` is the only LangChain user. `rag_service` is the chat agent built on it.
 
-`retrieval_service` finds the `RAG__TOP_K` closest passages, then passes them to a `RerankerPort`. With `RETRIEVAL__RERANK` on, that is `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, and the passages are reordered by that score, with ties keeping the vector order. With it off, `NoReranker` keeps the vector order.
+`retrieval_service` first asks a `QueryExpanderPort` for other phrasings of the query. With `RETRIEVAL__QUERY_VARIANTS` above 0, that is `LlmQueryExpander`: one structured LLM call rewrites the query that many ways. With 0, `NoQueryExpander` adds none. It finds the `RAG__TOP_K` closest passages for the query and for each phrasing, in parallel, and merges them: each passage once, with its best score, the best first. It passes the merged passages to a `RerankerPort`, ranked against the original query, and keeps the best `RAG__TOP_K`. With `RETRIEVAL__RERANK` on, that is `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, and the passages are reordered by that score, with ties keeping the vector order. With it off, `NoReranker` keeps the vector order.
 
 ## Chat agent
 

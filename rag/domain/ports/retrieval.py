@@ -18,6 +18,14 @@ class VectorStorePort(Protocol):
         ...
 
 
+class QueryExpanderPort(Protocol):
+    async def expand(self, query: str) -> list[str]:
+        """Other phrasings of `query` to search with too, `query` itself not among
+        them; never raises (on failure, none).
+        """
+        ...
+
+
 class RerankerPort(Protocol):
     async def rerank(
         self, query: str, candidates: list[tuple[Chunk, float]]
