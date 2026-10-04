@@ -144,12 +144,18 @@ describe('applyEvent', () => {
 });
 
 describe('turns', () => {
-  it('shows typing from the message until the first event', () => {
+  it('shows typing from the message until the answer ends', () => {
     const asked = startTurn(emptyTranscript(), 'Hi');
     expect(asked.bubbles).toMatchObject([{ type: 'user', content: { text: 'Hi' } }]);
     expect(isWaiting(asked)).toBe(true);
 
-    expect(isWaiting(applyEvent(asked, { type: 'text', text: 'Hello' }))).toBe(false);
+    const answering = applyEvents(asked, [
+      { type: 'tool', name: 'search', status: 'pending', query: 'a' },
+      { type: 'tool', name: 'search', status: 'done', output: '3 chunks' },
+      { type: 'text', text: 'Hello' },
+    ]);
+    expect(isWaiting(answering)).toBe(true);
+    expect(isWaiting(endTurn(answering))).toBe(false);
   });
 
   it('ends with an error bubble, and stops a reasoning bubble from streaming', () => {

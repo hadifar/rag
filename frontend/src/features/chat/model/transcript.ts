@@ -11,7 +11,7 @@ export function emptyTranscript(): Transcript {
 }
 
 function openTurn(): Turn {
-  return { received: false, textId: null, reasoningId: null, pendingToolIds: [], todosId: null };
+  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null };
 }
 
 /** A working copy that the functions below edit in place before handing it back. */
@@ -56,7 +56,6 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
   const t = draft(transcript);
   const turn = t.turn ?? openTurn();
   t.turn = turn;
-  turn.received = true;
 
   if (event.type === 'reasoning') {
     if (turn.reasoningId === null) {
@@ -133,7 +132,7 @@ export function endTurn(transcript: Transcript, error?: string): Transcript {
   return t;
 }
 
-/** The user's message, and an answer opened for it (shown as typing until it streams). */
+/** The user's message, and an answer opened for it (shown as typing until it ends). */
 export function startTurn(transcript: Transcript, text: string): Transcript {
   const t = draft(endTurn(transcript));
   push(t, { type: 'user', content: { text } });
@@ -141,9 +140,9 @@ export function startTurn(transcript: Transcript, text: string): Transcript {
   return t;
 }
 
-/** Whether the assistant shows as typing: an answer is open and nothing arrived yet. */
+/** Whether the assistant shows as typing: for as long as an answer is open. */
 export function isWaiting(t: Transcript): boolean {
-  return t.turn !== null && !t.turn.received;
+  return t.turn !== null;
 }
 
 /**

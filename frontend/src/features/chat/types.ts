@@ -27,8 +27,6 @@ export type BubbleOf<K extends BubbleType> = Extract<Bubble, { type: K }>;
 
 /** Which bubbles the answer being streamed grows next. */
 export type Turn = {
-  /** Whether any event arrived yet: until one does, the assistant shows as typing. */
-  received: boolean;
   textId: string | null;
   reasoningId: string | null;
   // FIFO: the backend doesn't send a call id, so this assumes tool calls resolve in the
