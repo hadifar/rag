@@ -34,7 +34,6 @@ Known gaps. None of these is addressed yet.
 * A failed title request leaves the conversation untitled. The next new chat reopens it.
 * Paging by `(updated_at, id)` can repeat a conversation across pages.
 * Deleting a user does not delete the user's checkpoint threads.
-* `langgraph.store` is unused since migration `0009` and can be dropped.
 * The whole thread goes to the LLM every turn. Long threads can exceed the context window.
 * The user sees an ungrounded draft until `AnswerRetracted` arrives.
 
