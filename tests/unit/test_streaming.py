@@ -3,6 +3,7 @@ from langgraph.types import Command
 
 from rag.domain.models import (
     AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     TextDelta,
     Todo,
@@ -89,6 +90,18 @@ def test_planning_tool_start_is_not_a_tool_call():
 def test_a_retraction_is_sent_as_its_own_event():
     event = {"event": "on_custom_event", "name": "answer_retracted", "data": {}}
     assert parse_event(event) == [AnswerRetracted()]
+
+
+def test_the_answers_check_is_sent_as_it_starts_and_with_its_verdict():
+    def check(data: dict) -> dict:
+        return {"event": "on_custom_event", "name": "answer_verification", "data": data}
+
+    assert parse_event(check({"status": "pending"})) == [
+        AnswerVerified(status="pending")
+    ]
+    assert parse_event(check({"status": "done", "grounded": False})) == [
+        AnswerVerified(status="done", grounded=False)
+    ]
 
 
 def test_other_custom_events_are_not_streamed():

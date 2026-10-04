@@ -42,7 +42,7 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 2. `to_stream_event` (`rag/api/schema/agent.py`) turns them into API models.
 3. `applyEvent` (`frontend/src/features/chat/model/transcript.ts`) turns them into chat bubbles.
 
-Event types: `text`, `reasoning`, `tool`, `todos`, `retracted`, `references`. History replays the stored events through the same `applyEvent`.
+Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `retracted`, `references`. History replays the stored events through the same `applyEvent`.
 
 ## Errors
 

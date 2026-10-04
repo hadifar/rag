@@ -11,7 +11,7 @@ export function emptyTranscript(): Transcript {
 }
 
 function openTurn(): Turn {
-  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null };
+  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null, verificationId: null };
 }
 
 /** A working copy that the functions below edit in place before handing it back. */
@@ -49,8 +49,9 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * One streamed event into the answer's bubbles: text deltas grow a single assistant
  * bubble, reasoning deltas a single reasoning bubble (until the model answers or calls a
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
- * in place each time the agent updates it, and references get their own. A retracted
- * answer's bubble is removed; its revision starts a new one.
+ * in place each time the agent updates it, the answer's check is a bubble filled in with
+ * its verdict, and references get their own. A retracted answer's bubble is removed; its
+ * revision starts a new one.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
   const t = draft(transcript);
@@ -96,6 +97,18 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
         turn.textId = null;
       } else {
         edit(t, turn.todosId, 'todos', () => content);
+      }
+      break;
+    }
+    case 'verification': {
+      const { type, ...content } = event;
+      // Unlike a tool call, this leaves `textId` alone: the check is of the answer above
+      // it, which a retraction that follows must still be able to remove.
+      if (content.status === 'pending') {
+        turn.verificationId = push(t, { type, content });
+      } else if (turn.verificationId !== null) {
+        edit(t, turn.verificationId, 'verification', () => content);
+        turn.verificationId = null;
       }
       break;
     }

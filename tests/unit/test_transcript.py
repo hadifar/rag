@@ -1,5 +1,6 @@
 from rag.domain.models import (
     AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
@@ -50,6 +51,18 @@ def test_a_retraction_drops_the_answer_since_the_last_tool_call() -> None:
         AnswerRetracted(),
         TextDelta("revised"),
     ) == [TextDelta("Searching."), done, ReasoningDelta("So"), TextDelta("revised")]
+
+
+def test_a_rejected_answers_verdict_stays_and_the_revision_follows_it() -> None:
+    rejected = AnswerVerified(status="done", grounded=False)
+
+    assert _built(
+        TextDelta("wrong"),
+        AnswerVerified(status="pending"),
+        rejected,
+        AnswerRetracted(),
+        TextDelta("revised"),
+    ) == [AnswerVerified(status="pending"), rejected, TextDelta("revised")]
 
 
 def test_a_retraction_stops_at_the_plan_too() -> None:

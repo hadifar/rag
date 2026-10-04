@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessageChunk, ToolMessage
 
 from rag.domain.models import (
     AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
@@ -22,7 +23,9 @@ _USER_FACING_NODE = "model"
 # as the plan itself; it returns a Command whose state update holds the new todos.
 _PLANNING_TOOL = "write_todos"
 
-# Dispatched (as a custom event) by a guard that rejects the answer it just streamed.
+# Dispatched (as custom events) by the guard that checks the answer it just streamed:
+# the check starting and its verdict, then a retraction if it rejects the answer.
+ANSWER_VERIFICATION = "answer_verification"
 ANSWER_RETRACTED = "answer_retracted"
 
 
@@ -38,9 +41,21 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     if kind in ("on_tool_start", "on_tool_end"):
         return _tool_events(raw_event)
 
-    if kind == "on_custom_event" and raw_event["name"] == ANSWER_RETRACTED:
-        return [AnswerRetracted()]
+    if kind == "on_custom_event":
+        return _guard_events(raw_event)
 
+    return []
+
+
+def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
+    """What the groundedness guard dispatched about the answer: its check, then a
+    retraction if it rejected it. Other custom events aren't streamed.
+    """
+    name, data = raw_event["name"], raw_event["data"]
+    if name == ANSWER_VERIFICATION:
+        return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
+    if name == ANSWER_RETRACTED:
+        return [AnswerRetracted()]
     return []
 
 

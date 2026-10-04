@@ -17,7 +17,10 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.agent_service.streaming import ANSWER_RETRACTED
+from rag.services.agent_service.streaming import (
+    ANSWER_RETRACTED,
+    ANSWER_VERIFICATION,
+)
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
@@ -35,11 +38,12 @@ def _collect_context(
     )
 
 
-async def is_grounded(
-    verify: Classify,
-    messages: Sequence[BaseMessage],
-    unverified_tools: frozenset[str] = frozenset(),
-) -> bool:
+def _verification_inputs(
+    messages: Sequence[BaseMessage], unverified_tools: frozenset[str]
+) -> tuple[str, str] | None:
+    """The turn's retrieved context and the answer to check against it; None if there's
+    nothing to check.
+    """
     context = _collect_context(messages, unverified_tools)
     answer = messages[-1]
 
@@ -47,9 +51,12 @@ async def is_grounded(
     # reasoning included, and only the answer's text is to be verified.
     if not context or not isinstance(answer, AIMessage) or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
-        return True
+        return None
+    return context, answer.text
 
-    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer.text))
+
+async def is_grounded(verify: Classify, context: str, answer: str) -> bool:
+    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer))
     return "UNGROUNDED" not in verdict.upper()
 
 
@@ -93,7 +100,17 @@ class GroundednessGuard(AgentMiddleware):
         if revisions >= self._max_revisions:
             return None
 
-        if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
+        inputs = _verification_inputs(state["messages"], self._unverified_tools)
+        if inputs is None:
+            return None
+
+        # The check is a whole LLM call after the answer streamed: the client shows it.
+        await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
+        grounded = await is_grounded(self._verifier, *inputs)
+        await adispatch_custom_event(
+            ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
+        )
+        if grounded:
             return None
 
         # The answer was already streamed: the client drops it before its revision.

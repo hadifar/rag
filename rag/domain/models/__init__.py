@@ -17,6 +17,7 @@ from rag.domain.models.agent.middleware import (
 )
 from rag.domain.models.agent.stream import (
     AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
@@ -54,6 +55,7 @@ __all__ = [
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
     "AnswerRetracted",
+    "AnswerVerified",
     "AssistantMessage",
     "Capability",
     "Chunk",

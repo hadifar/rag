@@ -21,7 +21,9 @@ sequenceDiagram
     A-->>CS: stream events
     CS-->>R: events
     R-->>UI: SSE data: {type, ...}
+    A-->>UI: verification pending
     A->>LLM: GroundednessGuard check
+    A-->>UI: verification done (grounded or not)
     opt ungrounded
         A-->>UI: retracted, then revised answer
     end

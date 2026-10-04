@@ -510,7 +510,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["RetractedEvent"] | components["schemas"]["ReferencesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["RetractedEvent"] | components["schemas"]["ReferencesEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
@@ -613,6 +613,25 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * VerificationEvent
+         * @description The answer checked against what the turn's searches found: `pending` while the
+         *     check runs, then `done` with whether the answer is supported by them.
+         */
+        VerificationEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "verification";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done";
+            /** Grounded */
+            grounded?: boolean | null;
         };
     };
     responses: never;

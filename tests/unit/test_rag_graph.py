@@ -23,6 +23,7 @@ from pydantic import Field
 
 from rag.domain.models import (
     AnswerRetracted,
+    AnswerVerified,
     Chunk,
     OffTopicMiddleware,
     ReferencesReady,
@@ -282,6 +283,37 @@ async def test_a_rejected_answer_is_retracted_before_its_revision_streams() -> N
 
     texts = [e for e in events if isinstance(e, TextDelta | AnswerRetracted)]
     assert texts == [TextDelta("wrong"), AnswerRetracted(), TextDelta("revised")]
+
+
+async def test_the_answers_check_is_streamed_between_the_answer_and_its_retraction() -> (
+    None
+):
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
+        groundedness_verdicts=["UNGROUNDED"],
+    )
+
+    events = await _Chat(model).send("first")
+
+    # max_revisions is 1: the revision isn't checked again.
+    answer = [
+        e for e in events if isinstance(e, TextDelta | AnswerVerified | AnswerRetracted)
+    ]
+    assert answer == [
+        TextDelta("wrong"),
+        AnswerVerified(status="pending"),
+        AnswerVerified(status="done", grounded=False),
+        AnswerRetracted(),
+        TextDelta("revised"),
+    ]
+
+
+async def test_an_answer_with_nothing_searched_is_not_checked() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    events = await _Chat(model).send("hello")
+
+    assert not any(isinstance(e, AnswerVerified) for e in events)
 
 
 async def test_a_grounded_answer_is_never_retracted() -> None:

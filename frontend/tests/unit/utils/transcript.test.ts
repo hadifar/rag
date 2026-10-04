@@ -123,6 +123,30 @@ describe('applyEvent', () => {
     expect(new Set(t.bubbles.map((b) => b.id)).size).toBe(3);
   });
 
+  it('fills in the verification bubble with its verdict', () => {
+    expect(bubbles([
+      { type: 'text', text: 'It costs 10.' },
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: true },
+    ])).toEqual([
+      { type: 'text', content: { text: 'It costs 10.' } },
+      { type: 'verification', content: { status: 'done', grounded: true } },
+    ]);
+  });
+
+  it('removes a rejected answer from above its verification, and revises below it', () => {
+    expect(bubbles([
+      { type: 'text', text: 'wrong' },
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: false },
+      { type: 'retracted' },
+      { type: 'text', text: 'revised' },
+    ])).toEqual([
+      { type: 'verification', content: { status: 'done', grounded: false } },
+      { type: 'text', content: { text: 'revised' } },
+    ]);
+  });
+
   it('ignores a retraction with no answer to remove', () => {
     expect(bubbles([
       { type: 'reasoning', text: 'Thinking' },
