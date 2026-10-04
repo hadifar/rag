@@ -9,7 +9,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 QUESTIONS: list[dict[str, Any]] = [
     {
-        "query": "latest release note release notes newest release",
+        "query": "latest release note Atlasflow release notes newest release",
         "expected": ["26-release-notes-2026-01.md"],
     }
 ]
