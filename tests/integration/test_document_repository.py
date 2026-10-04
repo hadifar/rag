@@ -1,8 +1,7 @@
-"""Hybrid retrieval and storage correctness against real Postgres (pgvector +
-full-text), over the fixture knowledge base. Tests that assert on embedding
-semantics/ranking use `seeded_kb` (real embeddings); storage/SQL-plumbing tests
-use `fake_kb` (deterministic, no network) since they don't care about vector
-quality.
+"""Vector retrieval and storage correctness against real Postgres (pgvector), over
+the fixture knowledge base. Tests that assert on embedding semantics/ranking use
+`seeded_kb` (real embeddings); storage/SQL-plumbing tests use `fake_kb`
+(deterministic, no network) since they don't care about vector quality.
 """
 
 from pathlib import Path
@@ -26,13 +25,6 @@ async def test_semantic_query_finds_the_document_without_shared_keywords(
 ) -> None:
     sources = await _top_sources(seeded_kb, "how expensive is the analytics extension?")
     assert sources[0] == "it-plans-and-pricing.md"
-
-
-async def test_exact_error_code_is_found_by_the_keyword_side(
-    seeded_kb: DocumentRepository,
-) -> None:
-    sources = await _top_sources(seeded_kb, "QX-7731")
-    assert sources[0] == "it-sso-troubleshooting.md"
 
 
 async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> None:

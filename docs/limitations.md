@@ -15,9 +15,8 @@ Known gaps. None of these is addressed yet.
 
 ## Retrieval
 
-* Full-text search uses the `english` configuration and `ts_rank_cd`, not BM25.
+* Vector search only. No keyword search, so exact terms such as error codes can be missed. The `content_tsv` column and its GIN index are still kept up to date but are not queried.
 * No reranker.
-* Reciprocal rank fusion uses `k=5`, untuned.
 * No retrieval evaluation set.
 
 ## Guardrails

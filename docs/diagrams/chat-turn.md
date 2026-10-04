@@ -16,7 +16,7 @@ sequenceDiagram
     A->>LLM: TopicalGuard classify
     A->>LLM: model call
     A->>KB: search_kb
-    KB->>DB: hybrid search
+    KB->>DB: vector search
     A->>LLM: model call (answer)
     A-->>CS: stream events
     CS-->>R: events

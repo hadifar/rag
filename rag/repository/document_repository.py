@@ -8,32 +8,11 @@ from psycopg_pool import AsyncConnectionPool
 from rag.domain.models import Chunk, IndexedDocument
 from rag.domain.ports import EmbeddingsPort
 
-RRF_K = 5  # reciprocal-rank-fusion constant when merging vector and full-text results
-
-# One round trip: the k nearest chunks by cosine distance (HNSW index) and the k best
-# full-text matches (GIN index), fused by reciprocal rank. A chunk found by both lists
-# scores both terms; one found by only one list scores just that term.
-_HYBRID_SEARCH = """
-WITH dense AS (
-    SELECT id, row_number() OVER (ORDER BY embedding <=> %(embedding)s::vector) AS rank
-    FROM chunks
-    ORDER BY embedding <=> %(embedding)s::vector
-    LIMIT %(k)s
-),
-sparse AS (
-    SELECT id, row_number() OVER (ORDER BY ts_rank_cd(content_tsv, query) DESC) AS rank
-    FROM chunks, websearch_to_tsquery('english', %(query)s) AS query
-    WHERE content_tsv @@ query
-    ORDER BY ts_rank_cd(content_tsv, query) DESC
-    LIMIT %(k)s
-)
-SELECT c.content, c.metadata,
-       COALESCE(1.0 / (%(rrf_k)s + dense.rank), 0)
-     + COALESCE(1.0 / (%(rrf_k)s + sparse.rank), 0) AS score
-FROM dense
-FULL OUTER JOIN sparse USING (id)
-JOIN chunks AS c USING (id)
-ORDER BY score DESC
+# The k nearest chunks by cosine distance (HNSW index), scored as cosine similarity.
+_VECTOR_SEARCH = """
+SELECT content, metadata, 1 - (embedding <=> %(embedding)s::vector) AS score
+FROM chunks
+ORDER BY embedding <=> %(embedding)s::vector
 LIMIT %(k)s
 """
 
@@ -49,8 +28,8 @@ class DocumentRepository:
     """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort for
     reads, DocumentIndexPort for ingestion).
 
-    Search is hybrid — pgvector cosine similarity plus Postgres full-text — fused by
-    reciprocal rank. Embeddings are computed client-side by `embeddings`.
+    Search is pgvector cosine similarity. Embeddings are computed client-side by
+    `embeddings`.
     """
 
     def __init__(
@@ -119,13 +98,8 @@ class DocumentRepository:
         embedding = await self._embeddings.aembed_query(query)
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                _HYBRID_SEARCH,
-                {
-                    "embedding": _to_vector_literal(embedding),
-                    "query": query,
-                    "k": k,
-                    "rrf_k": RRF_K,
-                },
+                _VECTOR_SEARCH,
+                {"embedding": _to_vector_literal(embedding), "k": k},
             )
             rows = await cur.fetchall()
         return [
