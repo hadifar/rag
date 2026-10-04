@@ -8,19 +8,29 @@ from psycopg_pool import AsyncConnectionPool
 from rag.domain.models import Chunk, IndexedDocument
 from rag.domain.ports import EmbeddingsPort
 
-# The k nearest chunks by cosine distance (HNSW index), scored as cosine similarity.
+# The k best chunks by a weighted sum of two cosine similarities: the query against
+# the chunk's summary, and against its text. A chunk without a summary embedding
+# uses its text for both. A full scan (an HNSW index can't order by a sum), which is
+# fine at knowledge-base size.
 _VECTOR_SEARCH = """
-SELECT content, metadata, 1 - (embedding <=> %(embedding)s::vector) AS score
-FROM chunks
-ORDER BY embedding <=> %(embedding)s::vector
+SELECT content, metadata, score
+FROM (
+    SELECT content, metadata,
+        (1 - %(summary_weight)s::float8) * (1 - (embedding <=> query.v))
+        + %(summary_weight)s::float8
+            * (1 - (COALESCE(summary_embedding, embedding) <=> query.v)) AS score
+    FROM chunks, (SELECT %(embedding)s::vector AS v) AS query
+) AS scored
+ORDER BY score DESC
 LIMIT %(k)s
 """
 
 _INSERT_DOCUMENT = "INSERT INTO documents (source_id, content_hash) VALUES (%s, %s)"
 
 _INSERT_CHUNK = """
-INSERT INTO chunks (id, source_id, chunk_index, content, metadata, embedding)
-VALUES (%s, %s, %s, %s, %s, %s::vector)
+INSERT INTO chunks
+    (id, source_id, chunk_index, content, metadata, embedding, summary_embedding)
+VALUES (%s, %s, %s, %s, %s, %s::vector, %s::vector)
 """
 
 
@@ -28,15 +38,21 @@ class DocumentRepository:
     """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort for
     reads, DocumentIndexPort for ingestion).
 
-    Search is pgvector cosine similarity. Embeddings are computed client-side by
-    `embeddings`.
+    Search is pgvector cosine similarity against both a chunk's text and its
+    `summary` metadata, `summary_weight` being the summary's share of the score.
+    Embeddings are computed client-side by `embeddings`.
     """
 
     def __init__(
-        self, pool: AsyncConnectionPool[AsyncConnection], embeddings: EmbeddingsPort
+        self,
+        pool: AsyncConnectionPool[AsyncConnection],
+        embeddings: EmbeddingsPort,
+        *,
+        summary_weight: float,
     ):
         self._pool = pool
         self._embeddings = embeddings
+        self._summary_weight = summary_weight
 
     async def alist_content_hashes(self) -> dict[str, str]:
         async with self._pool.connection() as conn:
@@ -54,11 +70,11 @@ class DocumentRepository:
             return
 
         chunks = [chunk for document in documents for chunk in document.chunks]
-        vectors = (
-            await self._embeddings.aembed_documents([chunk.text for chunk in chunks])
-            if chunks
-            else []
-        )
+        summaries = [str(chunk.metadata.get("summary", "")) for chunk in chunks]
+        # One embedding call: every chunk's text, then the summaries that exist.
+        texts = [chunk.text for chunk in chunks] + [s for s in summaries if s]
+        vectors = await self._embeddings.aembed_documents(texts) if texts else []
+        summary_vectors = iter(vectors[len(chunks) :])
         chunk_rows = [
             (
                 chunk.id,
@@ -67,8 +83,11 @@ class DocumentRepository:
                 chunk.text,
                 Jsonb(chunk.metadata),
                 _to_vector_literal(vector),
+                _to_vector_literal(next(summary_vectors)) if summary else None,
             )
-            for chunk, vector in zip(chunks, vectors, strict=True)
+            for chunk, summary, vector in zip(
+                chunks, summaries, vectors[: len(chunks)], strict=True
+            )
         ]
         stale = [*removed, *(document.source_id for document in documents)]
 
@@ -99,7 +118,11 @@ class DocumentRepository:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 _VECTOR_SEARCH,
-                {"embedding": _to_vector_literal(embedding), "k": k},
+                {
+                    "embedding": _to_vector_literal(embedding),
+                    "summary_weight": self._summary_weight,
+                    "k": k,
+                },
             )
             rows = await cur.fetchall()
         return [

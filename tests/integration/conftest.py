@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from rag.adapters.kb_archive_store import LocalArchiveStore
 from rag.adapters.lang_llm_client import build_embeddings
-from rag.config import Settings
+from rag.config import RetrievalConfig, Settings
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -77,7 +77,9 @@ async def fake_kb(
     exercise storage/SQL correctness (hash tracking, cascades, replace/remove) and
     don't assert on embedding semantics or ranking quality — use `seeded_kb` for those.
     """
-    repository = DocumentRepository(db_pool, FakeEmbeddings())
+    repository = DocumentRepository(
+        db_pool, FakeEmbeddings(), summary_weight=RetrievalConfig().SUMMARY_WEIGHT
+    )
     await ingestion_service(repository, db_pool, tmp_path).ingest(
         load_directory(FIXTURE_KB), remove_missing=False
     )
@@ -103,7 +105,11 @@ async def seeded_kb(
     async with AsyncConnectionPool[AsyncConnection](
         integration_settings.DATABASE_URL.get_secret_value(), open=False
     ) as pool:
-        repository = DocumentRepository(pool, build_embeddings(integration_settings))
+        repository = DocumentRepository(
+            pool,
+            build_embeddings(integration_settings),
+            summary_weight=integration_settings.RETRIEVAL.SUMMARY_WEIGHT,
+        )
         await ingestion_service(
             repository, pool, tmp_path_factory.mktemp("seeded_kb")
         ).ingest(load_directory(FIXTURE_KB), remove_missing=False)

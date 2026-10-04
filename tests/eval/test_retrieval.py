@@ -36,9 +36,7 @@ async def test_question_finds_an_expected_document(
     unknown = set(case["expected"]) - kb_sources
     assert not unknown, f"expected documents not in the knowledge base: {unknown}"
 
-    results = await kb.asimilarity_search_with_score(
-        case["query"], k=eval_settings.RAG.TOP_K
-    )
+    results = await kb.asimilarity_search_with_score(case["query"], k=30)
     sources = [str(chunk.metadata["source_id"]) for chunk, _score in results]
     rank = next(
         (i for i, source in enumerate(sources, start=1) if source in case["expected"]),

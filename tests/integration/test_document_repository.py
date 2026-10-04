@@ -80,6 +80,36 @@ async def test_replacing_a_document_drops_its_old_chunks(
     assert (await fake_kb.alist_content_hashes())[source_id] == "new-hash"
 
 
+async def test_only_chunks_with_a_summary_store_a_summary_embedding(
+    fake_kb: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+) -> None:
+    source_id = "it-plans-and-pricing.md"
+    chunk = Chunk(
+        id=f"{source_id}::0",
+        text="No headings at all.",
+        metadata={"source_id": source_id, "chunk_index": 0},
+    )
+    await fake_kb.areplace_documents(
+        [IndexedDocument(source_id, "0" * 64, [chunk])], removed=[]
+    )
+
+    async with db_pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT source_id, summary_embedding IS NOT NULL FROM chunks "
+            "WHERE source_id LIKE 'it-%' ORDER BY source_id"
+        )
+        stored = dict(await cur.fetchall())
+    assert stored == {
+        "it-office-plants.md": True,
+        "it-plans-and-pricing.md": False,
+        "it-sso-troubleshooting.md": True,
+    }
+    # Scored on its text alone, it's still found.
+    results = await fake_kb.asimilarity_search_with_score("anything", k=1000)
+    assert source_id in {doc.metadata["source_id"] for doc, _score in results}
+
+
 async def test_removing_a_document_deletes_it_and_its_chunks(
     fake_kb: DocumentRepository,
 ) -> None:

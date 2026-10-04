@@ -16,6 +16,8 @@ Known gaps. None of these is addressed yet.
 ## Retrieval
 
 * Vector search only. No keyword search, so exact terms such as error codes can be missed. The `content_tsv` column and its GIN index are still kept up to date but are not queried.
+* Search scans every chunk: the score adds the text and summary similarities (`RETRIEVAL__SUMMARY_WEIGHT`), which the HNSW index on `embedding` can't serve.
+* A document's summary is parsed from its own markdown: the `# title`, the paragraph under it, and the other headings. A file without a `# title` gets no summary and is scored on its text alone.
 * No reranker.
 * No retrieval evaluation set.
 

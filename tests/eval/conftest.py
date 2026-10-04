@@ -44,7 +44,11 @@ async def kb(eval_settings: Settings) -> AsyncGenerator[DocumentRepository]:
     async with AsyncConnectionPool[AsyncConnection](
         eval_settings.DATABASE_URL.get_secret_value(), open=False
     ) as pool:
-        yield DocumentRepository(pool, build_embeddings(eval_settings))
+        yield DocumentRepository(
+            pool,
+            build_embeddings(eval_settings),
+            summary_weight=eval_settings.RETRIEVAL.SUMMARY_WEIGHT,
+        )
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

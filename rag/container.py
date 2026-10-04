@@ -47,7 +47,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
     ):
-        vector_store = DocumentRepository(db_pool, build_embeddings(settings))
+        vector_store = DocumentRepository(
+            db_pool,
+            build_embeddings(settings),
+            summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
+        )
         retrieval_service = RetrievalService(
             vector_store=vector_store, top_k=settings.RAG.TOP_K
         )
