@@ -3,7 +3,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, RootModel
 
 from rag.domain.models import (
-    AnswerRetracted,
     AnswerVerified,
     ReasoningDelta,
     ReferencesReady,
@@ -62,14 +61,6 @@ class VerificationEvent(BaseModel):
     grounded: bool | None = None
 
 
-class RetractedEvent(BaseModel):
-    """The answer text sent since the last tool call or plan was rejected (unsupported
-    by the searches) and is being rewritten: drop it. Never in a saved conversation.
-    """
-
-    type: Literal["retracted"] = "retracted"
-
-
 class ReferencesEvent(BaseModel):
     """The turn's deduplicated references, once it's done. Only sent if the turn searched."""
 
@@ -85,7 +76,6 @@ class StreamEventResponse(
             | ToolEvent
             | TodosEvent
             | VerificationEvent
-            | RetractedEvent
             | ReferencesEvent,
             Field(discriminator="type"),
         ]
@@ -108,7 +98,6 @@ def _payload(
     | ToolEvent
     | TodosEvent
     | VerificationEvent
-    | RetractedEvent
     | ReferencesEvent
 ):
     match event:
@@ -118,21 +107,19 @@ def _payload(
             return ReasoningEvent(text=text)
         case ToolCall() | TodosUpdated():
             return _tool_payload(event)
-        case AnswerVerified() | AnswerRetracted() | ReferencesReady():
+        case AnswerVerified() | ReferencesReady():
             return _turn_payload(event)
 
 
 def _turn_payload(
-    event: AnswerVerified | AnswerRetracted | ReferencesReady,
-) -> VerificationEvent | RetractedEvent | ReferencesEvent:
-    """What becomes of the turn's answer: checked against the searches, a draft
-    retracted, or the references cited.
+    event: AnswerVerified | ReferencesReady,
+) -> VerificationEvent | ReferencesEvent:
+    """What becomes of the turn's answer: checked against the searches, or the
+    references cited.
     """
     match event:
         case AnswerVerified(status=status, grounded=grounded):
             return VerificationEvent(status=status, grounded=grounded)
-        case AnswerRetracted():
-            return RetractedEvent()
         case ReferencesReady(references=references):
             return ReferencesEvent(references=references)
 

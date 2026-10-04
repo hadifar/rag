@@ -2,14 +2,15 @@ from langchain_core.messages import AIMessageChunk
 from langgraph.types import Command
 
 from rag.domain.models import (
-    AnswerRetracted,
     AnswerVerified,
     ReasoningDelta,
+    StreamEvent,
     TextDelta,
     Todo,
     TodosUpdated,
+    ToolCall,
 )
-from rag.services.agent_service.streaming import parse_event
+from rag.services.agent_service.streaming import AnswerGate, parse_event
 
 
 def _model_stream(chunk: AIMessageChunk, node: str = "model") -> dict:
@@ -87,11 +88,6 @@ def test_planning_tool_start_is_not_a_tool_call():
     assert parse_event(event) == []
 
 
-def test_a_retraction_is_sent_as_its_own_event():
-    event = {"event": "on_custom_event", "name": "answer_retracted", "data": {}}
-    assert parse_event(event) == [AnswerRetracted()]
-
-
 def test_the_answers_check_is_sent_as_it_starts_and_with_its_verdict():
     def check(data: dict) -> dict:
         return {"event": "on_custom_event", "name": "answer_verification", "data": data}
@@ -107,3 +103,51 @@ def test_the_answers_check_is_sent_as_it_starts_and_with_its_verdict():
 def test_other_custom_events_are_not_streamed():
     event = {"event": "on_custom_event", "name": "something_else", "data": {}}
     assert parse_event(event) == []
+
+
+_SEARCH = ToolCall(name="search_kb", status="pending", query="pricing")
+_CHECKING = AnswerVerified(status="pending")
+_PASSED = AnswerVerified(status="done", grounded=True)
+_FAILED = AnswerVerified(status="done", grounded=False)
+
+
+def _gated(*events: StreamEvent) -> list[StreamEvent]:
+    gate = AnswerGate()
+    sent = [released for event in events for released in gate.feed(event)]
+    return sent + gate.flush()
+
+
+def test_text_streams_live_until_a_tool_runs():
+    gate = AnswerGate()
+    assert gate.feed(TextDelta("hi")) == [TextDelta("hi")]
+
+
+def test_an_answer_after_a_search_is_held_until_it_passes_its_check():
+    gate = AnswerGate()
+    gate.feed(_SEARCH)
+
+    assert gate.feed(TextDelta("It's 10.")) == []
+    assert gate.feed(_CHECKING) == [_CHECKING]
+    assert gate.feed(_PASSED) == [_PASSED, TextDelta("It's 10.")]
+
+
+def test_a_rejected_answer_is_never_sent_and_its_revision_is():
+    assert _gated(
+        _SEARCH, TextDelta("wrong"), _CHECKING, _FAILED, TextDelta("revised")
+    ) == [_SEARCH, _CHECKING, _FAILED, TextDelta("revised")]
+
+
+def test_held_text_is_sent_before_the_next_tool_call():
+    plan = TodosUpdated(todos=[Todo(content="Find it", status="pending")])
+
+    assert _gated(_SEARCH, TextDelta("Let me plan."), plan) == [
+        _SEARCH,
+        TextDelta("Let me plan."),
+        plan,
+    ]
+
+
+def test_reasoning_is_never_held():
+    gate = AnswerGate()
+    gate.feed(_SEARCH)
+    assert gate.feed(ReasoningDelta("So")) == [ReasoningDelta("So")]

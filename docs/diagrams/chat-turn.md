@@ -17,15 +17,18 @@ sequenceDiagram
     A->>LLM: model call
     A->>KB: search_kb
     KB->>DB: vector search
-    A->>LLM: model call (answer)
+    A->>LLM: model call (answer, held back)
     A-->>CS: stream events
     CS-->>R: events
     R-->>UI: SSE data: {type, ...}
     A-->>UI: verification pending
     A->>LLM: GroundednessGuard check
     A-->>UI: verification done (grounded or not)
-    opt ungrounded
-        A-->>UI: retracted, then revised answer
+    alt grounded
+        A-->>UI: answer
+    else ungrounded
+        A->>LLM: model call (revision)
+        A-->>UI: revised answer
     end
     A-->>UI: references
     CS->>DB: save turn to conversation_turns

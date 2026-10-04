@@ -26,7 +26,7 @@ class ConversationPage:
 @dataclass(frozen=True)
 class Turn:
     """One exchange of a conversation as the user saw it: their question, and the
-    events its answer streamed (a retracted draft left out).
+    events its answer streamed.
     """
 
     question: str

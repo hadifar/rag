@@ -18,7 +18,7 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
-from rag.services.agent_service.streaming import parse_event
+from rag.services.agent_service.streaming import AnswerGate, parse_event
 from rag.services.agent_service.turn import turn_references
 from rag.shared.resilience import or_default
 
@@ -55,6 +55,21 @@ class Agent:
     async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         config = self._config(str(ctx.conversation_id))
 
+        async for event in self._turn_events(message, ctx, config):
+            yield event
+
+        final_state = await self._graph.aget_state(config)
+        references = turn_references(final_state.values.get("messages", []))
+        if references is not None:
+            yield ReferencesReady(references=references)
+
+    async def _turn_events(
+        self, message: str, ctx: RunContext, config: RunnableConfig
+    ) -> AsyncIterator[StreamEvent]:
+        """The turn's events as the user is to see them: an answer the groundedness
+        guard checks is held back until its verdict (see `AnswerGate`).
+        """
+        gate = AnswerGate()
         async for raw_event in self._graph.astream_events(
             {"messages": [HumanMessage(content=message)]},
             config=config,
@@ -62,12 +77,10 @@ class Agent:
             version="v2",
         ):
             for event in parse_event(raw_event):
-                yield event
-
-        final_state = await self._graph.aget_state(config)
-        references = turn_references(final_state.values.get("messages", []))
-        if references is not None:
-            yield ReferencesReady(references=references)
+                for released in gate.feed(event):
+                    yield released
+        for released in gate.flush():
+            yield released
 
     async def forget(self, conversation_id: uuid.UUID) -> None:
         await self._checkpointer.adelete_thread(str(conversation_id))

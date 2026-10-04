@@ -104,54 +104,35 @@ describe('applyEvent', () => {
     ]).map((b) => b.type)).toEqual(['text', 'todos', 'text']);
   });
 
-  it('removes a retracted answer, and starts its revision in a new bubble', () => {
-    const t = applyEvents(emptyTranscript(), [
-      { type: 'tool', name: 'search', status: 'pending', query: 'pricing' },
-      { type: 'text', text: 'wro' },
-      { type: 'text', text: 'ng' },
-      { type: 'retracted' },
-      { type: 'reasoning', text: 'Again' },
-      { type: 'text', text: 'revised' },
-    ]);
-
-    expect(t.bubbles.map(({ type, content }) => ({ type, content }))).toEqual([
-      { type: 'tool', content: { name: 'search', query: 'pricing', status: 'pending' } },
-      { type: 'reasoning', content: { text: 'Again', streaming: false } },
-      { type: 'text', content: { text: 'revised' } },
-    ]);
-    // The revision's bubble is a new one, not the removed draft's.
-    expect(new Set(t.bubbles.map((b) => b.id)).size).toBe(3);
-  });
-
-  it('fills in the verification bubble with its verdict', () => {
+  it('fills in the verification bubble with its verdict, and shows the answer below it', () => {
     expect(bubbles([
-      { type: 'text', text: 'It costs 10.' },
       { type: 'verification', status: 'pending' },
       { type: 'verification', status: 'done', grounded: true },
+      { type: 'text', text: 'It costs 10.' },
     ])).toEqual([
-      { type: 'text', content: { text: 'It costs 10.' } },
       { type: 'verification', content: { status: 'done', grounded: true } },
+      { type: 'text', content: { text: 'It costs 10.' } },
     ]);
   });
 
-  it('removes a rejected answer from above its verification, and revises below it', () => {
+  it('starts a new bubble for an answer checked after earlier text', () => {
     expect(bubbles([
-      { type: 'text', text: 'wrong' },
+      { type: 'text', text: 'Let me check.' },
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: true },
+      { type: 'text', text: 'It costs 10.' },
+    ]).map((b) => b.type)).toEqual(['text', 'verification', 'text']);
+  });
+
+  it('shows a revision below the verdict that rejected the answer', () => {
+    expect(bubbles([
       { type: 'verification', status: 'pending' },
       { type: 'verification', status: 'done', grounded: false },
-      { type: 'retracted' },
       { type: 'text', text: 'revised' },
     ])).toEqual([
       { type: 'verification', content: { status: 'done', grounded: false } },
       { type: 'text', content: { text: 'revised' } },
     ]);
-  });
-
-  it('ignores a retraction with no answer to remove', () => {
-    expect(bubbles([
-      { type: 'reasoning', text: 'Thinking' },
-      { type: 'retracted' },
-    ])).toEqual([{ type: 'reasoning', content: { text: 'Thinking', streaming: false } }]);
   });
 
   it('leaves the bubbles it did not change as they were', () => {

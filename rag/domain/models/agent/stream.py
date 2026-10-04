@@ -56,15 +56,6 @@ class AnswerVerified:
 
 
 @dataclass
-class AnswerRetracted:
-    """The answer text sent since the last tool call or plan was rejected (e.g. as
-    unsupported by what the turn's searches found) and is being rewritten: drop it.
-    """
-
-    type: Literal["retracted"] = "retracted"
-
-
-@dataclass
 class ReferencesReady:
     """What the turn's tools cited (e.g. knowledge-base source ids), deduplicated; sent
     once the turn is done, and only if a tool that cites anything ran.
@@ -80,7 +71,6 @@ StreamEvent = (
     | ToolCall
     | TodosUpdated
     | AnswerVerified
-    | AnswerRetracted
     | ReferencesReady
 )
 

@@ -17,10 +17,7 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.agent_service.streaming import (
-    ANSWER_RETRACTED,
-    ANSWER_VERIFICATION,
-)
+from rag.services.agent_service.streaming import ANSWER_VERIFICATION
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
@@ -72,9 +69,10 @@ class GroundednessGuard(AgentMiddleware):
     supported, sends the model back to revise, up to `max_revisions` times per turn.
     The results of `unverified_tools` (ones about the user, not the product, e.g.
     saving a preference) aren't context to check against.
-    A rejected answer is retracted from the stream (`AnswerRetracted`). The revision
-    instruction is added to that model call only, never saved to the thread. Revisions are counted from this turn's messages, so no state carries over
-    between turns.
+    The stream holds a checked answer back until its verdict (`AnswerGate`), so a
+    rejected answer never reaches the user. The revision instruction is added to that
+    model call only, never saved to the thread. Revisions are counted from this turn's
+    messages, so no state carries over between turns.
     """
 
     def __init__(
@@ -104,18 +102,13 @@ class GroundednessGuard(AgentMiddleware):
         if inputs is None:
             return None
 
-        # The check is a whole LLM call after the answer streamed: the client shows it.
+        # The check is a whole LLM call the answer is held back for: the client shows it.
         await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
         grounded = await is_grounded(self._verifier, *inputs)
         await adispatch_custom_event(
             ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
         )
-        if grounded:
-            return None
-
-        # The answer was already streamed: the client drops it before its revision.
-        await adispatch_custom_event(ANSWER_RETRACTED, {})
-        return {"jump_to": "model"}
+        return None if grounded else {"jump_to": "model"}
 
     async def awrap_model_call(
         self,

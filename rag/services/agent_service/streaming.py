@@ -4,7 +4,6 @@ from typing import Any
 from langchain_core.messages import AIMessageChunk, ToolMessage
 
 from rag.domain.models import (
-    AnswerRetracted,
     AnswerVerified,
     ReasoningDelta,
     StreamEvent,
@@ -23,10 +22,9 @@ _USER_FACING_NODE = "model"
 # as the plan itself; it returns a Command whose state update holds the new todos.
 _PLANNING_TOOL = "write_todos"
 
-# Dispatched (as custom events) by the guard that checks the answer it just streamed:
-# the check starting and its verdict, then a retraction if it rejects the answer.
+# Dispatched (as a custom event) by the guard that checks each answer: the check
+# starting, then its verdict.
 ANSWER_VERIFICATION = "answer_verification"
-ANSWER_RETRACTED = "answer_retracted"
 
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
@@ -47,15 +45,52 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     return []
 
 
+class AnswerGate:
+    """Holds back answer text the groundedness guard may still reject, so the user never
+    sees an answer that is then taken back. Text streams live until a tool runs in the
+    turn: with nothing retrieved there is nothing to check it against. After that, each
+    model call's text is held until it is clear what it was: released before the next
+    tool call (the model was still working), after a passing verdict, or at the end of
+    the turn (an answer that wasn't checked); dropped on a failing verdict, as the guard
+    then has the model revise it. Reasoning and every other event pass straight through.
+    """
+
+    def __init__(self):
+        self._checkable = False
+        self._held: list[TextDelta] = []
+
+    def feed(self, event: StreamEvent) -> list[StreamEvent]:
+        """What to send for `event` now: none while it's held, else it and any text
+        it releases, in the order they were produced.
+        """
+        match event:
+            case TextDelta() if self._checkable:
+                self._held.append(event)
+                return []
+            case ToolCall() | TodosUpdated():
+                self._checkable = True
+                return [*self.flush(), event]
+            case AnswerVerified(status="done", grounded=False):
+                self._held.clear()
+                return [event]
+            case AnswerVerified(status="done"):
+                return [event, *self.flush()]
+            case _:
+                return [event]
+
+    def flush(self) -> list[StreamEvent]:
+        """The held text, released; call it once the turn ends."""
+        held, self._held = self._held, []
+        return list(held)
+
+
 def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
-    """What the groundedness guard dispatched about the answer: its check, then a
-    retraction if it rejected it. Other custom events aren't streamed.
+    """What the groundedness guard dispatched about the answer: its check starting, then
+    its verdict. Other custom events aren't streamed.
     """
     name, data = raw_event["name"], raw_event["data"]
     if name == ANSWER_VERIFICATION:
         return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
-    if name == ANSWER_RETRACTED:
-        return [AnswerRetracted()]
     return []
 
 

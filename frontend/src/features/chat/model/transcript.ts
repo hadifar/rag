@@ -50,8 +50,8 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * bubble, reasoning deltas a single reasoning bubble (until the model answers or calls a
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
  * in place each time the agent updates it, the answer's check is a bubble filled in with
- * its verdict, and references get their own. A retracted answer's bubble is removed; its
- * revision starts a new one.
+ * its verdict, and references get their own. A checked answer arrives only after its
+ * verdict, so it follows the verification bubble.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
   const t = draft(transcript);
@@ -102,25 +102,16 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
     }
     case 'verification': {
       const { type, ...content } = event;
-      // Unlike a tool call, this leaves `textId` alone: the check is of the answer above
-      // it, which a retraction that follows must still be able to remove.
       if (content.status === 'pending') {
         turn.verificationId = push(t, { type, content });
+        // Like a tool call: the checked answer is sent after its verdict, below it.
+        turn.textId = null;
       } else if (turn.verificationId !== null) {
         edit(t, turn.verificationId, 'verification', () => content);
         turn.verificationId = null;
       }
       break;
     }
-    case 'retracted':
-      // The answer streamed since the last tool call or plan was rejected (unsupported by
-      // the searches): drop it before its revision streams.
-      if (turn.textId !== null) {
-        const textId = turn.textId;
-        t.bubbles = t.bubbles.filter((b) => b.id !== textId);
-      }
-      turn.textId = null;
-      break;
     case 'references':
       // Sent only when the answer searched; an empty list still gets its bubble.
       push(t, { type: 'references', content: { references: event.references } });

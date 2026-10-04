@@ -32,7 +32,7 @@ Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/cha
 
 * `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/graphs/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
 * `TopicalGuard` classifies each user message. Off-topic: it adds a decline instruction and keeps only `kind="user"` tools.
-* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `RAG__MAX_REVISIONS` times.
+* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `RAG__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 * `CapabilityInstructions` adds each capability's instructions on every model call.
 * A `Capability` gives the agent a feature: tools plus instructions. The owning service creates it. `agent_service` knows no feature by name.
 
@@ -44,7 +44,7 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 2. `to_stream_event` (`rag/api/schema/agent.py`) turns them into API models.
 3. `applyEvent` (`frontend/src/features/chat/model/transcript.ts`) turns them into chat bubbles.
 
-Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `retracted`, `references`. History replays the stored events through the same `applyEvent`.
+Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `references`. History replays the stored events through the same `applyEvent`.
 
 ## Errors
 

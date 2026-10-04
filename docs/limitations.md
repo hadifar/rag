@@ -27,6 +27,7 @@ Known gaps. None of these is addressed yet.
 * `TopicalGuard` reads only the latest message.
 * `GroundednessGuard` passes an answer with no `search_kb` call.
 * Past `RAG__MAX_REVISIONS`, an ungrounded answer ships.
+* An answer after any tool call doesn't stream: it shows in one piece after the check.
 * Both guards parse free text with a substring check.
 * Saved preferences enter the system prompt in the user's own words.
 
@@ -36,7 +37,6 @@ Known gaps. None of these is addressed yet.
 * Paging by `(updated_at, id)` can repeat a conversation across pages.
 * Deleting a user does not delete the user's checkpoint threads.
 * The whole thread goes to the LLM every turn. Long threads can exceed the context window.
-* The user sees an ungrounded draft until `AnswerRetracted` arrives.
 
 ## Frontend
 
