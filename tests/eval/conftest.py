@@ -3,12 +3,17 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from rag.adapters.lang_llm_client import build_embeddings
+from rag.adapters.lang_llm_client import build_embeddings, build_llm
 from rag.config import Settings
 from rag.repository.document_repository import DocumentRepository
+from rag.services.agent_service.service import AgentService
+from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
+from rag.services.retrieval_service.service import RetrievalService
 
 EVAL_DIR = Path(__file__).parent
 
@@ -51,6 +56,31 @@ async def kb(eval_settings: Settings) -> AsyncGenerator[DocumentRepository]:
         )
 
 
+def _no_tracing(name: str | None) -> RunnableConfig:
+    return {}
+
+
+@pytest.fixture(scope="session")
+def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
+    """The app's search over `kb`, reranked as `RETRIEVAL__RERANK` says, as in the
+    container. The reranker's one-shot LLM calls need no memory and no tracing.
+    """
+    reranker = (
+        LlmReranker(
+            AgentService(
+                build_llm(eval_settings),
+                InMemorySaver(),
+                _no_tracing,
+                retry_attempts=eval_settings.LLM.RETRY_ATTEMPTS,
+            ),
+            attempts=eval_settings.LLM.RETRY_ATTEMPTS,
+        )
+        if eval_settings.RETRIEVAL.RERANK
+        else NoReranker()
+    )
+    return RetrievalService(kb, reranker, top_k=eval_settings.RAG.TOP_K)
+
+
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def kb_sources(kb: DocumentRepository) -> set[str]:
     """The `source_id`s ingested into the knowledge base."""
@@ -63,7 +93,11 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     hits = [rank for rank in RANKS if rank is not None]
     recall = len(hits) / len(RANKS)
     mrr = sum(1 / rank for rank in hits) / len(RANKS)
+    settings = Settings()  # pyright: ignore[reportCallIssue] — fields come from .env
     terminalreporter.section("retrieval eval")
+    terminalreporter.write_line(
+        f"k={settings.RAG.TOP_K}  rerank={settings.RETRIEVAL.RERANK}"
+    )
     terminalreporter.write_line(f"questions: {len(RANKS)}")
     terminalreporter.write_line(f"recall@k:  {recall:.2f}")
     terminalreporter.write_line(f"MRR:       {mrr:.2f}")
