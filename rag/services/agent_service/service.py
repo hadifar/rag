@@ -39,21 +39,21 @@ class Agent:
         self,
         graph: CompiledStateGraph,
         checkpointer: BaseCheckpointSaver,
-        trace_config: Callable[[str | None], RunnableConfig],
+        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
     ):
         self._graph = graph
         self._checkpointer = checkpointer
         self._trace_config = trace_config
 
-    def _config(self, thread_id: str) -> RunnableConfig:
+    def _config(self, ctx: RunContext) -> RunnableConfig:
         return {
-            "configurable": {"thread_id": thread_id},
+            "configurable": {"thread_id": str(ctx.conversation_id)},
             "recursion_limit": RECURSION_LIMIT,
-            **self._trace_config("chat"),
+            **self._trace_config("chat", ctx),
         }
 
     async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        config = self._config(str(ctx.conversation_id))
+        config = self._config(ctx)
 
         async for event in self._turn_events(message, ctx, config):
             yield event
@@ -95,7 +95,7 @@ class AgentService:
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
-        trace_config: Callable[[str | None], RunnableConfig],
+        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
@@ -111,13 +111,22 @@ class AgentService:
         return (await llm.ainvoke(prompt)).text
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class)"""
         llm = self._llm.with_structured_output(schema).with_retry(
             stop_after_attempt=attempts
         )
-        return cast(T, await llm.ainvoke(prompt))
+        # Its own trace only if named: inside an agent's run, a config of its own would
+        # cut the call from the run's trace.
+        config = self._trace_config(trace, ctx) if trace is not None else None
+        return cast(T, await llm.ainvoke(prompt, config=config))
 
     def create_agent(self, spec: AgentSpec) -> Agent:
         """A chat agent built as `spec` describes; raises ValueError if two of its

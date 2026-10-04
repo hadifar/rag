@@ -149,7 +149,7 @@ def _answer(text: str) -> AIMessage:
     return AIMessage(content=text)
 
 
-def _no_tracing(name: str | None) -> RunnableConfig:
+def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
     return {}
 
 

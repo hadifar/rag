@@ -257,7 +257,13 @@ class StubGeneration:
         return self.reply
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})

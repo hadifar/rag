@@ -10,6 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from rag.adapters.lang_llm_client import build_embeddings, build_llm
 from rag.config import Settings
+from rag.domain.models import RunContext
 from rag.repository.document_repository import DocumentRepository
 from rag.services.agent_service.service import AgentService
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
@@ -56,7 +57,7 @@ async def kb(eval_settings: Settings) -> AsyncGenerator[DocumentRepository]:
         )
 
 
-def _no_tracing(name: str | None) -> RunnableConfig:
+def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
     return {}
 
 

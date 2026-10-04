@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentSpec, Chunk
+from rag.domain.models import AgentSpec, Chunk, RunContext
 from rag.domain.ports import ChatAgentPort
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
@@ -23,7 +23,13 @@ class _ScoringAgent:
         self.prompts: list[str] = []
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         self.prompts.append(prompt)
         if self.error is not None:
