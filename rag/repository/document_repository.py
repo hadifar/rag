@@ -8,20 +8,57 @@ from psycopg_pool import AsyncConnectionPool
 from rag.domain.models import Chunk, IndexedDocument
 from rag.domain.ports import EmbeddingsPort
 
-# The k best chunks by a weighted sum of two cosine similarities: the query against
-# the chunk's summary, and against its text. A chunk without a summary embedding
-# uses its text for both. A full scan (an HNSW index can't order by a sum), which is
-# fine at knowledge-base size.
-_VECTOR_SEARCH = """
+# Reciprocal rank fusion's constant: the higher, the less a top rank outweighs the
+# next ones. 60 is the value from the original paper.
+_RRF_K = 10
+
+# The k best chunks by reciprocal rank fusion of two rankings, a chunk scoring
+# 1 / (rrf_k + rank) in each it appears in:
+# * semantic: every chunk, by a weighted sum of two cosine similarities, the query
+#   against the chunk's summary and against its text. A chunk without a summary
+#   embedding uses its text for both.
+# * keyword: the chunks matching any of the query's words in `content_tsv` (all of
+#   them would miss on one word absent from the knowledge base), by ts_rank_cd. The
+#   words are stemmed once, by to_tsvector, then quoted into the tsquery as they
+#   are: to_tsquery would stem them again ('releas' to 'relea'). A query of only
+#   stopwords has no words, and this ranking is empty.
+# Both rankings are whole, not cut to a top few, so a chunk matching a word always
+# beats one matching none. A full scan (an HNSW index can't order by a sum), which
+# is fine at knowledge-base size.
+_HYBRID_SEARCH = """
+WITH query AS (
+    SELECT %(embedding)s::vector AS v,
+        (
+            SELECT string_agg('''' || replace(word, '''', '''''') || '''', ' | ')
+            FROM unnest(tsvector_to_array(to_tsvector('english', %(query)s))) AS word
+        )::tsquery AS words
+),
+semantic AS (
+    SELECT id, row_number() OVER (ORDER BY score DESC, id) AS rank
+    FROM (
+        SELECT id,
+            (1 - %(summary_weight)s::float8) * (1 - (embedding <=> query.v))
+            + %(summary_weight)s::float8
+                * (1 - (COALESCE(summary_embedding, embedding) <=> query.v)) AS score
+        FROM chunks, query
+    ) AS scored
+),
+keyword AS (
+    SELECT id,
+        row_number() OVER (ORDER BY ts_rank_cd(content_tsv, query.words) DESC, id)
+            AS rank
+    FROM chunks, query
+    WHERE content_tsv @@ query.words
+),
+fused AS (
+    SELECT id,
+        1.0 / (%(rrf_k)s + semantic.rank)
+        + COALESCE(1.0 / (%(rrf_k)s + keyword.rank), 0) AS score
+    FROM semantic LEFT JOIN keyword USING (id)
+)
 SELECT content, metadata, score
-FROM (
-    SELECT content, metadata,
-        (1 - %(summary_weight)s::float8) * (1 - (embedding <=> query.v))
-        + %(summary_weight)s::float8
-            * (1 - (COALESCE(summary_embedding, embedding) <=> query.v)) AS score
-    FROM chunks, (SELECT %(embedding)s::vector AS v) AS query
-) AS scored
-ORDER BY score DESC
+FROM fused JOIN chunks USING (id)
+ORDER BY score DESC, id
 LIMIT %(k)s
 """
 
@@ -38,9 +75,10 @@ class DocumentRepository:
     """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort for
     reads, DocumentIndexPort for ingestion).
 
-    Search is pgvector cosine similarity against both a chunk's text and its
-    `summary` metadata, `summary_weight` being the summary's share of the score.
-    Embeddings are computed client-side by `embeddings`.
+    Search is hybrid: pgvector cosine similarity against both a chunk's text and its
+    `summary` metadata (`summary_weight` being the summary's share), fused by rank
+    with a Postgres full-text match on the chunk's text. Embeddings are computed
+    client-side by `embeddings`.
     """
 
     def __init__(
@@ -117,10 +155,12 @@ class DocumentRepository:
         embedding = await self._embeddings.aembed_query(query)
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                _VECTOR_SEARCH,
+                _HYBRID_SEARCH,
                 {
+                    "query": query,
                     "embedding": _to_vector_literal(embedding),
                     "summary_weight": self._summary_weight,
+                    "rrf_k": _RRF_K,
                     "k": k,
                 },
             )

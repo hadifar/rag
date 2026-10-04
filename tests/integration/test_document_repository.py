@@ -34,6 +34,23 @@ async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> N
     assert scores == sorted(scores, reverse=True)
 
 
+async def test_keyword_match_finds_the_document_semantics_cannot(
+    fake_kb: DocumentRepository,
+) -> None:
+    # FakeEmbeddings carry no meaning, so only the keyword ranking can find it. The
+    # word in no document doesn't stop the code matching.
+    sources = await _top_sources(fake_kb, "QX-7731 zzyzxq")
+    assert sources[0] == "it-sso-troubleshooting.md"
+
+
+async def test_query_with_tsquery_syntax_or_only_stopwords_still_searches(
+    fake_kb: DocumentRepository,
+) -> None:
+    for query in ["can't sign in: QX-7731 & 'expired' | !(cert)", "what is the"]:
+        results = await fake_kb.asimilarity_search_with_score(query, k=3)
+        assert len(results) == 3
+
+
 async def test_get_document_returns_the_whole_document(
     fake_kb: DocumentRepository,
 ) -> None:
