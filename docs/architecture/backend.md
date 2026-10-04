@@ -24,13 +24,15 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 `agent_service` is the only LangChain user. `rag_service` is the chat agent built on it.
 
+`retrieval_service` first asks a `QueryExpanderPort` for other phrasings of the query. With `RETRIEVAL__QUERY_VARIANTS` above 0, that is `LlmQueryExpander`: one structured LLM call rewrites the query that many ways. With 0, `NoQueryExpander` adds none. It finds the `RAG__TOP_K` best passages for the query and for each phrasing, in parallel, and merges them. Each search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). The merge keeps each passage once, with its best score, the best first. It passes the merged passages to a `RerankerPort`, ranked against the original query, and keeps the best `RAG__TOP_K`. With `RETRIEVAL__RERANK` on, that is `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, and the passages are reordered by that score, with ties keeping the search order. With it off, `NoReranker` keeps the search order.
+
 ## Chat agent
 
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
 * `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/graphs/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
 * `TopicalGuard` classifies each user message. Off-topic: it adds a decline instruction and keeps only `kind="user"` tools.
-* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `RAG__MAX_REVISIONS` times.
+* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `RAG__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 * `CapabilityInstructions` adds each capability's instructions on every model call.
 * A `Capability` gives the agent a feature: tools plus instructions. The owning service creates it. `agent_service` knows no feature by name.
 
@@ -42,7 +44,7 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 2. `to_stream_event` (`rag/api/schema/agent.py`) turns them into API models.
 3. `applyEvent` (`frontend/src/features/chat/model/transcript.ts`) turns them into chat bubbles.
 
-Event types: `text`, `reasoning`, `tool`, `todos`, `retracted`, `references`. History replays the stored events through the same `applyEvent`.
+Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `references`. History replays the stored events through the same `applyEvent`.
 
 ## Errors
 

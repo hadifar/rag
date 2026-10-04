@@ -22,7 +22,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import Field
 
 from rag.domain.models import (
-    AnswerRetracted,
+    AnswerVerified,
     Chunk,
     OffTopicMiddleware,
     ReferencesReady,
@@ -149,7 +149,7 @@ def _answer(text: str) -> AIMessage:
     return AIMessage(content=text)
 
 
-def _no_tracing(name: str | None) -> RunnableConfig:
+def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
     return {}
 
 
@@ -272,7 +272,7 @@ async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
     assert _text(events).endswith("still wrong")
 
 
-async def test_a_rejected_answer_is_retracted_before_its_revision_streams() -> None:
+async def test_a_rejected_answer_never_streams_only_its_check_and_revision_do() -> None:
     model = _ScriptedChatModel(
         answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
         groundedness_verdicts=["UNGROUNDED"],
@@ -280,16 +280,35 @@ async def test_a_rejected_answer_is_retracted_before_its_revision_streams() -> N
 
     events = await _Chat(model).send("first")
 
-    texts = [e for e in events if isinstance(e, TextDelta | AnswerRetracted)]
-    assert texts == [TextDelta("wrong"), AnswerRetracted(), TextDelta("revised")]
+    # max_revisions is 1: the revision isn't checked again.
+    answer = [e for e in events if isinstance(e, TextDelta | AnswerVerified)]
+    assert answer == [
+        AnswerVerified(status="pending"),
+        AnswerVerified(status="done", grounded=False),
+        TextDelta("revised"),
+    ]
 
 
-async def test_a_grounded_answer_is_never_retracted() -> None:
+async def test_a_grounded_answer_streams_once_it_passes_its_check() -> None:
     model = _ScriptedChatModel(answers=[_search("pricing"), _answer("right")])
 
     events = await _Chat(model).send("first")
 
-    assert not any(isinstance(e, AnswerRetracted) for e in events)
+    answer = [e for e in events if isinstance(e, TextDelta | AnswerVerified)]
+    assert answer == [
+        AnswerVerified(status="pending"),
+        AnswerVerified(status="done", grounded=True),
+        TextDelta("right"),
+    ]
+
+
+async def test_an_answer_with_nothing_searched_is_not_checked() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    events = await _Chat(model).send("hello")
+
+    assert not any(isinstance(e, AnswerVerified) for e in events)
+    assert _text(events) == "hi!"
 
 
 async def test_revision_instruction_is_not_saved_to_the_thread() -> None:

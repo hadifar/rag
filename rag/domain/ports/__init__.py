@@ -13,7 +13,13 @@ from rag.domain.ports.ingestion import (
     IngestionRunRepositoryPort,
 )
 from rag.domain.ports.preference import PreferenceRepositoryPort
-from rag.domain.ports.retrieval import EmbeddingsPort, SearchPort, VectorStorePort
+from rag.domain.ports.retrieval import (
+    EmbeddingsPort,
+    QueryExpanderPort,
+    RerankerPort,
+    SearchPort,
+    VectorStorePort,
+)
 
 __all__ = [
     "AgentServicePort",
@@ -26,6 +32,8 @@ __all__ = [
     "IngestionRunRepositoryPort",
     "PasswordHasherPort",
     "PreferenceRepositoryPort",
+    "QueryExpanderPort",
+    "RerankerPort",
     "SearchPort",
     "TokenCodecPort",
     "TranscriptRepositoryPort",

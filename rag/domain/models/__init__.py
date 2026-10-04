@@ -16,7 +16,7 @@ from rag.domain.models.agent.middleware import (
     TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
-    AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
@@ -53,7 +53,7 @@ __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AgentSpec",
-    "AnswerRetracted",
+    "AnswerVerified",
     "AssistantMessage",
     "Capability",
     "Chunk",

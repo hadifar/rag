@@ -11,7 +11,7 @@ export function emptyTranscript(): Transcript {
 }
 
 function openTurn(): Turn {
-  return { received: false, textId: null, reasoningId: null, pendingToolIds: [], todosId: null };
+  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null, verificationId: null };
 }
 
 /** A working copy that the functions below edit in place before handing it back. */
@@ -49,14 +49,14 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * One streamed event into the answer's bubbles: text deltas grow a single assistant
  * bubble, reasoning deltas a single reasoning bubble (until the model answers or calls a
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
- * in place each time the agent updates it, and references get their own. A retracted
- * answer's bubble is removed; its revision starts a new one.
+ * in place each time the agent updates it, the answer's check is a bubble filled in with
+ * its verdict, and references get their own. A checked answer arrives only after its
+ * verdict, so it follows the verification bubble.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
   const t = draft(transcript);
   const turn = t.turn ?? openTurn();
   t.turn = turn;
-  turn.received = true;
 
   if (event.type === 'reasoning') {
     if (turn.reasoningId === null) {
@@ -100,15 +100,18 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
       }
       break;
     }
-    case 'retracted':
-      // The answer streamed since the last tool call or plan was rejected (unsupported by
-      // the searches): drop it before its revision streams.
-      if (turn.textId !== null) {
-        const textId = turn.textId;
-        t.bubbles = t.bubbles.filter((b) => b.id !== textId);
+    case 'verification': {
+      const { type, ...content } = event;
+      if (content.status === 'pending') {
+        turn.verificationId = push(t, { type, content });
+        // Like a tool call: the checked answer is sent after its verdict, below it.
+        turn.textId = null;
+      } else if (turn.verificationId !== null) {
+        edit(t, turn.verificationId, 'verification', () => content);
+        turn.verificationId = null;
       }
-      turn.textId = null;
       break;
+    }
     case 'references':
       // Sent only when the answer searched; an empty list still gets its bubble.
       push(t, { type: 'references', content: { references: event.references } });
@@ -133,7 +136,7 @@ export function endTurn(transcript: Transcript, error?: string): Transcript {
   return t;
 }
 
-/** The user's message, and an answer opened for it (shown as typing until it streams). */
+/** The user's message, and an answer opened for it (shown as typing until it ends). */
 export function startTurn(transcript: Transcript, text: string): Transcript {
   const t = draft(endTurn(transcript));
   push(t, { type: 'user', content: { text } });
@@ -141,9 +144,9 @@ export function startTurn(transcript: Transcript, text: string): Transcript {
   return t;
 }
 
-/** Whether the assistant shows as typing: an answer is open and nothing arrived yet. */
+/** Whether the assistant shows as typing: for as long as an answer is open. */
 export function isWaiting(t: Transcript): boolean {
-  return t.turn !== null && !t.turn.received;
+  return t.turn !== null;
 }
 
 /**

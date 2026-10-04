@@ -1,5 +1,7 @@
 # Documentation
 
+This is the primary technical reference for AI coding agents implementing or updating application features.
+
 ## How-to guides
 
 ### Git
@@ -71,4 +73,4 @@
   * [Chat flow](diagrams/chat-turn.md)
   * [Auth flow](diagrams/auth-flow.md)
   * [Schema sync](diagrams/schema-sync.md)
-  * [Azure deployment](diagrams/azure-deployment.md)
+  * [Azure deployment graph](diagrams/azure-deployment.md)

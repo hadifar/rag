@@ -45,12 +45,14 @@ class TodosUpdated:
 
 
 @dataclass
-class AnswerRetracted:
-    """The answer text sent since the last tool call or plan was rejected (e.g. as
-    unsupported by what the turn's searches found) and is being rewritten: drop it.
+class AnswerVerified:
+    """The answer checked against what the turn's searches found: `pending` while the
+    check runs, then `done` with whether the answer is supported by them.
     """
 
-    type: Literal["retracted"] = "retracted"
+    status: Literal["pending", "done"]
+    grounded: bool | None = None
+    type: Literal["verification"] = "verification"
 
 
 @dataclass
@@ -68,7 +70,7 @@ StreamEvent = (
     | ReasoningDelta
     | ToolCall
     | TodosUpdated
-    | AnswerRetracted
+    | AnswerVerified
     | ReferencesReady
 )
 

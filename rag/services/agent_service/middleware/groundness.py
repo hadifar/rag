@@ -17,7 +17,7 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.agent_service.streaming import ANSWER_RETRACTED
+from rag.services.agent_service.streaming import ANSWER_VERIFICATION
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
@@ -35,11 +35,12 @@ def _collect_context(
     )
 
 
-async def is_grounded(
-    verify: Classify,
-    messages: Sequence[BaseMessage],
-    unverified_tools: frozenset[str] = frozenset(),
-) -> bool:
+def _verification_inputs(
+    messages: Sequence[BaseMessage], unverified_tools: frozenset[str]
+) -> tuple[str, str] | None:
+    """The turn's retrieved context and the answer to check against it; None if there's
+    nothing to check.
+    """
     context = _collect_context(messages, unverified_tools)
     answer = messages[-1]
 
@@ -47,9 +48,12 @@ async def is_grounded(
     # reasoning included, and only the answer's text is to be verified.
     if not context or not isinstance(answer, AIMessage) or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
-        return True
+        return None
+    return context, answer.text
 
-    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer.text))
+
+async def is_grounded(verify: Classify, context: str, answer: str) -> bool:
+    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer))
     return "UNGROUNDED" not in verdict.upper()
 
 
@@ -65,9 +69,10 @@ class GroundednessGuard(AgentMiddleware):
     supported, sends the model back to revise, up to `max_revisions` times per turn.
     The results of `unverified_tools` (ones about the user, not the product, e.g.
     saving a preference) aren't context to check against.
-    A rejected answer is retracted from the stream (`AnswerRetracted`). The revision
-    instruction is added to that model call only, never saved to the thread. Revisions are counted from this turn's messages, so no state carries over
-    between turns.
+    The stream holds a checked answer back until its verdict (`AnswerGate`), so a
+    rejected answer never reaches the user. The revision instruction is added to that
+    model call only, never saved to the thread. Revisions are counted from this turn's
+    messages, so no state carries over between turns.
     """
 
     def __init__(
@@ -93,12 +98,17 @@ class GroundednessGuard(AgentMiddleware):
         if revisions >= self._max_revisions:
             return None
 
-        if await is_grounded(self._verifier, state["messages"], self._unverified_tools):
+        inputs = _verification_inputs(state["messages"], self._unverified_tools)
+        if inputs is None:
             return None
 
-        # The answer was already streamed: the client drops it before its revision.
-        await adispatch_custom_event(ANSWER_RETRACTED, {})
-        return {"jump_to": "model"}
+        # The check is a whole LLM call the answer is held back for: the client shows it.
+        await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
+        grounded = await is_grounded(self._verifier, *inputs)
+        await adispatch_custom_event(
+            ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
+        )
+        return None if grounded else {"jump_to": "model"}
 
     async def awrap_model_call(
         self,

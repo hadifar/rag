@@ -15,7 +15,7 @@ export type ReasoningEvent = Schemas['ReasoningEvent'];
 export type ToolEvent = Schemas['ToolEvent'];
 export type TodoItem = Schemas['TodoItem'];
 export type TodosEvent = Schemas['TodosEvent'];
-export type RetractedEvent = Schemas['RetractedEvent'];
+export type VerificationEvent = Schemas['VerificationEvent'];
 export type ReferencesEvent = Schemas['ReferencesEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];
 

@@ -32,10 +32,18 @@ class AgentServicePort(Protocol):
         ...
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
-        instance of it; raises if all `attempts` fail or the reply is rejected.
+        instance of it; raises if all `attempts` fail or the reply is rejected. `trace`
+        names and tags the call as a trace of its own, under `ctx`'s user and
+        conversation; leave it out inside an agent's run, whose trace already has it.
         """
         ...
 

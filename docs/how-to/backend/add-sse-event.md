@@ -10,7 +10,7 @@ Add an event to the chat stream. Use when the agent must send the client a new k
 2. Add the dataclass to the `StreamEvent` union.
 3. Re-export the dataclass from `rag/domain/models/__init__.py`.
 4. Emit the event in `parse_event` in `rag/services/agent_service/streaming.py`.
-5. If a middleware emits the event, dispatch a custom event with `adispatch_custom_event`. Example: `AnswerRetracted`.
+5. If a middleware emits the event, dispatch a custom event with `adispatch_custom_event`. Example: `AnswerVerified`.
 6. If the event changes events already sent, apply it in `TranscriptBuilder` in `rag/services/conversation_service/transcript.py`.
 7. Add a Pydantic model with `type: Literal[...]` to `rag/api/schema/agent.py`.
 8. Add the model to the `StreamEventResponse` union and add its case to `_payload`.

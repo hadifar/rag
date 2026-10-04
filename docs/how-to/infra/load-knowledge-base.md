@@ -17,4 +17,5 @@ Index the knowledge base into Postgres. Run after a new database or a knowledge-
 
 * The backend image contains no `data/`. Mount `data/` or upload through the UI.
 * Use `--force` after you change the embedding model or the chunker.
+* Start each `.md` file with a `# title` and a one-paragraph description under it. Search scores the title, the description and the other headings as the document's summary.
 * Do not run `rag ingest` while an upload is running.

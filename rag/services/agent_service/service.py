@@ -18,7 +18,7 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.graphs.agent_builder import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE
-from rag.services.agent_service.streaming import parse_event
+from rag.services.agent_service.streaming import AnswerGate, parse_event
 from rag.services.agent_service.turn import turn_references
 from rag.shared.resilience import or_default
 
@@ -39,22 +39,37 @@ class Agent:
         self,
         graph: CompiledStateGraph,
         checkpointer: BaseCheckpointSaver,
-        trace_config: Callable[[str | None], RunnableConfig],
+        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
     ):
         self._graph = graph
         self._checkpointer = checkpointer
         self._trace_config = trace_config
 
-    def _config(self, thread_id: str) -> RunnableConfig:
+    def _config(self, ctx: RunContext) -> RunnableConfig:
         return {
-            "configurable": {"thread_id": thread_id},
+            "configurable": {"thread_id": str(ctx.conversation_id)},
             "recursion_limit": RECURSION_LIMIT,
-            **self._trace_config("chat"),
+            **self._trace_config("chat", ctx),
         }
 
     async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        config = self._config(str(ctx.conversation_id))
+        config = self._config(ctx)
 
+        async for event in self._turn_events(message, ctx, config):
+            yield event
+
+        final_state = await self._graph.aget_state(config)
+        references = turn_references(final_state.values.get("messages", []))
+        if references is not None:
+            yield ReferencesReady(references=references)
+
+    async def _turn_events(
+        self, message: str, ctx: RunContext, config: RunnableConfig
+    ) -> AsyncIterator[StreamEvent]:
+        """The turn's events as the user is to see them: an answer the groundedness
+        guard checks is held back until its verdict (see `AnswerGate`).
+        """
+        gate = AnswerGate()
         async for raw_event in self._graph.astream_events(
             {"messages": [HumanMessage(content=message)]},
             config=config,
@@ -62,12 +77,10 @@ class Agent:
             version="v2",
         ):
             for event in parse_event(raw_event):
-                yield event
-
-        final_state = await self._graph.aget_state(config)
-        references = turn_references(final_state.values.get("messages", []))
-        if references is not None:
-            yield ReferencesReady(references=references)
+                for released in gate.feed(event):
+                    yield released
+        for released in gate.flush():
+            yield released
 
     async def forget(self, conversation_id: uuid.UUID) -> None:
         await self._checkpointer.adelete_thread(str(conversation_id))
@@ -82,7 +95,7 @@ class AgentService:
         self,
         llm: BaseChatModel,
         checkpointer: BaseCheckpointSaver,
-        trace_config: Callable[[str | None], RunnableConfig],
+        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call in agents and guards before falling back
     ):
         self._llm = llm
@@ -98,13 +111,22 @@ class AgentService:
         return (await llm.ainvoke(prompt)).text
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class)"""
         llm = self._llm.with_structured_output(schema).with_retry(
             stop_after_attempt=attempts
         )
-        return cast(T, await llm.ainvoke(prompt))
+        # Its own trace only if named: inside an agent's run, a config of its own would
+        # cut the call from the run's trace.
+        config = self._trace_config(trace, ctx) if trace is not None else None
+        return cast(T, await llm.ainvoke(prompt, config=config))
 
     def create_agent(self, spec: AgentSpec) -> Agent:
         """A chat agent built as `spec` describes; raises ValueError if two of its
