@@ -24,6 +24,7 @@ from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
+from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
 
@@ -52,15 +53,21 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             build_embeddings(settings),
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
-        retrieval_service = RetrievalService(
-            vector_store=vector_store, top_k=settings.RAG.TOP_K
-        )
-
         agent_service = AgentService(
             llm=build_llm(settings),
             checkpointer=checkpointer,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
+        )
+
+        retrieval_service = RetrievalService(
+            vector_store=vector_store,
+            reranker=(
+                LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
+                if settings.RETRIEVAL.RERANK
+                else NoReranker()
+            ),
+            top_k=settings.RAG.TOP_K,
         )
 
         preference_service = PreferenceService(repository=PreferenceRepository(db_pool))

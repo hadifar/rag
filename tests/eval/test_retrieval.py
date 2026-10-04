@@ -1,13 +1,3 @@
-"""Retrieval quality over the real knowledge base: each question in
-`retrieval_questions.jsonl` must find one of its expected documents in the top k
-(`RAG__TOP_K`). One JSON object per line:
-
-    {"query": "how much is the analytics add-on?", "expected": ["02-plans-and-pricing.md"]}
-
-`expected` lists `source_id`s; any of them counts as a hit. The session ends with
-recall@k and MRR over all questions.
-"""
-
 from typing import Any
 
 import pytest
@@ -36,7 +26,7 @@ async def test_question_finds_an_expected_document(
     unknown = set(case["expected"]) - kb_sources
     assert not unknown, f"expected documents not in the knowledge base: {unknown}"
 
-    results = await kb.asimilarity_search_with_score(case["query"], k=30)
+    results = await kb.asimilarity_search_with_score(case["query"], k=10)
     sources = [str(chunk.metadata["source_id"]) for chunk, _score in results]
     rank = next(
         (i for i, source in enumerate(sources, start=1) if source in case["expected"]),

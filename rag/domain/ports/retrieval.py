@@ -18,6 +18,16 @@ class VectorStorePort(Protocol):
         ...
 
 
+class RerankerPort(Protocol):
+    async def rerank(
+        self, query: str, candidates: list[tuple[Chunk, float]]
+    ) -> list[tuple[Chunk, float]]:
+        """`candidates` reordered by relevance to `query`, the best first, each with
+        its new score; never raises (on failure, the candidates as given).
+        """
+        ...
+
+
 class SearchPort(Protocol):
     """Finds knowledge-base passages for a query: the best first, with their scores."""
 

@@ -18,7 +18,7 @@ Known gaps. None of these is addressed yet.
 * Vector search only. No keyword search, so exact terms such as error codes can be missed. The `content_tsv` column and its GIN index are still kept up to date but are not queried.
 * Search scans every chunk: the score adds the text and summary similarities (`RETRIEVAL__SUMMARY_WEIGHT`), which the HNSW index on `embedding` can't serve.
 * A document's summary is parsed from its own markdown: the `# title`, the paragraph under it, and the other headings. A file without a `# title` gets no summary and is scored on its text alone.
-* No reranker.
+* The LLM reranker (`RETRIEVAL__RERANK`) only reorders the `RAG__TOP_K` passages the vector search found, so it can't recover a passage the search missed. It scores each passage by its summary alone, and a passage with no summary is shown to it blank. If its call fails, the vector order is kept.
 * No retrieval evaluation set.
 
 ## Guardrails
