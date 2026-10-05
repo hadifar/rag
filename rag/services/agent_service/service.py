@@ -19,7 +19,7 @@ from rag.domain.models import (
     TurnFailed,
 )
 from rag.services.agent_service.agent_builder import build_tool_agent
-from rag.services.agent_service.prompts import FALLBACK_MESSAGE, TURN_FAILED_MESSAGE
+from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
 from rag.services.agent_service.streaming import AnswerGate, parse_event
 from rag.services.agent_service.turn import turn_references
 from rag.shared.resilience import or_default
@@ -172,9 +172,9 @@ class AgentService:
         return Agent(graph, self._checkpointer, self._trace_config)
 
     async def _classify(self, prompt: str) -> str:
-        """The guards' LLM call: retried, and if it still fails, answers with the
-        fallback message, which neither guard reads as a rejection (they fail open).
+        """The guards' LLM call: retried, and if it still fails, an empty reply, which
+        neither guard reads as a rejection (they fail open).
         """
         return await or_default(
-            self.generate(prompt, attempts=self._retry_attempts), FALLBACK_MESSAGE
+            self.generate(prompt, attempts=self._retry_attempts), ""
         )
