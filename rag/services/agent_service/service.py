@@ -7,6 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
 
@@ -80,16 +81,19 @@ class Agent:
     ) -> None:
         """Removes `question` and everything after it from the thread. A failed tool
         call leaves the model's request for it unanswered, which the model's API
-        rejects in every later turn.
+        rejects in every later turn. The list is replaced whole rather than removed by
+        id: the state also shows the results of tools that finished alongside the
+        failed one, which were never saved, and removing those ids would fail.
         """
         try:
             messages = (await self._graph.aget_state(config)).values.get("messages", [])
             ids = [m.id for m in messages]
             if question.id not in ids:
                 return
-            failed = ids[ids.index(question.id) :]
+            kept = messages[: ids.index(question.id)]
             await self._graph.aupdate_state(
-                config, {"messages": [RemoveMessage(id=i) for i in failed]}
+                config,
+                {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *kept]},
             )
         except Exception:
             logger.exception("couldn't forget the failed chat turn")

@@ -391,6 +391,27 @@ async def test_a_failed_search_ends_the_turn_with_an_error_and_is_forgotten() ->
     ]
 
 
+async def test_a_search_failing_beside_one_that_finished_is_forgotten_too() -> None:
+    both = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "search_kb", "args": {"query": q}, "id": str(uuid.uuid4())}
+            for q in ("pricing", _FAILING_QUERY)
+        ],
+    )
+    model = _ScriptedChatModel(
+        answers=[_answer("hi!"), both, _search("pricing"), _answer("A")]
+    )
+    chat = _Chat(model)
+    await chat.send("hello")
+
+    failed = await chat.send("pricing?")
+
+    assert failed[-1] == TurnFailed(message=TURN_FAILED_MESSAGE)
+    assert [m.content for m in await chat.saved_messages()] == ["hello", "hi!"]
+    assert _text(await chat.send("pricing?")) == "A"
+
+
 async def test_a_model_that_keeps_failing_ends_the_turn_with_an_error() -> None:
     model = _ScriptedChatModel(answers=[], failing_calls=1)
     chat = _Chat(model, retry_attempts=1)

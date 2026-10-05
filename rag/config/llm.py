@@ -7,7 +7,7 @@ class _ChatModelConfig(BaseModel):
     """How the chat model is called, whichever backend serves it."""
 
     TEMPERATURE: float = Field(default=0.2, ge=0, le=2)
-    # Tries per LLM call, in agents and guards, before falling back.
+    # Tries per LLM call before an agent's turn fails or a guard falls back.
     RETRY_ATTEMPTS: int = Field(default=3, ge=1)
     # Times the groundedness guard sends an answer back per turn; 0 only verifies.
     MAX_REVISIONS: int = Field(default=1, ge=0)
