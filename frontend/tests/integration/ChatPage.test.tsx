@@ -36,7 +36,7 @@ async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
 }
 
 describe('ChatPage', () => {
-  it('streams an answer with its references into a new chat', async () => {
+  it('streams an answer with its sources into a new chat', async () => {
     let sent: MessageRequest | undefined;
     server.use(
       http.post('/api/conversations', () =>
@@ -50,7 +50,7 @@ describe('ChatPage', () => {
           { type: 'tool', name: 'search_kb', status: 'done', output: '2 chunks' },
           { type: 'text', text: 'We offer ' },
           { type: 'text', text: 'three plans.' },
-          { type: 'references', references: ['02-plans-and-pricing.md'] },
+          { type: 'artifacts', artifacts: [{ kind: 'source', id: '02-plans-and-pricing.md' }] },
         ]);
       }),
       http.post('/api/conversations/:id/title', () =>
@@ -99,7 +99,7 @@ describe('ChatPage', () => {
               { type: 'tool', name: 'search_kb', status: 'pending', query: 'retention' },
               { type: 'tool', name: 'search_kb', status: 'done', output: '1 chunk' },
               { type: 'text', text: 'Ninety days.' },
-              { type: 'references', references: ['11-data-retention-policy.md'] },
+              { type: 'artifacts', artifacts: [{ kind: 'source', id: '11-data-retention-policy.md' }] },
             ],
           },
         ]),
@@ -127,7 +127,7 @@ describe('ChatPage', () => {
             role: 'assistant',
             events: [
               { type: 'text', text: "I don't know." },
-              { type: 'references', references: [] },
+              { type: 'artifacts', artifacts: [] },
             ],
           },
         ]),

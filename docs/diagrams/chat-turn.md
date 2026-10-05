@@ -30,6 +30,6 @@ sequenceDiagram
         A->>LLM: model call (revision)
         A-->>UI: revised answer
     end
-    A-->>UI: references
+    A-->>UI: artifacts (sources)
     CS->>DB: save turn to conversation_turns
 ```

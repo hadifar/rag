@@ -48,7 +48,9 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 2. `to_stream_event` (`rag/api/schema/agent.py`) turns them into API models.
 3. `applyEvent` (`frontend/src/features/chat/model/transcript.ts`) turns them into chat bubbles.
 
-Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `references`, `error`. History replays the stored events through the same `applyEvent`.
+Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `artifacts`, `error`. History replays the stored events through the same `applyEvent`.
+
+`artifacts` is sent once the turn is done, if a tool returned `ToolResult.artifacts`: what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so the checkpointer stores no domain classes.
 
 A turn whose tool or model fails (after `ModelRetryMiddleware`'s retries) ends with an `error` event carrying a user-facing message, never the exception. `Agent.stream` also removes the failed turn from the agent's thread, so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.
 

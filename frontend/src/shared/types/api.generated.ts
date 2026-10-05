@@ -345,6 +345,20 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ArtifactsEvent
+         * @description What the turn's tools handed the user, deduplicated, once it's done. Only sent
+         *     if a tool that hands anything over ran.
+         */
+        ArtifactsEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artifacts";
+            /** Artifacts */
+            artifacts: components["schemas"]["SourceArtifactItem"][];
+        };
+        /**
          * AssistantMessageResponse
          * @description A past answer as the events its stream sent, in order; replayed like the live stream.
          */
@@ -484,19 +498,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /**
-         * ReferencesEvent
-         * @description The turn's deduplicated references, once it's done. Only sent if the turn searched.
-         */
-        ReferencesEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "references";
-            /** References */
-            references: string[];
-        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Model */
@@ -507,11 +508,24 @@ export interface components {
             top_k: number;
         };
         /**
+         * SourceArtifactItem
+         * @description A knowledge-base source the answer drew on.
+         */
+        SourceArtifactItem: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "source";
+            /** Id */
+            id: string;
+        };
+        /**
          * StreamEventResponse
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["ReferencesEvent"] | components["schemas"]["ErrorEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["ArtifactsEvent"] | components["schemas"]["ErrorEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.

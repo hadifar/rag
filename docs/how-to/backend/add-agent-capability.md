@@ -11,9 +11,10 @@ Give the chat agent a feature: tools plus prompt instructions. Use for features 
 3. Write each tool as a factory that closes over its dependencies and returns a domain `Tool`. Example: `search_tool` in `rag/services/rag_service/tools.py`.
 4. Read the caller from the tool's `RunContext` argument.
 5. Set `kind="user"` on a tool that acts on the user, not on the product.
-6. Pass the capability in `rag/container.py`: `RagService(capabilities=[...])`.
-7. Add unit tests. Copy `tests/unit/test_preferences.py`.
-8. Validate the change. See [Run validation](../run-validation.md).
+6. To hand the user something beside the model's text, return it in `ToolResult.artifacts`. A new kind is a dataclass added to the `Artifact` union in `rag/domain/models/agent/artifact.py`, with its API model in `rag/api/schema/agent.py` and its bubble in `frontend/src/features/chat/model/transcript.ts`.
+7. Pass the capability in `rag/container.py`: `RagService(capabilities=[...])`.
+8. Add unit tests. Copy `tests/unit/test_preferences.py`.
+9. Validate the change. See [Run validation](../run-validation.md).
 
 ## Rules
 

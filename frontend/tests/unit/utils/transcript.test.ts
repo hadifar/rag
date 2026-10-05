@@ -55,9 +55,16 @@ describe('applyEvent', () => {
     ]).map((b) => b.type)).toEqual(['reasoning', 'tool', 'reasoning']);
   });
 
-  it('still shows a references bubble when the search found nothing', () => {
-    expect(bubbles([{ type: 'references', references: [] }])).toEqual([
-      { type: 'references', content: { references: [] } },
+  it('shows the source artifacts as a sources bubble', () => {
+    const artifacts = [{ kind: 'source' as const, id: 'a.md' }, { kind: 'source' as const, id: 'b.md' }];
+    expect(bubbles([{ type: 'artifacts', artifacts }])).toEqual([
+      { type: 'sources', content: { sources: ['a.md', 'b.md'] } },
+    ]);
+  });
+
+  it('still shows a sources bubble when the search found nothing', () => {
+    expect(bubbles([{ type: 'artifacts', artifacts: [] }])).toEqual([
+      { type: 'sources', content: { sources: [] } },
     ]);
   });
 

@@ -16,7 +16,8 @@ export type ToolEvent = Schemas['ToolEvent'];
 export type TodoItem = Schemas['TodoItem'];
 export type TodosEvent = Schemas['TodosEvent'];
 export type VerificationEvent = Schemas['VerificationEvent'];
-export type ReferencesEvent = Schemas['ReferencesEvent'];
+export type SourceArtifactItem = Schemas['SourceArtifactItem'];
+export type ArtifactsEvent = Schemas['ArtifactsEvent'];
 export type ErrorEvent = Schemas['ErrorEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];
 

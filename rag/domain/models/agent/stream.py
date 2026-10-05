@@ -3,6 +3,8 @@ from typing import Annotated, Literal
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from rag.domain.models.agent.artifact import Artifact
+
 # Each event carries its `type`, so a list of them can be stored and read back as it was
 # (the conversation transcript) without a mapping of its own.
 
@@ -56,13 +58,13 @@ class AnswerVerified:
 
 
 @dataclass
-class ReferencesReady:
-    """What the turn's tools cited (e.g. knowledge-base source ids), deduplicated; sent
-    once the turn is done, and only if a tool that cites anything ran.
+class ArtifactsReady:
+    """What the turn's tools handed the user (e.g. knowledge-base sources), deduplicated;
+    sent once the turn is done, and only if a tool that hands anything over ran.
     """
 
-    references: list[str]
-    type: Literal["references"] = "references"
+    artifacts: list[Artifact]
+    type: Literal["artifacts"] = "artifacts"
 
 
 @dataclass
@@ -81,7 +83,7 @@ StreamEvent = (
     | ToolCall
     | TodosUpdated
     | AnswerVerified
-    | ReferencesReady
+    | ArtifactsReady
     | TurnFailed
 )
 

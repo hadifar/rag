@@ -99,7 +99,7 @@ async def test_the_capabilitys_tools_act_for_the_turns_user() -> None:
     saved = await tools["save_user_preference"].run("Keep it short", _ctx(ALICE))
     (preference,) = await service.list_for_user(ALICE)
     assert saved.content == f"Saved preference {preference.id}: Keep it short"
-    assert saved.references is None  # cites nothing, so the turn has no references
+    assert saved.artifacts is None  # hands nothing over, so the turn has no artifacts
 
     # Another user can't forget it: their ids are looked up among their own.
     forgot = await tools["forget_user_preference"].run(preference.id, _ctx(BOB))

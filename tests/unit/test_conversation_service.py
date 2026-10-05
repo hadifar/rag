@@ -5,9 +5,9 @@ import pytest
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.models import (
+    ArtifactsReady,
     AssistantMessage,
     Conversation,
-    ReferencesReady,
     RunContext,
     StreamEvent,
     TextDelta,
@@ -196,7 +196,7 @@ async def test_delete_has_the_agent_forget_it_and_removes_the_row() -> None:
 
 async def test_history_is_each_turn_as_it_was_streamed() -> None:
     service, _, _ = _service(
-        chat_agent=StubChatAgent(extra_events=[TextDelta(text="!")], references=[])
+        chat_agent=StubChatAgent(extra_events=[TextDelta(text="!")], artifacts=[])
     )
     conversation_id = (await service.create(ALICE)).id
 
@@ -206,17 +206,17 @@ async def test_history_is_each_turn_as_it_was_streamed() -> None:
     assert streamed == [
         TextDelta(text="echo: hi"),
         TextDelta(text="!"),
-        ReferencesReady(references=[]),
+        ArtifactsReady(artifacts=[]),
     ]
     # Saved as the user saw it, the text's deltas merged.
     assert await service.history(ALICE, conversation_id) == [
         UserMessage(text="hi"),
         AssistantMessage(
-            events=[TextDelta(text="echo: hi!"), ReferencesReady(references=[])]
+            events=[TextDelta(text="echo: hi!"), ArtifactsReady(artifacts=[])]
         ),
         UserMessage(text="again"),
         AssistantMessage(
-            events=[TextDelta(text="echo: again!"), ReferencesReady(references=[])]
+            events=[TextDelta(text="echo: again!"), ArtifactsReady(artifacts=[])]
         ),
     ]
 

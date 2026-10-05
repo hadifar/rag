@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, type ComponentType } from 'react';
 import type { Bubble, BubbleOf, BubbleType } from '../types';
 import { ErrorBubble } from './ErrorBubble';
 import { ReasoningBubble } from './ReasoningBubble';
-import { ReferencesBubble } from './ReferencesBubble';
+import { SourcesBubble } from './SourcesBubble';
 import { TextBubble } from './TextBubble';
 import { TodosBubble } from './TodosBubble';
 import { ToolBubble } from './ToolBubble';
@@ -12,7 +12,7 @@ import { VerificationBubble } from './VerificationBubble';
 
 type BubbleViewProps<K extends BubbleType> = {
   bubble: BubbleOf<K>;
-  onOpenReference: (name: string) => void;
+  onOpenSource: (name: string) => void;
   onRetry?: () => void;
 };
 
@@ -25,30 +25,28 @@ const bubbleViews: { [K in BubbleType]: ComponentType<BubbleViewProps<K>> } = {
   tool: ({ bubble }) => <ToolBubble {...bubble.content} />,
   todos: ({ bubble }) => <TodosBubble {...bubble.content} />,
   verification: ({ bubble }) => <VerificationBubble {...bubble.content} />,
-  references: ({ bubble, onOpenReference }) => (
-    <ReferencesBubble {...bubble.content} onOpen={onOpenReference} />
-  ),
+  sources: ({ bubble, onOpenSource }) => <SourcesBubble {...bubble.content} onOpen={onOpenSource} />,
   error: ({ bubble, onRetry }) => <ErrorBubble {...bubble.content} onRetry={onRetry} />,
 };
 
 // Memoized: while an answer streams, only the bubble whose content changed re-renders
 // (and re-parses its markdown), not every earlier one.
-const MessageBubble = memo(function MessageBubble({ bubble, onOpenReference, onRetry }: BubbleViewProps<BubbleType>) {
+const MessageBubble = memo(function MessageBubble({ bubble, onOpenSource, onRetry }: BubbleViewProps<BubbleType>) {
   // The map pairs each type with its own view; TypeScript can't follow that through a lookup.
   const View = bubbleViews[bubble.type] as ComponentType<BubbleViewProps<BubbleType>>;
-  return <View bubble={bubble} onOpenReference={onOpenReference} onRetry={onRetry} />;
+  return <View bubble={bubble} onOpenSource={onOpenSource} onRetry={onRetry} />;
 });
 
 type MessageListProps = {
   bubbles: Bubble[];
   isWaiting: boolean;
-  onOpenReference: (name: string) => void;
+  onOpenSource: (name: string) => void;
   /** The error bubble that offers a retry, if any, and what retrying does. */
   retryBubbleId: string | null;
   onRetry: () => void;
 };
 
-export function MessageList({ bubbles, isWaiting, onOpenReference, retryBubbleId, onRetry }: MessageListProps) {
+export function MessageList({ bubbles, isWaiting, onOpenSource, retryBubbleId, onRetry }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,7 +62,7 @@ export function MessageList({ bubbles, isWaiting, onOpenReference, retryBubbleId
         >
           <MessageBubble
             bubble={bubble}
-            onOpenReference={onOpenReference}
+            onOpenSource={onOpenSource}
             onRetry={bubble.id === retryBubbleId ? onRetry : undefined}
           />
         </div>

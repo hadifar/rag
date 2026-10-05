@@ -42,7 +42,7 @@ class UserMessage:
 @dataclass(frozen=True)
 class AssistantMessage:
     """A turn's answer as the events its stream sent, in order: reasoning, searches,
-    the plan, the answer's text, and its references; replayed, it shows as it did live.
+    the plan, the answer's text, and its artifacts; replayed, it shows as it did live.
     """
 
     events: list[StreamEvent]

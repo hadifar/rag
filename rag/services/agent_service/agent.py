@@ -8,10 +8,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.graph.state import CompiledStateGraph
 
-from rag.domain.models import ReferencesReady, RunContext, StreamEvent, TurnFailed
+from rag.domain.models import ArtifactsReady, RunContext, StreamEvent, TurnFailed
 from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
 from rag.services.agent_service.streaming import AnswerGate, parse_event
-from rag.services.agent_service.turn import turn_references
+from rag.services.agent_service.turn import turn_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ RECURSION_LIMIT = 75
 
 class Agent:
     """A chat agent on any message-state graph: streams each turn's events, then what its
-    tools cited. The graph keeps each conversation's messages, the model's memory of it,
+    tools handed the user. The graph keeps each conversation's messages, the model's memory of it,
     through its checkpointer; what the user saw is the conversation service's to keep.
     """
 
@@ -61,9 +61,10 @@ class Agent:
             # would be read as the turn then is the one before it.
             if question.id not in [m.id for m in messages]:
                 return
-            references = turn_references(messages)
-            if references is not None:
-                yield ReferencesReady(references=references)
+            artifacts = turn_artifacts(messages)
+            if artifacts is not None:
+                yield ArtifactsReady(artifacts=artifacts)
+
         except Exception:
             logger.exception("chat turn failed")
             await self._forget_turn(question, config)

@@ -8,12 +8,13 @@ from pydantic import BaseModel
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
+    Artifact,
+    ArtifactsReady,
     Conversation,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
     Preference,
-    ReferencesReady,
     RunContext,
     StreamEvent,
     TextDelta,
@@ -310,24 +311,24 @@ class FakeTranscriptRepository:
 
 class StubChatAgent:
     """ChatAgentPort without a model: echoes the message, then `extra_events`, then
-    `references` if given; records the conversations it was told to forget.
+    `artifacts` if given; records the conversations it was told to forget.
     """
 
     def __init__(
         self,
         extra_events: list[StreamEvent] | None = None,
-        references: list[str] | None = None,
+        artifacts: list[Artifact] | None = None,
     ):
         self.extra_events = extra_events or []
-        self.references = references
+        self.artifacts = artifacts
         self.forgotten: list[uuid.UUID] = []
 
     async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         yield TextDelta(text=f"echo: {message}")
         for event in self.extra_events:
             yield event
-        if self.references is not None:
-            yield ReferencesReady(references=self.references)
+        if self.artifacts is not None:
+            yield ArtifactsReady(artifacts=self.artifacts)
 
     async def forget(self, conversation_id: uuid.UUID) -> None:
         self.forgotten.append(conversation_id)

@@ -24,7 +24,13 @@ from rag.config import (
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
-from rag.domain.models import MAX_PREFERENCE_LENGTH, MAX_PREFERENCES, Chunk, ToolCall
+from rag.domain.models import (
+    MAX_PREFERENCE_LENGTH,
+    MAX_PREFERENCES,
+    Chunk,
+    SourceArtifact,
+    ToolCall,
+)
 from rag.services.auth_service.service import AuthService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -100,7 +106,7 @@ def client() -> Generator[TestClient]:
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
         ],
-        references=["doc-a", "doc-b"],
+        artifacts=[SourceArtifact(id="doc-a"), SourceArtifact(id="doc-b")],
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
@@ -319,7 +325,7 @@ def test_send_message_contract_matches_frontend_parsing(
 ) -> None:
     """Locks the wire format to what frontend/src/api/chat.ts parses: one JSON object
     per event's `data`, told apart by `type`. The payloads' fields are typed through
-    OpenAPI (TextEvent/ToolEvent/ReferencesEvent); this checks they arrive that way.
+    OpenAPI (TextEvent/ToolEvent/ArtifactsEvent); this checks they arrive that way.
     """
     conversation_id = _create_conversation(client, auth_headers)
 
@@ -341,7 +347,13 @@ def test_send_message_contract_matches_frontend_parsing(
             "query": None,
             "output": "stub result",
         },
-        {"type": "references", "references": ["doc-a", "doc-b"]},
+        {
+            "type": "artifacts",
+            "artifacts": [
+                {"kind": "source", "id": "doc-a"},
+                {"kind": "source", "id": "doc-b"},
+            ],
+        },
     ]
 
 
@@ -471,7 +483,13 @@ def test_conversation_messages_and_delete(
                     "query": None,
                     "output": "stub result",
                 },
-                {"type": "references", "references": ["doc-a", "doc-b"]},
+                {
+                    "type": "artifacts",
+                    "artifacts": [
+                        {"kind": "source", "id": "doc-a"},
+                        {"kind": "source", "id": "doc-b"},
+                    ],
+                },
             ],
         },
     ]

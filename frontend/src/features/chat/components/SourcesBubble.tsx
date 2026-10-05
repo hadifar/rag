@@ -1,10 +1,10 @@
-import type { ReferencesContent } from '../types';
+import type { SourcesContent } from '../types';
 import { BubbleFrame } from './BubbleFrame';
 
-type ReferencesBubbleProps = ReferencesContent & { onOpen: (name: string) => void };
+type SourcesBubbleProps = SourcesContent & { onOpen: (name: string) => void };
 
-export function ReferencesBubble({ references, onOpen }: ReferencesBubbleProps) {
-  if (references.length === 0) {
+export function SourcesBubble({ sources, onOpen }: SourcesBubbleProps) {
+  if (sources.length === 0) {
     return (
       <BubbleFrame look="card">
         <span className="font-medium text-slate-700">📚 Sources</span>
@@ -17,7 +17,7 @@ export function ReferencesBubble({ references, onOpen }: ReferencesBubbleProps) 
     <BubbleFrame look="card">
       <div className="font-medium text-slate-700">📚 Sources</div>
       <ul className="mt-1 list-inside list-disc text-slate-600">
-        {references.map((name) => (
+        {sources.map((name) => (
           <li key={name}>
             <button
               type="button"

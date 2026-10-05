@@ -1,6 +1,5 @@
 import type {
   ReasoningEvent,
-  ReferencesEvent,
   TextEvent,
   TodosEvent,
   ToolEvent,
@@ -12,10 +11,11 @@ export type TextContent = Omit<TextEvent, 'type'>;
 export type ToolContent = Omit<ToolEvent, 'type'>;
 export type TodosContent = Omit<TodosEvent, 'type'>;
 export type VerificationContent = Omit<VerificationEvent, 'type'>;
-export type ReferencesContent = Omit<ReferencesEvent, 'type'>;
 // `streaming` until the model moves on from reasoning to answering or calling a tool.
 export type ReasoningContent = Omit<ReasoningEvent, 'type'> & { streaming: boolean };
 export type ErrorContent = { text: string };
+// The ids of the knowledge-base sources among a turn's artifacts.
+export type SourcesContent = { sources: string[] };
 
 /** One bubble of the chat; `id` is stable, so a bubble can be grown in place. */
 export type Bubble = { id: string } & (
@@ -25,7 +25,7 @@ export type Bubble = { id: string } & (
   | { type: 'tool'; content: ToolContent }
   | { type: 'todos'; content: TodosContent }
   | { type: 'verification'; content: VerificationContent }
-  | { type: 'references'; content: ReferencesContent }
+  | { type: 'sources'; content: SourcesContent }
   | { type: 'error'; content: ErrorContent }
 );
 

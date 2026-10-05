@@ -54,11 +54,24 @@ class VerificationEvent(BaseModel):
     grounded: bool | None = None
 
 
-class ReferencesEvent(BaseModel):
-    """The turn's deduplicated references, once it's done. Only sent if the turn searched."""
+class SourceArtifactItem(BaseModel):
+    """A knowledge-base source the answer drew on."""
 
-    type: Literal["references"] = "references"
-    references: list[str]
+    kind: Literal["source"] = "source"
+    id: str
+
+
+# A new artifact kind joins the union here.
+ArtifactItem = Annotated[SourceArtifactItem, Field(discriminator="kind")]
+
+
+class ArtifactsEvent(BaseModel):
+    """What the turn's tools handed the user, deduplicated, once it's done. Only sent
+    if a tool that hands anything over ran.
+    """
+
+    type: Literal["artifacts"] = "artifacts"
+    artifacts: list[ArtifactItem]
 
 
 class ErrorEvent(BaseModel):
@@ -76,7 +89,7 @@ class StreamEventResponse(
             | ToolEvent
             | TodosEvent
             | VerificationEvent
-            | ReferencesEvent
+            | ArtifactsEvent
             | ErrorEvent,
             Field(discriminator="type"),
         ]
