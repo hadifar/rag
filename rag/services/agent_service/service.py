@@ -12,14 +12,13 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
 
 from rag.domain.models import (
-    AgentSpec,
     ReferencesReady,
     RunContext,
     StreamEvent,
     ToolAgentSpec,
     TurnFailed,
 )
-from rag.services.agent_service.graphs.agent_builder import build_tool_agent
+from rag.services.agent_service.agent_builder import build_tool_agent
 from rag.services.agent_service.prompts import FALLBACK_MESSAGE, TURN_FAILED_MESSAGE
 from rag.services.agent_service.streaming import AnswerGate, parse_event
 from rag.services.agent_service.turn import turn_references
@@ -163,20 +162,13 @@ class AgentService:
         config = self._trace_config(trace, ctx) if trace is not None else None
         return cast(T, await llm.ainvoke(prompt, config=config))
 
-    def create_agent(self, spec: AgentSpec) -> Agent:
+    def create_agent(self, spec: ToolAgentSpec) -> Agent:
         """A chat agent built as `spec` describes; raises ValueError if two of its
-        tools share a name. A new kind of agent adds its spec to AgentSpec, a graph
-        builder in graphs/, and a case here.
+        tools share a name.
         """
-        match spec:
-            case ToolAgentSpec():
-                graph = build_tool_agent(
-                    self._llm,
-                    spec,
-                    self._classify,
-                    self._checkpointer,
-                    self._retry_attempts,
-                )
+        graph = build_tool_agent(
+            self._llm, spec, self._classify, self._checkpointer, self._retry_attempts
+        )
         return Agent(graph, self._checkpointer, self._trace_config)
 
     async def _classify(self, prompt: str) -> str:

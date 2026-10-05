@@ -30,7 +30,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
-* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/graphs/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
+* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
 * `TopicalGuard` classifies each user message. Off-topic: it adds a decline instruction and keeps only `kind="user"` tools.
 * `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `LLM__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 * `CapabilityInstructions` adds each capability's instructions on every model call.

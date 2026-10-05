@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from rag.config import RetrievalConfig
-from rag.domain.models import AgentSpec, Chunk, RunContext
+from rag.domain.models import Chunk, RunContext, ToolAgentSpec
 from rag.domain.ports import ChatAgentPort
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
@@ -42,7 +42,7 @@ class _ScoringAgent:
     async def generate(self, prompt: str, *, attempts: int = 1) -> str:
         raise NotImplementedError("the reranker only asks for structured replies")
 
-    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
+    def create_agent(self, spec: ToolAgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
 
 
