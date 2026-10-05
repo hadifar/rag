@@ -1,3 +1,37 @@
+## v0.13.0 (2026-10-05)
+
+### Feat
+
+- **chat**: end failed turns with an error event and offer a retr
+- **retrieval**: rerank RETRIEVAL__RERANK_CANDIDATES passages and keep RAG__TOP_K
+- **retrieval**: fuse full-text keyword search with vector search by reciprocal rank
+- **retrieval**: search with LLM rephrasings of the query and merge the passages found
+- **observability**: tag Langfuse traces and group them by user and conversation
+- **agent**: hold a checked answer back until its verdict instead of retracting it
+- **retrieval**: rerank found passages by an LLM score of their summary
+- **retrieval**: score passages on their document summary as well as their text
+- **chat**: stream the answer's source verification as its own event
+- **chat**: keep the typing indicator until the answer ends
+
+### Fix
+
+- **frontend**: tell the user why an answer stopped in plain words
+- **skill**: update skill
+- **chat**: forget a failed turn even when a parallel search finished
+- **compose**: add name to docker-compose.yml
+
+### Refactor
+
+- **infra**: set shared proxy directives once in nginx
+- **backend**: yield the logging trace config directly
+- **backend**: share one helper for adding instructions to a model call
+- **backend**: fail the guards open on an empty reply
+- **backend**: build the one agent kind without an AgentSpec alias
+- **backend**: map stream events to API models by their fields
+- **config**: replace RAG__TOP_K and RETRIEVAL__RERANK with retrieval and rerank candidate counts
+- **retrieval**: drop the LLM query expander
+- **retrieval**: search by vector similarity only
+
 ## v0.12.1 (2026-10-03)
 
 ### Fix
