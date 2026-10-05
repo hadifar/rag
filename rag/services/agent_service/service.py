@@ -168,12 +168,12 @@ class AgentService:
         return cast(T, await llm.ainvoke(prompt, config=config))
 
     def create_agent(self, spec: ToolAgentSpec) -> Agent:
-        """A chat agent built as `spec` describes; raises ValueError if two of its
-        tools share a name.
-        """
+        """A chat agent built as `spec` describes"""
+
         graph = build_tool_agent(
             self._llm, spec, self._judge, self._checkpointer, self._retry_attempts
         )
+
         return Agent(graph, self._checkpointer, self._trace_config)
 
     async def _judge[T: BaseModel](self, prompt: str, schema: type[T]) -> T | None:

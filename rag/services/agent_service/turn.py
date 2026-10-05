@@ -6,7 +6,6 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 
 # Guards inject their instructions per model call instead of saving them to the
 # thread, so every HumanMessage in state is the user's and marks the start of a turn.
-# TODO: we must refactor this
 
 
 def is_final_answer(message: BaseMessage | None) -> TypeGuard[AIMessage]:
