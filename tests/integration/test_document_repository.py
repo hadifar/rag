@@ -1,8 +1,7 @@
-"""Hybrid retrieval and storage correctness against real Postgres (pgvector +
-full-text), over the fixture knowledge base. Tests that assert on embedding
-semantics/ranking use `seeded_kb` (real embeddings); storage/SQL-plumbing tests
-use `fake_kb` (deterministic, no network) since they don't care about vector
-quality.
+"""Vector retrieval and storage correctness against real Postgres (pgvector), over
+the fixture knowledge base. Tests that assert on embedding semantics/ranking use
+`seeded_kb` (real embeddings); storage/SQL-plumbing tests use `fake_kb`
+(deterministic, no network) since they don't care about vector quality.
 """
 
 from pathlib import Path
@@ -28,18 +27,28 @@ async def test_semantic_query_finds_the_document_without_shared_keywords(
     assert sources[0] == "it-plans-and-pricing.md"
 
 
-async def test_exact_error_code_is_found_by_the_keyword_side(
-    seeded_kb: DocumentRepository,
-) -> None:
-    sources = await _top_sources(seeded_kb, "QX-7731")
-    assert sources[0] == "it-sso-troubleshooting.md"
-
-
 async def test_results_are_ranked_best_first(seeded_kb: DocumentRepository) -> None:
     results = await seeded_kb.asimilarity_search_with_score("Gustavo the ficus", k=3)
     scores = [score for _doc, score in results]
     assert results[0][0].metadata["source_id"] == "it-office-plants.md"
     assert scores == sorted(scores, reverse=True)
+
+
+async def test_keyword_match_finds_the_document_semantics_cannot(
+    fake_kb: DocumentRepository,
+) -> None:
+    # FakeEmbeddings carry no meaning, so only the keyword ranking can find it. The
+    # word in no document doesn't stop the code matching.
+    sources = await _top_sources(fake_kb, "QX-7731 zzyzxq")
+    assert sources[0] == "it-sso-troubleshooting.md"
+
+
+async def test_query_with_tsquery_syntax_or_only_stopwords_still_searches(
+    fake_kb: DocumentRepository,
+) -> None:
+    for query in ["can't sign in: QX-7731 & 'expired' | !(cert)", "what is the"]:
+        results = await fake_kb.asimilarity_search_with_score(query, k=3)
+        assert len(results) == 3
 
 
 async def test_get_document_returns_the_whole_document(
@@ -86,6 +95,36 @@ async def test_replacing_a_document_drops_its_old_chunks(
     assert document is not None
     assert document.text == "# Replaced"
     assert (await fake_kb.alist_content_hashes())[source_id] == "new-hash"
+
+
+async def test_only_chunks_with_a_summary_store_a_summary_embedding(
+    fake_kb: DocumentRepository,
+    db_pool: AsyncConnectionPool[AsyncConnection],
+) -> None:
+    source_id = "it-plans-and-pricing.md"
+    chunk = Chunk(
+        id=f"{source_id}::0",
+        text="No headings at all.",
+        metadata={"source_id": source_id, "chunk_index": 0},
+    )
+    await fake_kb.areplace_documents(
+        [IndexedDocument(source_id, "0" * 64, [chunk])], removed=[]
+    )
+
+    async with db_pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT source_id, summary_embedding IS NOT NULL FROM chunks "
+            "WHERE source_id LIKE 'it-%' ORDER BY source_id"
+        )
+        stored = dict(await cur.fetchall())
+    assert stored == {
+        "it-office-plants.md": True,
+        "it-plans-and-pricing.md": False,
+        "it-sso-troubleshooting.md": True,
+    }
+    # Scored on its text alone, it's still found.
+    results = await fake_kb.asimilarity_search_with_score("anything", k=1000)
+    assert source_id in {doc.metadata["source_id"] for doc, _score in results}
 
 
 async def test_removing_a_document_deletes_it_and_its_chunks(

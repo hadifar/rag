@@ -8,40 +8,66 @@ from psycopg_pool import AsyncConnectionPool
 from rag.domain.models import Chunk, IndexedDocument
 from rag.domain.ports import EmbeddingsPort
 
-RRF_K = 5  # reciprocal-rank-fusion constant when merging vector and full-text results
+# Reciprocal rank fusion's constant: the higher, the less a top rank outweighs the
+# next ones. 60 is the value from the original paper.
+_RRF_K = 10
 
-# One round trip: the k nearest chunks by cosine distance (HNSW index) and the k best
-# full-text matches (GIN index), fused by reciprocal rank. A chunk found by both lists
-# scores both terms; one found by only one list scores just that term.
+# The k best chunks by reciprocal rank fusion of two rankings, a chunk scoring
+# 1 / (rrf_k + rank) in each it appears in:
+# * semantic: every chunk, by a weighted sum of two cosine similarities, the query
+#   against the chunk's summary and against its text. A chunk without a summary
+#   embedding uses its text for both.
+# * keyword: the chunks matching any of the query's words in `content_tsv` (all of
+#   them would miss on one word absent from the knowledge base), by ts_rank_cd. The
+#   words are stemmed once, by to_tsvector, then quoted into the tsquery as they
+#   are: to_tsquery would stem them again ('releas' to 'relea'). A query of only
+#   stopwords has no words, and this ranking is empty.
+# Both rankings are whole, not cut to a top few, so a chunk matching a word always
+# beats one matching none. A full scan (an HNSW index can't order by a sum), which
+# is fine at knowledge-base size.
 _HYBRID_SEARCH = """
-WITH dense AS (
-    SELECT id, row_number() OVER (ORDER BY embedding <=> %(embedding)s::vector) AS rank
-    FROM chunks
-    ORDER BY embedding <=> %(embedding)s::vector
-    LIMIT %(k)s
+WITH query AS (
+    SELECT %(embedding)s::vector AS v,
+        (
+            SELECT string_agg('''' || replace(word, '''', '''''') || '''', ' | ')
+            FROM unnest(tsvector_to_array(to_tsvector('english', %(query)s))) AS word
+        )::tsquery AS words
 ),
-sparse AS (
-    SELECT id, row_number() OVER (ORDER BY ts_rank_cd(content_tsv, query) DESC) AS rank
-    FROM chunks, websearch_to_tsquery('english', %(query)s) AS query
-    WHERE content_tsv @@ query
-    ORDER BY ts_rank_cd(content_tsv, query) DESC
-    LIMIT %(k)s
+semantic AS (
+    SELECT id, row_number() OVER (ORDER BY score DESC, id) AS rank
+    FROM (
+        SELECT id,
+            (1 - %(summary_weight)s::float8) * (1 - (embedding <=> query.v))
+            + %(summary_weight)s::float8
+                * (1 - (COALESCE(summary_embedding, embedding) <=> query.v)) AS score
+        FROM chunks, query
+    ) AS scored
+),
+keyword AS (
+    SELECT id,
+        row_number() OVER (ORDER BY ts_rank_cd(content_tsv, query.words) DESC, id)
+            AS rank
+    FROM chunks, query
+    WHERE content_tsv @@ query.words
+),
+fused AS (
+    SELECT id,
+        1.0 / (%(rrf_k)s + semantic.rank)
+        + COALESCE(1.0 / (%(rrf_k)s + keyword.rank), 0) AS score
+    FROM semantic LEFT JOIN keyword USING (id)
 )
-SELECT c.content, c.metadata,
-       COALESCE(1.0 / (%(rrf_k)s + dense.rank), 0)
-     + COALESCE(1.0 / (%(rrf_k)s + sparse.rank), 0) AS score
-FROM dense
-FULL OUTER JOIN sparse USING (id)
-JOIN chunks AS c USING (id)
-ORDER BY score DESC
+SELECT content, metadata, score
+FROM fused JOIN chunks USING (id)
+ORDER BY score DESC, id
 LIMIT %(k)s
 """
 
 _INSERT_DOCUMENT = "INSERT INTO documents (source_id, content_hash) VALUES (%s, %s)"
 
 _INSERT_CHUNK = """
-INSERT INTO chunks (id, source_id, chunk_index, content, metadata, embedding)
-VALUES (%s, %s, %s, %s, %s, %s::vector)
+INSERT INTO chunks
+    (id, source_id, chunk_index, content, metadata, embedding, summary_embedding)
+VALUES (%s, %s, %s, %s, %s, %s::vector, %s::vector)
 """
 
 
@@ -49,15 +75,22 @@ class DocumentRepository:
     """Knowledge-base documents, stored as chunks in Postgres (VectorStorePort for
     reads, DocumentIndexPort for ingestion).
 
-    Search is hybrid — pgvector cosine similarity plus Postgres full-text — fused by
-    reciprocal rank. Embeddings are computed client-side by `embeddings`.
+    Search is hybrid: pgvector cosine similarity against both a chunk's text and its
+    `summary` metadata (`summary_weight` being the summary's share), fused by rank
+    with a Postgres full-text match on the chunk's text. Embeddings are computed
+    client-side by `embeddings`.
     """
 
     def __init__(
-        self, pool: AsyncConnectionPool[AsyncConnection], embeddings: EmbeddingsPort
+        self,
+        pool: AsyncConnectionPool[AsyncConnection],
+        embeddings: EmbeddingsPort,
+        *,
+        summary_weight: float,
     ):
         self._pool = pool
         self._embeddings = embeddings
+        self._summary_weight = summary_weight
 
     async def alist_content_hashes(self) -> dict[str, str]:
         async with self._pool.connection() as conn:
@@ -75,11 +108,11 @@ class DocumentRepository:
             return
 
         chunks = [chunk for document in documents for chunk in document.chunks]
-        vectors = (
-            await self._embeddings.aembed_documents([chunk.text for chunk in chunks])
-            if chunks
-            else []
-        )
+        summaries = [str(chunk.metadata.get("summary", "")) for chunk in chunks]
+        # One embedding call: every chunk's text, then the summaries that exist.
+        texts = [chunk.text for chunk in chunks] + [s for s in summaries if s]
+        vectors = await self._embeddings.aembed_documents(texts) if texts else []
+        summary_vectors = iter(vectors[len(chunks) :])
         chunk_rows = [
             (
                 chunk.id,
@@ -88,8 +121,11 @@ class DocumentRepository:
                 chunk.text,
                 Jsonb(chunk.metadata),
                 _to_vector_literal(vector),
+                _to_vector_literal(next(summary_vectors)) if summary else None,
             )
-            for chunk, vector in zip(chunks, vectors, strict=True)
+            for chunk, summary, vector in zip(
+                chunks, summaries, vectors[: len(chunks)], strict=True
+            )
         ]
         stale = [*removed, *(document.source_id for document in documents)]
 
@@ -121,10 +157,11 @@ class DocumentRepository:
             cur = await conn.execute(
                 _HYBRID_SEARCH,
                 {
-                    "embedding": _to_vector_literal(embedding),
                     "query": query,
+                    "embedding": _to_vector_literal(embedding),
+                    "summary_weight": self._summary_weight,
+                    "rrf_k": _RRF_K,
                     "k": k,
-                    "rrf_k": RRF_K,
                 },
             )
             rows = await cur.fetchall()

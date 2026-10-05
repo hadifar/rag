@@ -1,7 +1,6 @@
 """The domain's data types, grouped by area; import them from here."""
 
 from rag.domain.models.agent.agent import (
-    AgentSpec,
     Capability,
     Middleware,
     RunContext,
@@ -16,7 +15,7 @@ from rag.domain.models.agent.middleware import (
     TodolistMiddleware,
 )
 from rag.domain.models.agent.stream import (
-    AnswerRetracted,
+    AnswerVerified,
     ReasoningDelta,
     ReferencesReady,
     StreamEvent,
@@ -25,6 +24,7 @@ from rag.domain.models.agent.stream import (
     Todo,
     TodosUpdated,
     ToolCall,
+    TurnFailed,
 )
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
@@ -52,8 +52,7 @@ from rag.domain.models.retrieval import Chunk
 __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
-    "AgentSpec",
-    "AnswerRetracted",
+    "AnswerVerified",
     "AssistantMessage",
     "Capability",
     "Chunk",
@@ -84,6 +83,7 @@ __all__ = [
     "ToolKind",
     "ToolResult",
     "Turn",
+    "TurnFailed",
     "User",
     "UserMessage",
 ]

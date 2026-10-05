@@ -7,9 +7,8 @@ from langchain.agents.middleware import (
     ModelRequest,
     ModelResponse,
 )
-from langchain_core.messages import SystemMessage
-
 from rag.domain.models import Capability, RunContext
+from rag.services.agent_service.middleware.instructions import with_instructions
 
 
 class CapabilityInstructions(AgentMiddleware[AgentState, RunContext]):
@@ -30,8 +29,5 @@ class CapabilityInstructions(AgentMiddleware[AgentState, RunContext]):
         ctx = request.runtime.context
         texts = [text for read in self._instructions if (text := await read(ctx))]
         if texts:
-            base = request.system_message.text if request.system_message else ""
-            request = request.override(
-                system_message=SystemMessage(content="\n\n".join([base, *texts]))
-            )
+            request = with_instructions(request, *texts)
         return await handler(request)

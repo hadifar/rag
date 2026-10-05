@@ -7,10 +7,29 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 
 from rag.config import LangfuseObservabilityConfig, LoggingObservabilityConfig, Settings
+from rag.domain.models import RunContext
 
 logger = logging.getLogger(__name__)
 
-TraceConfig = Callable[[str | None], RunnableConfig]
+TraceConfig = Callable[[str | None, RunContext | None], RunnableConfig]
+
+
+def _run_config(
+    handler: BaseCallbackHandler, name: str | None, ctx: RunContext | None
+) -> RunnableConfig:
+    """A run traced by `handler`: named and tagged `name`, and given `ctx`, under its
+    user and with its conversation as the session (the keys Langfuse reads).
+    """
+    config: RunnableConfig = {"callbacks": [handler]}
+    if name is not None:
+        config["run_name"] = name
+        config["tags"] = [name]
+    if ctx is not None:
+        config["metadata"] = {
+            "langfuse_user_id": str(ctx.user_id),
+            "langfuse_session_id": str(ctx.conversation_id),
+        }
+    return config
 
 
 class _LoggingCallbackHandler(BaseCallbackHandler):
@@ -33,18 +52,10 @@ class _LoggingCallbackHandler(BaseCallbackHandler):
         logger.info("tool_end", extra={"output": str(output)})
 
 
-def _logging_trace_config(name: str | None = None) -> RunnableConfig:
-    config: RunnableConfig = {"callbacks": [_LoggingCallbackHandler()]}
-    if name is not None:
-        config["run_name"] = name
-    return config
-
-
-@asynccontextmanager
-async def _open_logging(
-    config: LoggingObservabilityConfig,
-) -> AsyncGenerator[TraceConfig, None]:
-    yield _logging_trace_config
+def _logging_trace_config(
+    name: str | None = None, ctx: RunContext | None = None
+) -> RunnableConfig:
+    return _run_config(_LoggingCallbackHandler(), name, ctx)
 
 
 @asynccontextmanager
@@ -61,11 +72,10 @@ async def _open_langfuse(
     )
     handler = CallbackHandler()
 
-    def trace_config(name: str | None = None) -> RunnableConfig:
-        cfg: RunnableConfig = {"callbacks": [handler]}
-        if name is not None:
-            cfg["run_name"] = name
-        return cfg
+    def trace_config(
+        name: str | None = None, ctx: RunContext | None = None
+    ) -> RunnableConfig:
+        return _run_config(handler, name, ctx)
 
     try:
         yield trace_config
@@ -78,9 +88,8 @@ async def _open_langfuse(
 @asynccontextmanager
 async def open_trace_config(settings: Settings) -> AsyncGenerator[TraceConfig, None]:
     match settings.OBSERVABILITY:
-        case LoggingObservabilityConfig() as config:
-            async with _open_logging(config) as trace_config:
-                yield trace_config
+        case LoggingObservabilityConfig():
+            yield _logging_trace_config
         case LangfuseObservabilityConfig() as config:
             async with _open_langfuse(config) as trace_config:
                 yield trace_config

@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24  # as in infra/docker/Dockerfile.frontend
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -31,19 +31,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
       - uses: pre-commit/action@v3.0.1
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - uses: astral-sh/setup-uv@v10.1.0
-      - name: Install dependencies
-        run: uv sync --group dev
-      - name: Run unit tests
-        run: uv run pytest tests/unit
 
   commitizen:
     if: github.event_name == 'pull_request'

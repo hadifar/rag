@@ -7,6 +7,7 @@ import {
   endTurn,
   fromHistory,
   isWaiting,
+  retryable,
   startTurn,
 } from '@/features/chat/model/transcript';
 import type { StreamEventResponse } from '@/shared/types';
@@ -104,30 +105,35 @@ describe('applyEvent', () => {
     ]).map((b) => b.type)).toEqual(['text', 'todos', 'text']);
   });
 
-  it('removes a retracted answer, and starts its revision in a new bubble', () => {
-    const t = applyEvents(emptyTranscript(), [
-      { type: 'tool', name: 'search', status: 'pending', query: 'pricing' },
-      { type: 'text', text: 'wro' },
-      { type: 'text', text: 'ng' },
-      { type: 'retracted' },
-      { type: 'reasoning', text: 'Again' },
-      { type: 'text', text: 'revised' },
+  it('fills in the verification bubble with its verdict, and shows the answer below it', () => {
+    expect(bubbles([
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: true },
+      { type: 'text', text: 'It costs 10.' },
+    ])).toEqual([
+      { type: 'verification', content: { status: 'done', grounded: true } },
+      { type: 'text', content: { text: 'It costs 10.' } },
     ]);
-
-    expect(t.bubbles.map(({ type, content }) => ({ type, content }))).toEqual([
-      { type: 'tool', content: { name: 'search', query: 'pricing', status: 'pending' } },
-      { type: 'reasoning', content: { text: 'Again', streaming: false } },
-      { type: 'text', content: { text: 'revised' } },
-    ]);
-    // The revision's bubble is a new one, not the removed draft's.
-    expect(new Set(t.bubbles.map((b) => b.id)).size).toBe(3);
   });
 
-  it('ignores a retraction with no answer to remove', () => {
+  it('starts a new bubble for an answer checked after earlier text', () => {
     expect(bubbles([
-      { type: 'reasoning', text: 'Thinking' },
-      { type: 'retracted' },
-    ])).toEqual([{ type: 'reasoning', content: { text: 'Thinking', streaming: false } }]);
+      { type: 'text', text: 'Let me check.' },
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: true },
+      { type: 'text', text: 'It costs 10.' },
+    ]).map((b) => b.type)).toEqual(['text', 'verification', 'text']);
+  });
+
+  it('shows a revision below the verdict that rejected the answer', () => {
+    expect(bubbles([
+      { type: 'verification', status: 'pending' },
+      { type: 'verification', status: 'done', grounded: false },
+      { type: 'text', text: 'revised' },
+    ])).toEqual([
+      { type: 'verification', content: { status: 'done', grounded: false } },
+      { type: 'text', content: { text: 'revised' } },
+    ]);
   });
 
   it('leaves the bubbles it did not change as they were', () => {
@@ -144,12 +150,18 @@ describe('applyEvent', () => {
 });
 
 describe('turns', () => {
-  it('shows typing from the message until the first event', () => {
+  it('shows typing from the message until the answer ends', () => {
     const asked = startTurn(emptyTranscript(), 'Hi');
     expect(asked.bubbles).toMatchObject([{ type: 'user', content: { text: 'Hi' } }]);
     expect(isWaiting(asked)).toBe(true);
 
-    expect(isWaiting(applyEvent(asked, { type: 'text', text: 'Hello' }))).toBe(false);
+    const answering = applyEvents(asked, [
+      { type: 'tool', name: 'search', status: 'pending', query: 'a' },
+      { type: 'tool', name: 'search', status: 'done', output: '3 chunks' },
+      { type: 'text', text: 'Hello' },
+    ]);
+    expect(isWaiting(answering)).toBe(true);
+    expect(isWaiting(endTurn(answering))).toBe(false);
   });
 
   it('ends with an error bubble, and stops a reasoning bubble from streaming', () => {
@@ -163,6 +175,33 @@ describe('turns', () => {
       { type: 'reasoning', content: { streaming: false } },
       { type: 'error', content: { text: 'Something went wrong: offline' } },
     ]);
+  });
+
+  it('shows a failed turn as an error bubble, and stops its pending tool showing as running', () => {
+    const failed = applyEvents(startTurn(emptyTranscript(), 'Hi'), [
+      { type: 'tool', name: 'search', status: 'pending', query: 'a' },
+      { type: 'error', message: 'Something went wrong.' },
+    ]);
+
+    expect(endTurn(failed).bubbles).toMatchObject([
+      { type: 'user' },
+      { type: 'tool', content: { status: 'done', output: "Didn't finish." } },
+      { type: 'error', content: { text: 'Something went wrong.' } },
+    ]);
+  });
+
+  it('offers to retry a failed answer once it has ended, with its question', () => {
+    const failed = applyEvent(startTurn(emptyTranscript(), 'Hi'), { type: 'error', message: 'Oops' });
+    expect(retryable(failed)).toBeNull();
+
+    const ended = endTurn(failed);
+    expect(retryable(ended)).toEqual({ bubbleId: ended.bubbles.at(-1)!.id, question: 'Hi' });
+  });
+
+  it('offers no retry after an answer, or for a conversation that failed to load', () => {
+    const answered = endTurn(applyEvent(startTurn(emptyTranscript(), 'Hi'), { type: 'text', text: 'Hello' }));
+    expect(retryable(answered)).toBeNull();
+    expect(retryable(endTurn(emptyTranscript(), "Couldn't load"))).toBeNull();
   });
 
   it('gives every bubble its own id across turns', () => {

@@ -4,7 +4,7 @@ import { useOpenKbSource } from '@/features/knowledge-base';
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { bubbles, isWaiting, showWelcome, sendMessage } = useChat(conversationId);
+  const { bubbles, isWaiting, showWelcome, sendMessage, retryBubbleId, retry } = useChat(conversationId);
   const openReference = useOpenKbSource();
 
   return (
@@ -12,7 +12,13 @@ export function ChatPage() {
       {showWelcome ? (
         <WelcomePlaceholder />
       ) : (
-        <MessageList bubbles={bubbles} isWaiting={isWaiting} onOpenReference={openReference} />
+        <MessageList
+          bubbles={bubbles}
+          isWaiting={isWaiting}
+          onOpenReference={openReference}
+          retryBubbleId={retryBubbleId}
+          onRetry={retry}
+        />
       )}
       <Composer onSend={sendMessage} />
     </div>

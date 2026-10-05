@@ -63,7 +63,3 @@ class ToolAgentSpec:
     middleware: list[Middleware] = field(default_factory=list[Middleware])
     # Their tools join `tools`; their instructions follow the middleware's.
     capabilities: list[Capability] = field(default_factory=list[Capability])
-
-
-# # Every kind of agent the agent service can build;
-AgentSpec = ToolAgentSpec

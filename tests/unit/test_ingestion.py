@@ -16,7 +16,10 @@ from rag.domain.errors import (
 )
 from rag.domain.models import IngestionReport, RawDocument
 from rag.services.ingestion_service import loaders, service
-from rag.services.ingestion_service.chunking import WholeDocumentChunker
+from rag.services.ingestion_service.chunking import (
+    WholeDocumentChunker,
+    markdown_summary,
+)
 from rag.services.ingestion_service.loaders import load_archive, load_path
 from rag.services.ingestion_service.service import IngestionService
 from tests.unit.fakes import (
@@ -123,6 +126,39 @@ def test_load_path_reads_a_directory_or_a_zip(tmp_path: Path) -> None:
 
     assert [d.source_id for d in load_path(tmp_path)] == ["a.md"]
     assert [d.source_id for d in load_path(zip_path)] == ["b.md"]
+
+
+# --- Chunking ------------------------------------------------------------------------
+
+
+def test_summary_is_title_description_and_other_headings_as_keywords() -> None:
+    text = (
+        "# Plans and Pricing\n\n"
+        "This document summarizes\nthe plan structure.\n\n"
+        "More text.\n\n## Plan overview\n\n### Starter\n\nStarter is small.\n"
+    )
+
+    assert markdown_summary(text) == (
+        "Plans and Pricing\n"
+        "This document summarizes the plan structure.\n"
+        "Keywords: Plan overview, Starter"
+    )
+
+
+def test_summary_has_no_description_when_a_heading_follows_the_title() -> None:
+    assert markdown_summary("# Title\n## Section\n\nBody.") == (
+        "Title\nKeywords: Section"
+    )
+
+
+def test_chunk_carries_the_summary_only_when_the_document_has_one() -> None:
+    chunker = WholeDocumentChunker()
+
+    [titled] = chunker.chunk(RawDocument("a.md", "# A\n\nAbout A."))
+    [plain] = chunker.chunk(RawDocument("b.md", "No headings at all."))
+
+    assert titled.metadata["summary"] == "A\nAbout A."
+    assert "summary" not in plain.metadata
 
 
 # --- IngestionService ---------------------------------------------------------------

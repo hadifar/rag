@@ -100,7 +100,13 @@ class ConversationService:
         conversation = await self.get_owned(user_id, conversation_id)
         prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
         reply = await or_default(
-            self._agent_service.generate_structured(prompt, TitleOutput), None
+            self._agent_service.generate_structured(
+                prompt,
+                TitleOutput,
+                trace="title",
+                ctx=RunContext(user_id=user_id, conversation_id=conversation_id),
+            ),
+            None,
         )
         title = reply.title if reply is not None else _fallback_title(message)
         await self._repository.set_title(conversation_id, title)

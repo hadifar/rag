@@ -159,7 +159,7 @@ def test_settings_endpoint_returns_config(
     body = response.json()
     assert body["model"] == "gpt-4o-mini"
     assert body["temperature"] == 0.2
-    assert body["top_k"] == 3
+    assert body["top_k"] == 3  # the reranker's pick of the 10 fetched
 
 
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:

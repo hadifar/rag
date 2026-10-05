@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
-    AgentSpec,
     Conversation,
     IndexedDocument,
     IngestionReport,
@@ -18,6 +17,7 @@ from rag.domain.models import (
     RunContext,
     StreamEvent,
     TextDelta,
+    ToolAgentSpec,
     Turn,
     User,
 )
@@ -257,12 +257,18 @@ class StubGeneration:
         return self.reply
 
     async def generate_structured[T: BaseModel](
-        self, prompt: str, schema: type[T], *, attempts: int = 1
+        self,
+        prompt: str,
+        schema: type[T],
+        *,
+        attempts: int = 1,
+        trace: str | None = None,
+        ctx: RunContext | None = None,
     ) -> T:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    def create_agent(self, spec: AgentSpec) -> ChatAgentPort:
+    def create_agent(self, spec: ToolAgentSpec) -> ChatAgentPort:
         raise NotImplementedError("the stub builds no agent")
 
 

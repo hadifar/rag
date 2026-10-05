@@ -8,10 +8,11 @@ from langchain.agents.middleware import (
     ModelResponse,
 )
 from langchain.agents.middleware.types import PrivateStateAttr
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 
+from rag.services.agent_service.middleware.instructions import with_instructions
 from rag.services.agent_service.prompts import (
     GUARDRAIL_PROMPT,
     OFF_TOPIC_INSTRUCTION,
@@ -70,11 +71,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         if request.state.get("off_topic"):
-            base = request.system_message.text if request.system_message else ""
-            request = request.override(
-                system_message=SystemMessage(
-                    content=f"{base}\n\n{OFF_TOPIC_INSTRUCTION}"
-                ),
-                tools=[t for t in request.tools if _name(t) in self._kept_tools],
+            request = with_instructions(request, OFF_TOPIC_INSTRUCTION).override(
+                tools=[t for t in request.tools if _name(t) in self._kept_tools]
             )
         return await handler(request)

@@ -1,16 +1,9 @@
+from dataclasses import asdict
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
-from rag.domain.models import (
-    AnswerRetracted,
-    ReasoningDelta,
-    ReferencesReady,
-    StreamEvent,
-    TextDelta,
-    TodosUpdated,
-    ToolCall,
-)
+from rag.domain.models import StreamEvent
 
 # The message stream's events: each is one SSE `data:` line of JSON, told apart by `type`.
 
@@ -51,12 +44,14 @@ class TodosEvent(BaseModel):
     todos: list[TodoItem]
 
 
-class RetractedEvent(BaseModel):
-    """The answer text sent since the last tool call or plan was rejected (unsupported
-    by the searches) and is being rewritten: drop it. Never in a saved conversation.
+class VerificationEvent(BaseModel):
+    """The answer checked against what the turn's searches found: `pending` while the
+    check runs, then `done` with whether the answer is supported by them.
     """
 
-    type: Literal["retracted"] = "retracted"
+    type: Literal["verification"] = "verification"
+    status: Literal["pending", "done"]
+    grounded: bool | None = None
 
 
 class ReferencesEvent(BaseModel):
@@ -66,6 +61,13 @@ class ReferencesEvent(BaseModel):
     references: list[str]
 
 
+class ErrorEvent(BaseModel):
+    """The turn couldn't finish; the last event of its stream. `message` is for the user."""
+
+    type: Literal["error"] = "error"
+    message: str
+
+
 class StreamEventResponse(
     RootModel[
         Annotated[
@@ -73,8 +75,9 @@ class StreamEventResponse(
             | ReasoningEvent
             | ToolEvent
             | TodosEvent
-            | RetractedEvent
-            | ReferencesEvent,
+            | VerificationEvent
+            | ReferencesEvent
+            | ErrorEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -85,47 +88,5 @@ class StreamEventResponse(
 
 
 def to_stream_event(event: StreamEvent) -> StreamEventResponse:
-    return StreamEventResponse(_payload(event))
-
-
-def _payload(
-    event: StreamEvent,
-) -> (
-    TextEvent
-    | ReasoningEvent
-    | ToolEvent
-    | TodosEvent
-    | RetractedEvent
-    | ReferencesEvent
-):
-    match event:
-        case TextDelta(text=text):
-            return TextEvent(text=text)
-        case ReasoningDelta(text=text):
-            return ReasoningEvent(text=text)
-        case ToolCall() | TodosUpdated():
-            return _tool_payload(event)
-        case AnswerRetracted() | ReferencesReady():
-            return _turn_payload(event)
-
-
-def _turn_payload(
-    event: AnswerRetracted | ReferencesReady,
-) -> RetractedEvent | ReferencesEvent:
-    """What becomes of the turn's answer: a draft retracted, or the references cited."""
-    match event:
-        case AnswerRetracted():
-            return RetractedEvent()
-        case ReferencesReady(references=references):
-            return ReferencesEvent(references=references)
-
-
-def _tool_payload(event: ToolCall | TodosUpdated) -> ToolEvent | TodosEvent:
-    """A tool's call: a search's progress, or the plan the planning tool wrote."""
-    match event:
-        case ToolCall(name=name, status=status, query=query, output=output):
-            return ToolEvent(name=name, status=status, query=query, output=output)
-        case TodosUpdated(todos=todos):
-            return TodosEvent(
-                todos=[TodoItem(content=t.content, status=t.status) for t in todos]
-            )
+    """The API model for a domain event: both carry the same fields and `type` tag."""
+    return StreamEventResponse.model_validate(asdict(event))

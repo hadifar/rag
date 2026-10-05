@@ -24,6 +24,7 @@ from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
+from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
 
@@ -47,11 +48,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
     ):
-        vector_store = DocumentRepository(db_pool, build_embeddings(settings))
-        retrieval_service = RetrievalService(
-            vector_store=vector_store, top_k=settings.RAG.TOP_K
+        vector_store = DocumentRepository(
+            db_pool,
+            build_embeddings(settings),
+            summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
-
         agent_service = AgentService(
             llm=build_llm(settings),
             checkpointer=checkpointer,
@@ -59,12 +60,23 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
 
+        retrieval_service = RetrievalService(
+            vector_store=vector_store,
+            reranker=(
+                LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
+                if settings.RETRIEVAL.rerank
+                else NoReranker()
+            ),
+            top_k=settings.RETRIEVAL.top_k,
+            candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
+        )
+
         preference_service = PreferenceService(repository=PreferenceRepository(db_pool))
 
         rag_service = RagService(
             retrieval_service=retrieval_service,
             agent_service=agent_service,
-            max_revisions=settings.RAG.MAX_REVISIONS,
+            max_revisions=settings.LLM.MAX_REVISIONS,
             capabilities=[preference_service.capability()],
         )
 
