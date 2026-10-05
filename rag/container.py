@@ -24,7 +24,6 @@ from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
-from rag.services.retrieval_service.expansion import LlmQueryExpander, NoQueryExpander
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -63,15 +62,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         retrieval_service = RetrievalService(
             vector_store=vector_store,
-            expander=(
-                LlmQueryExpander(
-                    agent_service,
-                    count=settings.RETRIEVAL.QUERY_VARIANTS,
-                    attempts=settings.LLM.RETRY_ATTEMPTS,
-                )
-                if settings.RETRIEVAL.QUERY_VARIANTS
-                else NoQueryExpander()
-            ),
             reranker=(
                 LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
                 if settings.RETRIEVAL.RERANK
