@@ -13,11 +13,12 @@ The project prefers a failing build over a review comment. This page lists what 
 * `migrations-append-only`: rejects a change to a committed migration.
 * `frontend-api-types`: regenerates `frontend/src/shared/types/api.generated.ts` from the backend schema.
 * `frontend-typecheck`: `tsc` against the regenerated types. A renamed backend field fails here.
+* `frontend-oxlintrc`: regenerates `frontend/.oxlintrc.json` from `scripts/generate_oxlintrc.mjs`.
 * `frontend-lint`: `oxlint`, the frontend layer rules in [Frontend](frontend.md#layers-inside-a-feature).
 * `commitizen`: Conventional Commits, on the commit message.
 * `precommit-gitguard`: `master` and `dev` accept merges only; branch names start with `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`, `release/` or `hotfix/`.
 
-Hooks that fix files: `ruff`, `uv-lock`, `frontend-api-types`. Stage the fixes and run the checks again.
+Hooks that fix files: `ruff`, `uv-lock`, `frontend-api-types`, `frontend-oxlintrc`. Stage the fixes and run the checks again.
 
 ## Tests outside the hooks
 
