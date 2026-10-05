@@ -105,12 +105,15 @@ describe('ChatPage', () => {
         ]),
       ),
     );
-    renderChat('/chat/c1');
+    const { user } = renderChat('/chat/c1');
 
     expect(await screen.findByText('Ninety days.')).toBeInTheDocument();
     expect(screen.getByText('How long is data kept?')).toBeInTheDocument();
-    // Finished, as it was once the answer began.
-    expect(screen.getByText('Thought process')).toBeInTheDocument();
+    // Finished, as it was once the answer began, and folded until opened.
+    const thoughts = screen.getByRole('button', { name: 'Thought process' });
+    expect(thoughts).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Check the retention policy.')).not.toBeInTheDocument();
+    await user.click(thoughts);
     expect(screen.getByText('Check the retention policy.')).toBeInTheDocument();
     expect(screen.getByText('Find the policy')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '11-data-retention-policy.md' })).toBeInTheDocument();
