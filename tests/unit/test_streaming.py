@@ -100,6 +100,15 @@ def test_the_answers_check_is_sent_as_it_starts_and_with_its_verdict():
     ]
 
 
+def test_a_blocked_messages_refusal_is_sent_as_the_answers_text():
+    event = {
+        "event": "on_custom_event",
+        "name": "input_blocked",
+        "data": {"message": "I can't help with that."},
+    }
+    assert parse_event(event) == [TextDelta(text="I can't help with that.")]
+
+
 def test_other_custom_events_are_not_streamed():
     event = {"event": "on_custom_event", "name": "something_else", "data": {}}
     assert parse_event(event) == []

@@ -67,7 +67,12 @@ class Agent:
                 yield event
 
             final_state = await self._graph.aget_state(config)
-            references = turn_references(final_state.values.get("messages", []))
+            messages = final_state.values.get("messages", [])
+            # A blocked question is dropped from the thread, and with it its turn: what
+            # would be read as the turn then is the one before it.
+            if question.id not in [m.id for m in messages]:
+                return
+            references = turn_references(messages)
             if references is not None:
                 yield ReferencesReady(references=references)
         except Exception:
@@ -163,18 +168,19 @@ class AgentService:
         return cast(T, await llm.ainvoke(prompt, config=config))
 
     def create_agent(self, spec: ToolAgentSpec) -> Agent:
-        """A chat agent built as `spec` describes; raises ValueError if two of its
-        tools share a name.
-        """
+        """A chat agent built as `spec` describes"""
+
         graph = build_tool_agent(
-            self._llm, spec, self._classify, self._checkpointer, self._retry_attempts
+            self._llm, spec, self._judge, self._checkpointer, self._retry_attempts
         )
+
         return Agent(graph, self._checkpointer, self._trace_config)
 
-    async def _classify(self, prompt: str) -> str:
-        """The guards' LLM call: retried, and if it still fails, an empty reply, which
+    async def _judge[T: BaseModel](self, prompt: str, schema: type[T]) -> T | None:
+        """The guards' LLM call (a `Judge`): retried, and if it still fails, None, which
         neither guard reads as a rejection (they fail open).
         """
         return await or_default(
-            self.generate(prompt, attempts=self._retry_attempts), ""
+            self.generate_structured(prompt, schema, attempts=self._retry_attempts),
+            None,
         )

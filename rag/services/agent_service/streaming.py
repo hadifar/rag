@@ -26,6 +26,10 @@ _PLANNING_TOOL = "write_todos"
 # starting, then its verdict.
 ANSWER_VERIFICATION = "answer_verification"
 
+# Dispatched by the guard that blocks a user message, with the refusal sent instead of
+# an answer.
+INPUT_BLOCKED = "input_blocked"
+
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     """The user-facing events a raw graph event stands for; none if it isn't one."""
@@ -85,12 +89,15 @@ class AnswerGate:
 
 
 def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
-    """What the groundedness guard dispatched about the answer: its check starting, then
-    its verdict. Other custom events aren't streamed.
+    """What the guards dispatched: the answer's check starting, then its verdict; or
+    the refusal for a blocked message, sent as the answer's text. Other custom events
+    aren't streamed.
     """
     name, data = raw_event["name"], raw_event["data"]
     if name == ANSWER_VERIFICATION:
         return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
+    if name == INPUT_BLOCKED:
+        return [TextDelta(text=data["message"])]
     return []
 
 

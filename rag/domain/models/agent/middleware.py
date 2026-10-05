@@ -3,8 +3,9 @@ from pydantic.dataclasses import dataclass
 
 @dataclass(frozen=True)
 class OffTopicMiddleware:
-    """Classifies each user message; for an off-topic one the agent is told to decline
-    and gets no tools.
+    """Classifies each user message, with the turns before it: a blocked one (an
+    injection, jailbreak or harmful request) gets a fixed refusal and never reaches the
+    model; for an off-topic one the agent is told to decline and gets no tools.
     """
 
 
