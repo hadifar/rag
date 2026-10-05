@@ -1,17 +1,9 @@
+from dataclasses import asdict
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
-from rag.domain.models import (
-    AnswerVerified,
-    ReasoningDelta,
-    ReferencesReady,
-    StreamEvent,
-    TextDelta,
-    TodosUpdated,
-    ToolCall,
-    TurnFailed,
-)
+from rag.domain.models import StreamEvent
 
 # The message stream's events: each is one SSE `data:` line of JSON, told apart by `type`.
 
@@ -96,52 +88,5 @@ class StreamEventResponse(
 
 
 def to_stream_event(event: StreamEvent) -> StreamEventResponse:
-    return StreamEventResponse(_payload(event))
-
-
-def _payload(
-    event: StreamEvent,
-) -> (
-    TextEvent
-    | ReasoningEvent
-    | ToolEvent
-    | TodosEvent
-    | VerificationEvent
-    | ReferencesEvent
-    | ErrorEvent
-):
-    match event:
-        case TextDelta(text=text):
-            return TextEvent(text=text)
-        case ReasoningDelta(text=text):
-            return ReasoningEvent(text=text)
-        case ToolCall() | TodosUpdated():
-            return _tool_payload(event)
-        case AnswerVerified() | ReferencesReady() | TurnFailed():
-            return _turn_payload(event)
-
-
-def _turn_payload(
-    event: AnswerVerified | ReferencesReady | TurnFailed,
-) -> VerificationEvent | ReferencesEvent | ErrorEvent:
-    """What becomes of the turn's answer: checked against the searches, the
-    references cited, or no answer, as the turn failed.
-    """
-    match event:
-        case AnswerVerified(status=status, grounded=grounded):
-            return VerificationEvent(status=status, grounded=grounded)
-        case ReferencesReady(references=references):
-            return ReferencesEvent(references=references)
-        case TurnFailed(message=message):
-            return ErrorEvent(message=message)
-
-
-def _tool_payload(event: ToolCall | TodosUpdated) -> ToolEvent | TodosEvent:
-    """A tool's call: a search's progress, or the plan the planning tool wrote."""
-    match event:
-        case ToolCall(name=name, status=status, query=query, output=output):
-            return ToolEvent(name=name, status=status, query=query, output=output)
-        case TodosUpdated(todos=todos):
-            return TodosEvent(
-                todos=[TodoItem(content=t.content, status=t.status) for t in todos]
-            )
+    """The API model for a domain event: both carry the same fields and `type` tag."""
+    return StreamEventResponse.model_validate(asdict(event))
