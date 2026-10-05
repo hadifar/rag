@@ -13,7 +13,7 @@ sequenceDiagram
     UI->>R: POST /api/conversations/{id}/messages
     R->>CS: send_message
     CS->>A: run turn (thread = conversation id)
-    A->>LLM: TopicalGuard classify
+    A->>LLM: OffTopicGuard classify
     A->>LLM: model call
     A->>KB: search_kb
     KB->>DB: vector search

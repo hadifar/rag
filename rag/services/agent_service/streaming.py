@@ -11,6 +11,7 @@ from rag.domain.models import (
     TodosUpdated,
     ToolCall,
 )
+from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same
@@ -21,14 +22,6 @@ _USER_FACING_NODE = "model"
 # TodoListMiddleware's planning tool. Its call is the plan, not a search, so it's sent
 # as the plan itself; it returns a Command whose state update holds the new todos.
 _PLANNING_TOOL = "write_todos"
-
-# Dispatched (as a custom event) by the guard that checks each answer: the check
-# starting, then its verdict.
-ANSWER_VERIFICATION = "answer_verification"
-
-# Dispatched by the guard that blocks a user message, with the refusal sent instead of
-# an answer.
-INPUT_BLOCKED = "input_blocked"
 
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:

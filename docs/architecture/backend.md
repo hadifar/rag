@@ -33,8 +33,8 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
 * Free text a user types (a chat message, a preference) is a `UserText` field (`rag/api/schema/text.py`): `normalize_text` (`rag/shared/text.py`) applies NFKC, drops control, invisible and bidi-override characters, and tidies whitespace before the length checks run.
-* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
-* `TopicalGuard` classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`. Restrict (off-topic): it adds a decline instruction and keeps only `kind="user"` tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the message is dropped from the thread.
+* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/builder.py`) turns the spec into a LangChain `create_agent` graph: `tools.py` adapts the tools, and `middleware/` maps each spec middleware to its guard (`middleware/factory.py`).
+* `OffTopicGuard` classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`. Restrict (off-topic): it adds a decline instruction and keeps only `kind="user"` tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the message is dropped from the thread.
 * Both guards get a structured verdict (a Pydantic schema) from their LLM call. A failed call passes the message or answer (fail open).
 * `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `LLM__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 * `CapabilityInstructions` adds each capability's instructions on every model call.

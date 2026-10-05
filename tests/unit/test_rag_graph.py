@@ -35,15 +35,16 @@ from rag.domain.models import (
     ToolResult,
     TurnFailed,
 )
-from rag.services.agent_service.middleware.groundness import GroundednessVerdict
-from rag.services.agent_service.middleware.topical import InputVerdict
-from rag.services.agent_service.prompts import (
+from rag.services.agent_service.agent import Agent
+from rag.services.agent_service.middleware.groundedness import GroundednessVerdict
+from rag.services.agent_service.middleware.off_topic import InputVerdict
+from rag.services.agent_service.middleware.prompts import (
     BLOCKED_MESSAGE,
     OFF_TOPIC_INSTRUCTION,
     REVISION_INSTRUCTION,
-    TURN_FAILED_MESSAGE,
 )
-from rag.services.agent_service.service import Agent, AgentService
+from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
+from rag.services.agent_service.service import AgentService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
 from rag.services.rag_service.service import RagService

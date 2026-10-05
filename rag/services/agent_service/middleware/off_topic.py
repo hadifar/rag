@@ -16,14 +16,14 @@ from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
+from rag.services.agent_service.events import INPUT_BLOCKED
 from rag.services.agent_service.middleware.instructions import with_instructions
 from rag.services.agent_service.middleware.judge import Judge
-from rag.services.agent_service.prompts import (
+from rag.services.agent_service.middleware.prompts import (
     BLOCKED_MESSAGE,
     GUARDRAIL_PROMPT,
     OFF_TOPIC_INSTRUCTION,
 )
-from rag.services.agent_service.streaming import INPUT_BLOCKED
 from rag.services.agent_service.turn import is_final_answer, split_turns
 
 logger = logging.getLogger(__name__)
@@ -76,11 +76,11 @@ def _name(tool: BaseTool | dict[str, Any]) -> str | None:
     return tool.get("name") if isinstance(tool, dict) else tool.name
 
 
-class TopicalState(AgentState):
+class OffTopicState(AgentState):
     off_topic: NotRequired[Annotated[bool, PrivateStateAttr]]
 
 
-class TopicalGuard(AgentMiddleware[TopicalState]):
+class OffTopicGuard(AgentMiddleware[OffTopicState]):
     """Classifies each user message once per turn, with the turns before it for context.
     Blocked (an injection, jailbreak or harmful request): the turn ends before the model
     runs, the user gets a fixed refusal, and the message is dropped from the thread so
@@ -90,7 +90,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
     only, never saved to the thread, so it can't leak into later turns.
     """
 
-    state_schema = TopicalState
+    state_schema = OffTopicState
 
     def __init__(self, judge: Judge, kept_tools: frozenset[str] = frozenset()):
         super().__init__()
@@ -99,7 +99,7 @@ class TopicalGuard(AgentMiddleware[TopicalState]):
 
     @hook_config(can_jump_to=["end"])
     async def abefore_agent(
-        self, state: TopicalState, runtime: Runtime
+        self, state: OffTopicState, runtime: Runtime
     ) -> dict[str, Any] | None:
         decision = await classify_input(self._judge, state["messages"])
         if decision == "block":
