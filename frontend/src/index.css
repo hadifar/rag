@@ -56,22 +56,32 @@
   --color-warning-950: oklch(27.9% 0.077 45.635); /* amber-950 */
 
   /* A deleted sidebar chat: blurs and rises away, then its row folds shut. */
-  --animate-vaporize: vaporize 600ms ease-in forwards;
+  /* Moves within the row only: the sidebar list clips anything that spills out. */
+  --animate-vaporize: vaporize 1000ms ease-out forwards;
   @keyframes vaporize {
-    0% {
+    /* A beat to let the eye travel from the dialog to the row. */
+    0%,
+    12% {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
       max-height: 3rem;
+    }
+    45% {
+      opacity: 0.6;
+      filter: blur(2px);
+      transform: translateY(-3px);
     }
     75% {
       opacity: 0;
       filter: blur(6px);
-      transform: translateY(-6px) scale(1.04);
-      letter-spacing: 0.12em;
+      transform: translateY(-8px);
       max-height: 3rem;
     }
     100% {
       opacity: 0;
       filter: blur(6px);
-      transform: translateY(-6px) scale(1.04);
+      transform: translateY(-8px);
       max-height: 0;
     }
   }
