@@ -1,12 +1,13 @@
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from rag.api.schema.agent import StreamEventResponse, to_stream_event
-from rag.domain.models import AssistantMessage, HistoryMessage, UserMessage
+from rag.api.schema.agent import StreamEventResponse
+from rag.domain.models import HistoryMessage
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 
@@ -56,13 +57,8 @@ class HistoryMessageResponse(
 
 
 def to_history_message(message: HistoryMessage) -> HistoryMessageResponse:
-    match message:
-        case UserMessage(text=text):
-            return HistoryMessageResponse(UserMessageResponse(text=text))
-        case AssistantMessage(events=events):
-            return HistoryMessageResponse(
-                AssistantMessageResponse(events=[to_stream_event(e) for e in events])
-            )
+    """The API model for a domain message: both carry the same fields and `role` tag."""
+    return HistoryMessageResponse.model_validate(asdict(message))
 
 
 class MessageRequest(BaseModel):

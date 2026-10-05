@@ -104,6 +104,16 @@ repos:
         files: ^(frontend/(src|tests)/.*\.tsx?|frontend/tsconfig.*\.json)$
         stages: [pre-commit]
 
+      # Regenerates frontend/.oxlintrc.json from scripts/generate_oxlintrc.mjs, where each
+      # import-boundary pattern is written once: a hand edit to the JSON is overwritten.
+      - id: frontend-oxlintrc
+        name: frontend lint config matches its generator
+        entry: node scripts/generate_oxlintrc.mjs
+        language: system
+        pass_filenames: false
+        files: ^(scripts/generate_oxlintrc\.mjs|frontend/\.oxlintrc\.json)$
+        stages: [pre-commit]
+
       # oxlint (frontend/.oxlintrc.json): hooks rules, plus the import boundaries — components
       # and pages never import api/, types come from the types index, no bare fetch.
       - id: frontend-lint
@@ -111,5 +121,5 @@ repos:
         entry: bash -c 'cd frontend && npx --no-install oxlint --deny-warnings'
         language: system
         pass_filenames: false
-        files: ^frontend/(src|tests)/.*\.tsx?$|^frontend/\.oxlintrc\.json$
+        files: ^frontend/(src|tests)/.*\.tsx?$|^frontend/\.oxlintrc\.json$|^scripts/generate_oxlintrc\.mjs$
         stages: [pre-commit]

@@ -127,6 +127,12 @@ source_modules = ["rag.domain"]
 forbidden_modules = ["rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.container", "rag.app", "rag.cli", "langchain_core", "langchain", "langgraph"]
 
 [[tool.importlinter.contracts]]
+name = "shared is a leaf: helpers any layer may use, depending on none"
+type = "forbidden"
+source_modules = ["rag.shared"]
+forbidden_modules = ["rag.domain", "rag.services", "rag.adapters", "rag.repository", "rag.api", "rag.config", "rag.container", "rag.app", "rag.cli"]
+
+[[tool.importlinter.contracts]]
 name = "services do not import adapters, entrypoints, or the api layer directly"
 type = "forbidden"
 source_modules = ["rag.services"]

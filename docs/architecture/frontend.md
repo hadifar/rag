@@ -12,7 +12,7 @@ Diagram: [Frontend layers](../diagrams/architecture.md#frontend-layers).
 * `components/`: presentation only. Never imports `api/` or `@tanstack/react-query`.
 * `index.ts`: the feature's public API. Other code imports `@/features/<name>` only.
 
-oxlint (`frontend/.oxlintrc.json`) enforces every rule above.
+oxlint (`frontend/.oxlintrc.json`) enforces every rule above. The JSON is generated: edit `scripts/generate_oxlintrc.mjs`, which writes each rule once.
 
 ## State
 

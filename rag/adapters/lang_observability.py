@@ -59,13 +59,6 @@ def _logging_trace_config(
 
 
 @asynccontextmanager
-async def _open_logging(
-    config: LoggingObservabilityConfig,
-) -> AsyncGenerator[TraceConfig, None]:
-    yield _logging_trace_config
-
-
-@asynccontextmanager
 async def _open_langfuse(
     config: LangfuseObservabilityConfig,
 ) -> AsyncGenerator[TraceConfig, None]:
@@ -95,9 +88,8 @@ async def _open_langfuse(
 @asynccontextmanager
 async def open_trace_config(settings: Settings) -> AsyncGenerator[TraceConfig, None]:
     match settings.OBSERVABILITY:
-        case LoggingObservabilityConfig() as config:
-            async with _open_logging(config) as trace_config:
-                yield trace_config
+        case LoggingObservabilityConfig():
+            yield _logging_trace_config
         case LangfuseObservabilityConfig() as config:
             async with _open_langfuse(config) as trace_config:
                 yield trace_config

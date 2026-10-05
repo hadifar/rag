@@ -5,7 +5,7 @@ description: Repo-wide design audit. Returns a ranked list of what to delete, si
 
 # Scan Repo
 
-Audit the whole tree, not a diff. Find over-engineering, needless complexity, and structure that will get in the way as the code grows. Keep good architecture: SOLID, clean layers, ports and adapters.
+Audit the whole tree, not a diff. Find over-engineering, needless complexity, and structure that will get in the way as the code grows. Keep good architecture: SOLID, clean layers.
 
 Reports only. It never edits code. Not for bugs or security (use `pr-review`).
 

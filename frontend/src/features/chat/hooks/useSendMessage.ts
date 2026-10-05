@@ -8,6 +8,7 @@ import {
   touchConversation,
   useConversationCache,
 } from '@/features/conversations';
+import { errorMessage } from '@/shared/api/errors';
 import type { StreamEventResponse } from '@/shared/types';
 import { routes } from '@/shared/routes';
 import { streamChat } from '../api/chat';
@@ -15,6 +16,17 @@ import { chatKeys } from '../api/queryKeys';
 import { applyEvents, emptyTranscript, endTurn, startTurn } from '../model/transcript';
 import type { Transcript } from '../types';
 import { frameBatcher } from './frameBatcher';
+
+/** Why the answer stopped, for the user: never the raw error, which reads as gibberish. */
+function answerErrorText(err: unknown): string {
+  // fetch fails with a TypeError when the request never got a response.
+  if (err instanceof TypeError) return "Couldn't reach the server. Check your connection and try again.";
+  return errorMessage(
+    err,
+    { 404: 'This conversation no longer exists.' },
+    'Something went wrong while answering. Please try again.'
+  );
+}
 
 /** The answer being streamed: which conversation it's for, and how to stop it. */
 type Stream = { conversationId: string | undefined; controller: AbortController };
@@ -102,8 +114,7 @@ export function useSendMessage(conversationId: string | undefined) {
         write((t) => endTurn(t));
       } catch (err) {
         events.flushNow();
-        const message = err instanceof Error ? err.message : String(err);
-        write((t) => endTurn(t, `Something went wrong: ${message}`));
+        write((t) => endTurn(t, answerErrorText(err)));
       } finally {
         if (active.current === stream) active.current = null;
       }

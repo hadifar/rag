@@ -1,7 +1,6 @@
 """The domain's data types, grouped by area; import them from here."""
 
 from rag.domain.models.agent.agent import (
-    AgentSpec,
     Capability,
     Middleware,
     RunContext,
@@ -53,7 +52,6 @@ from rag.domain.models.retrieval import Chunk
 __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
-    "AgentSpec",
     "AnswerVerified",
     "AssistantMessage",
     "Capability",

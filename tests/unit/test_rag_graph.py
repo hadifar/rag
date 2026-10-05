@@ -53,6 +53,7 @@ class _ScriptedChatModel(BaseChatModel):
 
     answers: list[AIMessage]
     failing_calls: int = 0  # the agent's first calls that raise instead of answering
+    failing_guards: bool = False  # the guards' classifier calls raise
     off_topic_messages: set[str] = Field(default_factory=set)
     groundedness_verdicts: list[str] = Field(default_factory=list)
     agent_calls: list[dict[str, Any]] = Field(default_factory=list)
@@ -68,6 +69,10 @@ class _ScriptedChatModel(BaseChatModel):
 
     def _reply(self, messages: list[BaseMessage]) -> AIMessage:
         prompt = str(messages[-1].content)
+        if self.failing_guards and prompt.startswith(
+            ("You are a scope classifier", "You are a strict fact-checker")
+        ):
+            raise RuntimeError("guard model down")
         if prompt.startswith("You are a scope classifier"):
             message = prompt.rsplit("MESSAGE:\n", 1)[1]
             return AIMessage(
@@ -214,6 +219,19 @@ async def test_streams_only_the_agents_answer_not_the_guards_verdicts() -> None:
     events = await _Chat(model).send("How much?")
 
     assert _text(events) == "It costs 10."
+
+
+async def test_guards_whose_llm_fails_let_the_answer_through() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("It costs 10.")], failing_guards=True
+    )
+
+    events = await _Chat(model, retry_attempts=1).send("How much?")
+
+    assert _text(events) == "It costs 10."
+    assert "search_kb" in model.agent_calls[0]["tools"]  # not taken for off-topic
+    assert AnswerVerified(status="done", grounded=True) in events
+    assert not any(_is_revision_call(call) for call in model.agent_calls)
 
 
 async def test_references_cover_only_the_current_turn() -> None:
