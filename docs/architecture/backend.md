@@ -12,6 +12,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 * **Adapters** (`rag/adapters/`): wrapped third-party SDK clients.
 * **Repository** (`rag/repository/`): SQL behind a domain port.
 * **Config** (`rag/config/`): `Settings` and one module per settings section.
+* **Shared** (`rag/shared/`): framework-free helpers any layer may use (e.g. `or_default`). Imports nothing else in `rag`.
 
 `import-linter` enforces these rules:
 
@@ -19,6 +20,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 * Only `rag/services/agent_service/` and `rag/adapters/` import LangChain.
 * Only `rag/container.py` constructs adapters, repositories and services.
 * Routers never import `rag.domain` or `rag.config`.
+* `rag.shared` imports nothing else in `rag`.
 
 ## Services
 
