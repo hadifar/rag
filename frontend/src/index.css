@@ -54,6 +54,34 @@
   --color-warning-800: oklch(47.3% 0.137 46.201); /* amber-800 */
   --color-warning-900: oklch(41.4% 0.112 45.904); /* amber-900 */
   --color-warning-950: oklch(27.9% 0.077 45.635); /* amber-950 */
+
+  /* A deleted sidebar chat: blurs and rises away, then its row folds shut. */
+  --animate-vaporize: vaporize 600ms ease-in forwards;
+  @keyframes vaporize {
+    0% {
+      max-height: 3rem;
+    }
+    75% {
+      opacity: 0;
+      filter: blur(6px);
+      transform: translateY(-6px) scale(1.04);
+      letter-spacing: 0.12em;
+      max-height: 3rem;
+    }
+    100% {
+      opacity: 0;
+      filter: blur(6px);
+      transform: translateY(-6px) scale(1.04);
+      max-height: 0;
+    }
+  }
+}
+
+/* Still ends, so the row is taken off the list, but without the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-vaporize {
+    animation-duration: 1ms;
+  }
 }
 
 @layer base {

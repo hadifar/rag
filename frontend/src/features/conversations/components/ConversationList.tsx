@@ -15,13 +15,22 @@ const NEW_CHAT_TITLE = 'New chat';
 
 const ConversationLink = memo(function ConversationLink({
   conversation,
+  vanishing,
   onDelete,
+  onVanished,
 }: {
   conversation: ConversationResponse;
+  vanishing: boolean;
   onDelete: (conversation: ConversationResponse) => void;
+  onVanished: (id: string) => void;
 }) {
   return (
-    <div className="group flex items-center gap-1">
+    <div
+      className={`group flex items-center gap-1 ${vanishing ? 'pointer-events-none animate-vaporize' : ''}`}
+      // Already deleted: hidden from assistive tech while it plays its exit.
+      aria-hidden={vanishing || undefined}
+      onAnimationEnd={vanishing ? () => onVanished(conversation.id) : undefined}
+    >
       <NavLink
         to={routes.chat(conversation.id)}
         title={conversation.title ?? NEW_CHAT_TITLE}
@@ -51,7 +60,7 @@ const ConversationLink = memo(function ConversationLink({
 /** The sidebar's recent chats: paged in on demand, each deletable after a confirmation. */
 export function ConversationList() {
   const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversationList();
-  const { requestDelete, pending, isDeleting, error, confirm, cancel } =
+  const { requestDelete, pending, isDeleting, error, confirm, cancel, vanishing, finishVanish } =
     useConfirmDeleteConversation();
 
   return (
@@ -73,7 +82,13 @@ export function ConversationList() {
         </StatusLine>
       )}
       {conversations.map((conversation) => (
-        <ConversationLink key={conversation.id} conversation={conversation} onDelete={requestDelete} />
+        <ConversationLink
+          key={conversation.id}
+          conversation={conversation}
+          vanishing={vanishing.has(conversation.id)}
+          onDelete={requestDelete}
+          onVanished={finishVanish}
+        />
       ))}
       {hasMore && (
         <button
