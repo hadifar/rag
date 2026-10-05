@@ -30,8 +30,7 @@ Hooks that fix files: `ruff`, `uv-lock`, `frontend-api-types`, `frontend-oxlintr
 
 Merge gates (`pre-commit.yml`, on each pull request and each push to `master`):
 
-* `pre-commit` job: every hook above.
-* `test` job: `pytest tests/unit`.
+* `pre-commit` job: every hook above, `pytest tests/unit` included.
 * `commitizen` job: commit messages and append-only migrations across the pull request.
 
 Not merge gates:
