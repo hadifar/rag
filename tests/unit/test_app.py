@@ -351,13 +351,23 @@ def test_send_message_text_with_newlines_survives_sse_framing(
     """LLM tokens are full of "\\n" (markdown); a raw "\\n\\n" in a data field would end
     the SSE event early and drop the text after it.
     """
-    message = "# Title\n\n- item\r\n- item\n"
+    message = "# Title\n\n- item\n- item"
     conversation_id = _create_conversation(client, auth_headers)
 
     body = _send(client, auth_headers, conversation_id, message)
 
     text_events = [e for e in _parse_sse(body) if e["type"] == "text"]
     assert text_events == [{"type": "text", "text": f"echo: {message}"}]
+
+
+def test_the_agent_gets_the_message_normalized(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+
+    body = _send(client, auth_headers, conversation_id, "  ｈｉ\u200b\U000e0041 ")
+
+    assert {"type": "text", "text": "echo: hi"} in _parse_sse(body)
 
 
 def test_generate_title_renames_the_conversation(
@@ -654,9 +664,10 @@ def test_a_blank_preference_is_rejected(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     response = client.post(
-        "/api/settings/preferences", headers=auth_headers, json={"text": "  "}
+        "/api/settings/preferences", headers=auth_headers, json={"text": " \u200b "}
     )
-    assert response.status_code == 400
+    # Blank once normalized, so the request itself is invalid.
+    assert response.status_code == 422
 
 
 def test_a_preference_past_the_cap_is_409(
