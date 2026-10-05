@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
+from rag.api.schema.text import UserText
 from rag.domain.models import MAX_PREFERENCE_LENGTH
 
 
@@ -22,7 +23,7 @@ class SettingsResponse(BaseModel):
 
 
 class PreferenceRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=MAX_PREFERENCE_LENGTH)
+    text: UserText = Field(min_length=1, max_length=MAX_PREFERENCE_LENGTH)
 
 
 class PreferenceResponse(BaseModel):
