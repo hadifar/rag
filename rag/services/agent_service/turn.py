@@ -16,7 +16,7 @@ def is_final_answer(message: BaseMessage | None) -> TypeGuard[AIMessage]:
 
 def current_turn(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
     """The messages from the user's latest message onward."""
-    turns = _split_turns(messages)
+    turns = split_turns(messages)
     return turns[-1] if turns else messages
 
 
@@ -31,7 +31,7 @@ def turn_references(messages: Sequence[BaseMessage]) -> list[str] | None:
     return _references(current_turn(messages))
 
 
-def _split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]:
+def split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]:
     """Each turn runs from one HumanMessage up to the next; none for an empty thread."""
     starts = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
     return [messages[start:end] for start, end in pairwise([*starts, len(messages)])]

@@ -25,7 +25,8 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.middleware.capabilities import CapabilityInstructions
 from rag.services.agent_service.middleware.groundness import GroundednessGuard
-from rag.services.agent_service.middleware.topical import Classify, TopicalGuard
+from rag.services.agent_service.middleware.judge import Judge
+from rag.services.agent_service.middleware.topical import TopicalGuard
 
 
 def _to_langchain_tool(tool: Tool) -> BaseTool:
@@ -63,17 +64,17 @@ def _to_langchain_tools(tools: list[Tool]) -> list[BaseTool]:
 
 
 def _to_langchain_middleware(
-    middleware: Middleware, classify: Classify, user_tools: frozenset[str]
+    middleware: Middleware, judge: Judge, user_tools: frozenset[str]
 ) -> AgentMiddleware[Any, Any]:
     """`user_tools` act on the user, not the product: the model keeps them off-topic,
     and their results aren't what an answer is checked against.
     """
     match middleware:
         case OffTopicMiddleware():
-            return TopicalGuard(classify, kept_tools=user_tools)
+            return TopicalGuard(judge, kept_tools=user_tools)
         case GroundednessMiddleware(max_revisions=max_revisions):
             return GroundednessGuard(
-                classify, max_revisions=max_revisions, unverified_tools=user_tools
+                judge, max_revisions=max_revisions, unverified_tools=user_tools
             )
         case TodolistMiddleware(instructions=instructions):
             # The instructions come with the tool, so the model is never told to plan
@@ -86,7 +87,7 @@ def _to_langchain_middleware(
 def build_tool_agent(
     llm: BaseChatModel,
     spec: ToolAgentSpec,
-    classify: Classify,
+    judge: Judge,
     checkpointer: BaseCheckpointSaver,
     retry_attempts: int,
 ) -> CompiledStateGraph:
@@ -98,7 +99,7 @@ def build_tool_agent(
     user_tools = frozenset(t.name for t in all_tools if t.kind == "user")
 
     middleware = [
-        _to_langchain_middleware(m, classify, user_tools) for m in spec.middleware
+        _to_langchain_middleware(m, judge, user_tools) for m in spec.middleware
     ]
     if any(capability.instructions for capability in spec.capabilities):
         middleware.append(CapabilityInstructions(spec.capabilities))
