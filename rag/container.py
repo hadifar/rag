@@ -64,14 +64,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             vector_store=vector_store,
             reranker=(
                 LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
-                if settings.RETRIEVAL.RERANK
+                if settings.RETRIEVAL.rerank
                 else NoReranker()
             ),
-            top_k=settings.RAG.TOP_K,
-            # without a reranker, there is nothing to fetch beyond the top_k for
-            candidates=(
-                settings.RETRIEVAL.RERANK_CANDIDATES if settings.RETRIEVAL.RERANK else 0
-            ),
+            top_k=settings.RETRIEVAL.top_k,
+            candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
         )
 
         preference_service = PreferenceService(repository=PreferenceRepository(db_pool))
@@ -79,7 +76,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         rag_service = RagService(
             retrieval_service=retrieval_service,
             agent_service=agent_service,
-            max_revisions=settings.RAG.MAX_REVISIONS,
+            max_revisions=settings.LLM.MAX_REVISIONS,
             capabilities=[preference_service.capability()],
         )
 

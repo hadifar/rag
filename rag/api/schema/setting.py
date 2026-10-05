@@ -16,7 +16,9 @@ class SettingsResponse(BaseModel):
                 model = llm.MODEL
             case AzureOpenAILLMConfig() as llm:
                 model = llm.DEPLOYMENT
-        return cls(model=model, temperature=llm.TEMPERATURE, top_k=settings.RAG.TOP_K)
+        return cls(
+            model=model, temperature=llm.TEMPERATURE, top_k=settings.RETRIEVAL.top_k
+        )
 
 
 class PreferenceRequest(BaseModel):

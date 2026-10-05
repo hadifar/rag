@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from rag.config import RetrievalConfig
 from rag.domain.models import AgentSpec, Chunk, RunContext
 from rag.domain.ports import ChatAgentPort
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
@@ -160,6 +161,14 @@ async def test_search_fetches_at_least_top_k_candidates() -> None:
     service = RetrievalService(store, NoReranker(), top_k=3, candidates=1)
 
     assert len(await service.search("q")) == 3
+
+
+def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
+    reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=5)
+    not_reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=0)
+
+    assert (reranked.rerank, reranked.top_k) == (True, 5)
+    assert (not_reranked.rerank, not_reranked.top_k) == (False, 10)
 
 
 async def test_search_without_reranking_keeps_the_vector_order() -> None:

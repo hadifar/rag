@@ -24,7 +24,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 `agent_service` is the only LangChain user. `rag_service` is the chat agent built on it.
 
-`retrieval_service` returns the `RAG__TOP_K` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK` on, the search fetches `RETRIEVAL__RERANK_CANDIDATES` passages (at least `RAG__TOP_K`) and passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RAG__TOP_K` are kept. With it off, the search fetches `RAG__TOP_K` passages and `NoReranker` keeps their order.
+`retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned.
 
 ## Chat agent
 
@@ -32,7 +32,7 @@ Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/cha
 
 * `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/graphs/agent_builder.py`) turns the spec into a LangChain `create_agent` graph.
 * `TopicalGuard` classifies each user message. Off-topic: it adds a decline instruction and keeps only `kind="user"` tools.
-* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `RAG__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
+* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `LLM__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 * `CapabilityInstructions` adds each capability's instructions on every model call.
 * A `Capability` gives the agent a feature: tools plus instructions. The owning service creates it. `agent_service` knows no feature by name.
 
@@ -54,5 +54,5 @@ Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `references`.
 
 ## Configuration
 
-* Nested values use `__`: `LLM__API_KEY`, `RAG__TOP_K`.
+* Nested values use `__`: `LLM__API_KEY`, `RETRIEVAL__RERANK_CANDIDATES`.
 * `LLM`, `OBSERVABILITY` and `KB_STORAGE` are discriminated unions on `BACKEND`.
