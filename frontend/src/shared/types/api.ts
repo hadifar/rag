@@ -17,6 +17,7 @@ export type TodoItem = Schemas['TodoItem'];
 export type TodosEvent = Schemas['TodosEvent'];
 export type VerificationEvent = Schemas['VerificationEvent'];
 export type ReferencesEvent = Schemas['ReferencesEvent'];
+export type ErrorEvent = Schemas['ErrorEvent'];
 export type StreamEventResponse = Schemas['StreamEventResponse'];
 
 // conversation.py

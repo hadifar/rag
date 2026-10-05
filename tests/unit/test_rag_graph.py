@@ -33,9 +33,11 @@ from rag.domain.models import (
     ToolAgentSpec,
     ToolCall,
     ToolResult,
+    TurnFailed,
 )
 from rag.services.agent_service.middleware.groundness import REVISION_INSTRUCTION
 from rag.services.agent_service.middleware.topical import OFF_TOPIC_INSTRUCTION
+from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
 from rag.services.agent_service.service import Agent, AgentService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS
@@ -50,6 +52,7 @@ class _ScriptedChatModel(BaseChatModel):
     """
 
     answers: list[AIMessage]
+    failing_calls: int = 0  # the agent's first calls that raise instead of answering
     off_topic_messages: set[str] = Field(default_factory=set)
     groundedness_verdicts: list[str] = Field(default_factory=list)
     agent_calls: list[dict[str, Any]] = Field(default_factory=list)
@@ -81,6 +84,9 @@ class _ScriptedChatModel(BaseChatModel):
             )
             return AIMessage(content=verdict)
 
+        if self.failing_calls:
+            self.failing_calls -= 1
+            raise RuntimeError("model down")
         self.agent_calls.append({"messages": messages, "tools": self.bound_tools})
         return self.answers.pop(0)
 
@@ -118,14 +124,17 @@ class _ScriptedChatModel(BaseChatModel):
 
 
 _NO_RESULTS_QUERY = "nothing"
+_FAILING_QUERY = "outage"
 
 
 class _StubRetrievalService:
-    """Returns one document whose source_id is the query itself, or none for
-    _NO_RESULTS_QUERY.
+    """Returns one document whose source_id is the query itself, none for
+    _NO_RESULTS_QUERY, and fails for _FAILING_QUERY.
     """
 
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
+        if query == _FAILING_QUERY:
+            raise RuntimeError("vector store down")
         if query == _NO_RESULTS_QUERY:
             return []
         return [
@@ -159,9 +168,11 @@ _PREFERENCE_TOOLS = ["forget_user_preference", "save_user_preference"]
 
 
 class _Chat:
-    def __init__(self, model: _ScriptedChatModel):
+    def __init__(self, model: _ScriptedChatModel, retry_attempts: int = 3):
         self.preferences = PreferenceService(FakePreferenceRepository())
-        agents = AgentService(model, InMemorySaver(), _no_tracing, retry_attempts=3)
+        agents = AgentService(
+            model, InMemorySaver(), _no_tracing, retry_attempts=retry_attempts
+        )
         self.rag = RagService(
             _StubRetrievalService(),
             agents,
@@ -351,6 +362,43 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     )
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in await chat.saved_messages())
+
+
+async def test_a_failed_search_ends_the_turn_with_an_error_and_is_forgotten() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _answer("hi!"),
+            _search(_FAILING_QUERY),
+            _search("pricing"),
+            _answer("A"),
+        ]
+    )
+    chat = _Chat(model)
+    await chat.send("hello")
+
+    failed = await chat.send("pricing?")
+
+    assert failed[-1] == TurnFailed(message=TURN_FAILED_MESSAGE)
+    assert not any(isinstance(e, ReferencesReady) for e in failed)
+    # The same message, sent again, reaches the model as if the failed turn never ran:
+    # its unanswered tool call would otherwise be rejected by the model's API.
+    retried = await chat.send("pricing?")
+    assert _text(retried) == "A"
+    assert [type(m) for m in model.agent_calls[2]["messages"][1:]] == [
+        HumanMessage,
+        AIMessage,
+        HumanMessage,
+    ]
+
+
+async def test_a_model_that_keeps_failing_ends_the_turn_with_an_error() -> None:
+    model = _ScriptedChatModel(answers=[], failing_calls=1)
+    chat = _Chat(model, retry_attempts=1)
+
+    events = await chat.send("hello")
+
+    assert events == [TurnFailed(message=TURN_FAILED_MESSAGE)]
+    assert await chat.saved_messages() == []
 
 
 @pytest.mark.parametrize("second_turn_searches", [False, True])

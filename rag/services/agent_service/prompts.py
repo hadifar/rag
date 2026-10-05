@@ -25,3 +25,6 @@ OFF_TOPIC_INSTRUCTION = (
 )
 
 FALLBACK_MESSAGE = "I'm having trouble reaching the language model right now. Please try again shortly."
+
+# Shown to the user when a turn fails (see TurnFailed).
+TURN_FAILED_MESSAGE = "Something went wrong while answering. Please try again."

@@ -53,8 +53,9 @@ Known gaps. None of these is addressed yet.
 
 ## Reliability
 
-* `search_kb` has no retry and no error handling.
-* The SSE stream has no `error` or `done` event.
+* `search_kb` has no retry: a failed search fails the turn (see [Streaming](architecture/backend.md#streaming)).
+* The SSE stream has no `done` event.
+* A stream abandoned mid-tool-call (client hung up) is not rolled back from the agent's thread.
 * `ChatOpenAI` has no request timeout.
 * `/api/health/ready` does not check the embedding API.
 
