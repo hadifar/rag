@@ -19,6 +19,10 @@ type ConfirmDeleteConversation = {
   error: string | null;
   confirm: () => void;
   cancel: () => void;
+  /** Deleted conversations still on screen while their row plays its exit. */
+  vanishing: ReadonlySet<string>;
+  /** The row of `id` finished its exit: take it off the list. */
+  finishVanish: (id: string) => void;
 };
 
 /** Holds a delete until the user confirms it; a failure stays in the dialog so they can retry. */
@@ -27,12 +31,14 @@ export function useConfirmDeleteConversation(): ConfirmDeleteConversation {
   const navigate = useNavigate();
   const openConversation = useMatch(routePatterns.chat)?.params.conversationId;
   const [pending, setPending] = useState<ConversationResponse | null>(null);
+  const [vanishing, setVanishing] = useState<ReadonlySet<string>>(new Set());
 
   const { mutate, reset, isPending, isError } = useMutation({
     // Already gone is success too; without this, a retry would 404 forever.
     mutationFn: (id: string) => ignoreNotFound(deleteConversation(id)),
     onSuccess: (_, id) => {
-      remove(id);
+      // Stays listed until its row has played its exit; see finishVanish.
+      setVanishing((ids) => new Set(ids).add(id));
       setPending(null);
       // Its page would show a chat that no longer exists.
       if (openConversation === id) navigate(routes.newChat, { replace: true });
@@ -56,6 +62,18 @@ export function useConfirmDeleteConversation(): ConfirmDeleteConversation {
     if (pending && !isPending) mutate(pending.id);
   }, [pending, isPending, mutate]);
 
+  const finishVanish = useCallback(
+    (id: string) => {
+      remove(id);
+      setVanishing((ids) => {
+        const rest = new Set(ids);
+        rest.delete(id);
+        return rest;
+      });
+    },
+    [remove]
+  );
+
   return {
     requestDelete,
     pending,
@@ -63,5 +81,7 @@ export function useConfirmDeleteConversation(): ConfirmDeleteConversation {
     error: isError ? DELETE_FAILED : null,
     confirm,
     cancel,
+    vanishing,
+    finishVanish,
   };
 }
