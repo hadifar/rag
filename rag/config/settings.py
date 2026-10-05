@@ -8,7 +8,6 @@ from rag.config.auth import AuthConfig
 from rag.config.kb_storage import KbStorageConfig, LocalKbStorageConfig
 from rag.config.llm import LLMConfig
 from rag.config.observability import LoggingObservabilityConfig, ObservabilityConfig
-from rag.config.rag import RagConfig
 from rag.config.retrieval import RetrievalConfig
 
 
@@ -29,7 +28,6 @@ class Settings(BaseSettings):
     KB_STORAGE: KbStorageConfig = LocalKbStorageConfig()
 
     LLM: LLMConfig
-    RAG: RagConfig = RagConfig()
     RETRIEVAL: RetrievalConfig = RetrievalConfig()
     OBSERVABILITY: ObservabilityConfig = LoggingObservabilityConfig()
 

@@ -26,11 +26,6 @@ from rag.domain.models import (
 from rag.services.agent_service.middleware.capabilities import CapabilityInstructions
 from rag.services.agent_service.middleware.groundness import GroundednessGuard
 from rag.services.agent_service.middleware.topical import Classify, TopicalGuard
-from rag.services.agent_service.prompts import FALLBACK_MESSAGE
-
-
-def _fallback_message(_exc: Exception) -> str:
-    return FALLBACK_MESSAGE
 
 
 def _to_langchain_tool(tool: Tool) -> BaseTool:
@@ -107,10 +102,10 @@ def build_tool_agent(
     ]
     if any(capability.instructions for capability in spec.capabilities):
         middleware.append(CapabilityInstructions(spec.capabilities))
+    # Once its retries run out, the model's error ends the turn (see Agent.stream),
+    # rather than an apology standing in for the answer.
     middleware.append(
-        ModelRetryMiddleware(
-            max_retries=retry_attempts - 1, on_failure=_fallback_message
-        )
+        ModelRetryMiddleware(max_retries=retry_attempts - 1, on_failure="error")
     )
     # context_schema: each turn is run with its RunContext, which tools and middleware
     # read from their runtime (e.g. whose preferences to apply).

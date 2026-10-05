@@ -2,9 +2,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from rag.config import RetrievalConfig
 from rag.domain.models import AgentSpec, Chunk, RunContext
 from rag.domain.ports import ChatAgentPort
-from rag.services.retrieval_service.expansion import NoQueryExpander
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -143,22 +143,38 @@ async def test_a_single_candidate_needs_no_llm_call() -> None:
     assert agent.prompts == []
 
 
-async def test_search_reranks_all_top_k_candidates() -> None:
-    store = _VectorStore(_candidates("a", "b", "c", "d"))
-    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 8)])
+async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
+    store = _VectorStore(_candidates("a", "b", "c", "d", "e"))
+    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 3), (3, 9)])
     service = RetrievalService(
-        store, NoQueryExpander(), LlmReranker(agent, attempts=1), top_k=3
+        store, LlmReranker(agent, attempts=1), top_k=2, candidates=4
     )
 
     results = await service.search("q")
 
-    assert _sources(results) == ["doc-2", "doc-1", "doc-0"]
+    assert _sources(results) == ["doc-3", "doc-2"]  # doc-4 never reached the reranker
+    assert "[4]" not in agent.prompts[0]
+
+
+async def test_search_fetches_at_least_top_k_candidates() -> None:
+    store = _VectorStore(_candidates("a", "b", "c"))
+    service = RetrievalService(store, NoReranker(), top_k=3, candidates=1)
+
+    assert len(await service.search("q")) == 3
+
+
+def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
+    reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=5)
+    not_reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=0)
+
+    assert (reranked.rerank, reranked.top_k) == (True, 5)
+    assert (not_reranked.rerank, not_reranked.top_k) == (False, 10)
 
 
 async def test_search_without_reranking_keeps_the_vector_order() -> None:
     candidates = _candidates("a", "b")
     service = RetrievalService(
-        _VectorStore(candidates), NoQueryExpander(), NoReranker(), top_k=3
+        _VectorStore(candidates), NoReranker(), top_k=3, candidates=0
     )
 
     assert await service.search("q") == candidates

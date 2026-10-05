@@ -10,6 +10,7 @@ from rag.domain.models import (
     TextDelta,
     TodosUpdated,
     ToolCall,
+    TurnFailed,
 )
 
 # The message stream's events: each is one SSE `data:` line of JSON, told apart by `type`.
@@ -68,6 +69,13 @@ class ReferencesEvent(BaseModel):
     references: list[str]
 
 
+class ErrorEvent(BaseModel):
+    """The turn couldn't finish; the last event of its stream. `message` is for the user."""
+
+    type: Literal["error"] = "error"
+    message: str
+
+
 class StreamEventResponse(
     RootModel[
         Annotated[
@@ -76,7 +84,8 @@ class StreamEventResponse(
             | ToolEvent
             | TodosEvent
             | VerificationEvent
-            | ReferencesEvent,
+            | ReferencesEvent
+            | ErrorEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -99,6 +108,7 @@ def _payload(
     | TodosEvent
     | VerificationEvent
     | ReferencesEvent
+    | ErrorEvent
 ):
     match event:
         case TextDelta(text=text):
@@ -107,21 +117,23 @@ def _payload(
             return ReasoningEvent(text=text)
         case ToolCall() | TodosUpdated():
             return _tool_payload(event)
-        case AnswerVerified() | ReferencesReady():
+        case AnswerVerified() | ReferencesReady() | TurnFailed():
             return _turn_payload(event)
 
 
 def _turn_payload(
-    event: AnswerVerified | ReferencesReady,
-) -> VerificationEvent | ReferencesEvent:
-    """What becomes of the turn's answer: checked against the searches, or the
-    references cited.
+    event: AnswerVerified | ReferencesReady | TurnFailed,
+) -> VerificationEvent | ReferencesEvent | ErrorEvent:
+    """What becomes of the turn's answer: checked against the searches, the
+    references cited, or no answer, as the turn failed.
     """
     match event:
         case AnswerVerified(status=status, grounded=grounded):
             return VerificationEvent(status=status, grounded=grounded)
         case ReferencesReady(references=references):
             return ReferencesEvent(references=references)
+        case TurnFailed(message=message):
+            return ErrorEvent(message=message)
 
 
 def _tool_payload(event: ToolCall | TodosUpdated) -> ToolEvent | TodosEvent:

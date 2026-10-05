@@ -116,6 +116,11 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
       // Sent only when the answer searched; an empty list still gets its bubble.
       push(t, { type: 'references', content: { references: event.references } });
       break;
+    case 'error':
+      // The turn's last event: it failed, and says so where its answer would have been.
+      push(t, { type: 'error', content: { text: event.message } });
+      turn.textId = null;
+      break;
     default:
       // A new backend event type fails to compile here until it's handled.
       event satisfies never;
@@ -127,10 +132,18 @@ export function applyEvents(t: Transcript, events: StreamEventResponse[]): Trans
   return events.reduce(applyEvent, t);
 }
 
-/** Closes the answer being streamed, if any, with `error` shown after it. */
+/**
+ * Closes the answer being streamed, if any, with `error` shown after it. A tool call
+ * still pending then never finished (its turn failed), so it stops showing as running.
+ */
 export function endTurn(transcript: Transcript, error?: string): Transcript {
   const t = draft(transcript);
-  if (t.turn) endReasoning(t, t.turn);
+  if (t.turn) {
+    endReasoning(t, t.turn);
+    for (const id of t.turn.pendingToolIds) {
+      edit(t, id, 'tool', (c) => ({ ...c, status: 'done', output: "Didn't finish." }));
+    }
+  }
   t.turn = null;
   if (error !== undefined) push(t, { type: 'error', content: { text: error } });
   return t;
@@ -142,6 +155,17 @@ export function startTurn(transcript: Transcript, text: string): Transcript {
   push(t, { type: 'user', content: { text } });
   t.turn = openTurn();
   return t;
+}
+
+/**
+ * The failed answer that can be asked for again: the last bubble, if it's an error after
+ * a question, and the question to send again. None while an answer is open.
+ */
+export function retryable(t: Transcript): { bubbleId: string; question: string } | null {
+  const last = t.bubbles.at(-1);
+  if (t.turn !== null || last?.type !== 'error') return null;
+  const question = t.bubbles.findLast((b) => b.type === 'user');
+  return question?.type === 'user' ? { bubbleId: last.id, question: question.content.text } : null;
 }
 
 /** Whether the assistant shows as typing: for as long as an answer is open. */

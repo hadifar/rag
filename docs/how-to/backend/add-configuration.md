@@ -7,7 +7,7 @@ Add a setting, or a backend selected by a setting. Use when behavior must change
 ## Add a setting
 
 1. Find the section module in `rag/config/`.
-2. Add a typed field with a default and `Field` bounds. Example: `TOP_K: int = Field(default=3, ge=1)`.
+2. Add a typed field with a default and `Field` bounds. Example: `RETRIEVAL_CANDIDATES: int = Field(default=10, ge=1)`.
 3. If no section fits, add a field to `Settings` in `rag/config/settings.py`.
 4. Add the variable, commented out with its default, to `.example.env`.
 5. Pass the value to the service constructor in `rag/container.py`.
@@ -29,6 +29,6 @@ Use for `LLM`, `OBSERVABILITY`, `KB_STORAGE`.
 ## Rules
 
 * Read configuration only through `Settings`. `os.environ` and `os.getenv` are banned.
-* Name nested variables with `__`: `RAG__TOP_K`.
+* Name nested variables with `__`: `RETRIEVAL__RERANK_CANDIDATES`.
 * Callers never branch on the active backend.
 * `Settings` forbids unknown variables (`extra="forbid"`). Remove a deleted variable from `.env`.

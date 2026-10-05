@@ -24,7 +24,6 @@ from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
 from rag.services.rag_service.service import RagService
-from rag.services.retrieval_service.expansion import LlmQueryExpander, NoQueryExpander
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -63,21 +62,13 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         retrieval_service = RetrievalService(
             vector_store=vector_store,
-            expander=(
-                LlmQueryExpander(
-                    agent_service,
-                    count=settings.RETRIEVAL.QUERY_VARIANTS,
-                    attempts=settings.LLM.RETRY_ATTEMPTS,
-                )
-                if settings.RETRIEVAL.QUERY_VARIANTS
-                else NoQueryExpander()
-            ),
             reranker=(
                 LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
-                if settings.RETRIEVAL.RERANK
+                if settings.RETRIEVAL.rerank
                 else NoReranker()
             ),
-            top_k=settings.RAG.TOP_K,
+            top_k=settings.RETRIEVAL.top_k,
+            candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
         )
 
         preference_service = PreferenceService(repository=PreferenceRepository(db_pool))
@@ -85,7 +76,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         rag_service = RagService(
             retrieval_service=retrieval_service,
             agent_service=agent_service,
-            max_revisions=settings.RAG.MAX_REVISIONS,
+            max_revisions=settings.LLM.MAX_REVISIONS,
             capabilities=[preference_service.capability()],
         )
 

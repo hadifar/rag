@@ -13,7 +13,6 @@ from rag.config import Settings
 from rag.domain.models import RunContext
 from rag.repository.document_repository import DocumentRepository
 from rag.services.agent_service.service import AgentService
-from rag.services.retrieval_service.expansion import LlmQueryExpander, NoQueryExpander
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -64,9 +63,8 @@ def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
 
 @pytest.fixture(scope="session")
 def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
-    """The app's search over `kb`, expanded and reranked as `RETRIEVAL__QUERY_VARIANTS`
-    and `RETRIEVAL__RERANK` say, as in the container. Their one-shot LLM calls need no
-    memory and no tracing.
+    """The app's search over `kb`, reranked as `RETRIEVAL__RERANK_CANDIDATES` says, as
+    in the container. The reranker's one-shot LLM call needs no memory and no tracing.
     """
     agent_service = AgentService(
         build_llm(eval_settings),
@@ -75,18 +73,18 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
         retry_attempts=eval_settings.LLM.RETRY_ATTEMPTS,
     )
     attempts = eval_settings.LLM.RETRY_ATTEMPTS
-    variants = eval_settings.RETRIEVAL.QUERY_VARIANTS
-    expander = (
-        LlmQueryExpander(agent_service, count=variants, attempts=attempts)
-        if variants
-        else NoQueryExpander()
-    )
+    retrieval = eval_settings.RETRIEVAL
     reranker = (
         LlmReranker(agent_service, attempts=attempts)
-        if eval_settings.RETRIEVAL.RERANK
+        if retrieval.rerank
         else NoReranker()
     )
-    return RetrievalService(kb, expander, reranker, top_k=eval_settings.RAG.TOP_K)
+    return RetrievalService(
+        kb,
+        reranker,
+        top_k=retrieval.top_k,
+        candidates=retrieval.RETRIEVAL_CANDIDATES,
+    )
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -103,9 +101,10 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     mrr = sum(1 / rank for rank in hits) / len(RANKS)
     settings = Settings()  # pyright: ignore[reportCallIssue] — fields come from .env
     terminalreporter.section("retrieval eval")
+    retrieval = settings.RETRIEVAL
     terminalreporter.write_line(
-        f"k={settings.RAG.TOP_K}  rerank={settings.RETRIEVAL.RERANK}  "
-        f"query_variants={settings.RETRIEVAL.QUERY_VARIANTS}"
+        f"k={retrieval.top_k} of {retrieval.RETRIEVAL_CANDIDATES}"
+        f"  rerank={retrieval.rerank}"
     )
     terminalreporter.write_line(f"questions: {len(RANKS)}")
     terminalreporter.write_line(f"recall@k:  {recall:.2f}")

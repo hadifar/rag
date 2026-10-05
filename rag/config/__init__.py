@@ -18,7 +18,6 @@ from rag.config.observability import (
     LoggingObservabilityConfig,
     ObservabilityConfig,
 )
-from rag.config.rag import RagConfig
 from rag.config.retrieval import RetrievalConfig
 from rag.config.settings import Settings, get_settings
 
@@ -33,7 +32,6 @@ __all__ = [
     "LoggingObservabilityConfig",
     "ObservabilityConfig",
     "OpenAILLMConfig",
-    "RagConfig",
     "RetrievalConfig",
     "Settings",
     "get_settings",

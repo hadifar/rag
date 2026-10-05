@@ -7,6 +7,7 @@ import {
   endTurn,
   fromHistory,
   isWaiting,
+  retryable,
   startTurn,
 } from '@/features/chat/model/transcript';
 import type { StreamEventResponse } from '@/shared/types';
@@ -174,6 +175,33 @@ describe('turns', () => {
       { type: 'reasoning', content: { streaming: false } },
       { type: 'error', content: { text: 'Something went wrong: offline' } },
     ]);
+  });
+
+  it('shows a failed turn as an error bubble, and stops its pending tool showing as running', () => {
+    const failed = applyEvents(startTurn(emptyTranscript(), 'Hi'), [
+      { type: 'tool', name: 'search', status: 'pending', query: 'a' },
+      { type: 'error', message: 'Something went wrong.' },
+    ]);
+
+    expect(endTurn(failed).bubbles).toMatchObject([
+      { type: 'user' },
+      { type: 'tool', content: { status: 'done', output: "Didn't finish." } },
+      { type: 'error', content: { text: 'Something went wrong.' } },
+    ]);
+  });
+
+  it('offers to retry a failed answer once it has ended, with its question', () => {
+    const failed = applyEvent(startTurn(emptyTranscript(), 'Hi'), { type: 'error', message: 'Oops' });
+    expect(retryable(failed)).toBeNull();
+
+    const ended = endTurn(failed);
+    expect(retryable(ended)).toEqual({ bubbleId: ended.bubbles.at(-1)!.id, question: 'Hi' });
+  });
+
+  it('offers no retry after an answer, or for a conversation that failed to load', () => {
+    const answered = endTurn(applyEvent(startTurn(emptyTranscript(), 'Hi'), { type: 'text', text: 'Hello' }));
+    expect(retryable(answered)).toBeNull();
+    expect(retryable(endTurn(emptyTranscript(), "Couldn't load"))).toBeNull();
   });
 
   it('gives every bubble its own id across turns', () => {

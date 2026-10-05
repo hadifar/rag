@@ -25,6 +25,7 @@ from rag.domain.models.agent.stream import (
     Todo,
     TodosUpdated,
     ToolCall,
+    TurnFailed,
 )
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
@@ -84,6 +85,7 @@ __all__ = [
     "ToolKind",
     "ToolResult",
     "Turn",
+    "TurnFailed",
     "User",
     "UserMessage",
 ]

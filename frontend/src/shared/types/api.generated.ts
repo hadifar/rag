@@ -389,6 +389,19 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ErrorEvent
+         * @description The turn couldn't finish; the last event of its stream. `message` is for the user.
+         */
+        ErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Message */
+            message: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -498,7 +511,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["ReferencesEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["ReferencesEvent"] | components["schemas"]["ErrorEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
