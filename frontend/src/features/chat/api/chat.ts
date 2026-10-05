@@ -36,6 +36,9 @@ export function streamChat({
     },
 
     onmessage({ data }) {
+      // The server's keep-alive `: ping` comes through as an empty message; the SSE spec
+      // says to drop it, but this library hands it over.
+      if (!data) return;
       // Each event is one JSON object, told apart by its `type` (see StreamEventResponse).
       onEvent(JSON.parse(data) as StreamEventResponse);
     },
