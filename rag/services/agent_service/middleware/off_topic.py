@@ -25,6 +25,7 @@ from rag.services.agent_service.middleware.prompts import (
     OFF_TOPIC_INSTRUCTION,
 )
 from rag.services.agent_service.turn import is_final_answer, split_turns
+from rag.shared.resilience import or_default
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def classify_input(judge: Judge, messages: Sequence[BaseMessage]) -> Decis
         return "allow"
 
     prompt = GUARDRAIL_PROMPT.format(history=_history(turns[:-1]), message=message)
-    verdict = await judge(prompt, InputVerdict)
+    verdict = await or_default(judge(prompt, InputVerdict), None)
     if verdict is None:
         return "allow"
     if verdict.decision == "block":

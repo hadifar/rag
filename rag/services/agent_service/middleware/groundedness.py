@@ -24,6 +24,7 @@ from rag.services.agent_service.turn import (
     is_final_answer,
     turn_tool_messages,
 )
+from rag.shared.resilience import or_default
 
 
 def _collect_context(
@@ -60,7 +61,7 @@ class GroundednessVerdict(BaseModel):
 async def is_grounded(judge: Judge, context: str, answer: str) -> bool:
     """Whether `answer` is supported by `context`; True if the verifier failed."""
     prompt = VERIFIER_PROMPT.format(context=context, answer=answer)
-    verdict = await judge(prompt, GroundednessVerdict)
+    verdict = await or_default(judge(prompt, GroundednessVerdict), None)
     return verdict is None or verdict.grounded
 
 

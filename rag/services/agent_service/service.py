@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import partial
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
@@ -9,7 +10,6 @@ from pydantic import BaseModel
 from rag.domain.models import RunContext, ToolAgentSpec
 from rag.services.agent_service.agent import Agent
 from rag.services.agent_service.builder import build_tool_agent
-from rag.shared.resilience import or_default
 
 
 class AgentService:
@@ -57,17 +57,10 @@ class AgentService:
     def create_agent(self, spec: ToolAgentSpec) -> Agent:
         """A chat agent built as `spec` describes"""
 
+        # The guards' LLM call (a `Judge`), retried like the agent's own model calls.
+        judge = partial(self.generate_structured, attempts=self._retry_attempts)
         graph = build_tool_agent(
-            self._llm, spec, self._judge, self._checkpointer, self._retry_attempts
+            self._llm, spec, judge, self._checkpointer, self._retry_attempts
         )
 
         return Agent(graph, self._checkpointer, self._trace_config)
-
-    async def _judge[T: BaseModel](self, prompt: str, schema: type[T]) -> T | None:
-        """The guards' LLM call (a `Judge`): retried, and if it still fails, None, which
-        neither guard reads as a rejection (they fail open).
-        """
-        return await or_default(
-            self.generate_structured(prompt, schema, attempts=self._retry_attempts),
-            None,
-        )
