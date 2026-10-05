@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from rag.domain.models.agent.artifact import Artifact
 from rag.domain.models.agent.middleware import Middleware
 
 
@@ -19,9 +20,9 @@ class RunContext:
 @dataclass(frozen=True)
 class ToolResult:
     content: str  # what the model reads
-    # What the content came from (e.g. knowledge-base source ids), sent to the user as
-    # the turn's references; None for a tool that cites nothing.
-    references: list[str] | None = None
+    # What the user is handed beside it (e.g. the knowledge-base sources the content
+    # came from), sent as the turn's artifacts; None for a tool that hands over nothing.
+    artifacts: list[Artifact] | None = None
 
 
 # "product": works on what the agent is about (e.g. searching the knowledge base).

@@ -11,18 +11,20 @@ from langchain.agents.middleware import (
 from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.runtime import Runtime
+from pydantic import BaseModel
 
-from rag.services.agent_service.middleware.topical import Classify
-from rag.services.agent_service.prompts import (
+from rag.services.agent_service.events import ANSWER_VERIFICATION
+from rag.services.agent_service.middleware.judge import Judge
+from rag.services.agent_service.middleware.prompts import (
     REVISION_INSTRUCTION,
     VERIFIER_PROMPT,
 )
-from rag.services.agent_service.streaming import ANSWER_VERIFICATION
 from rag.services.agent_service.turn import (
     current_turn,
     is_final_answer,
     turn_tool_messages,
 )
+from rag.shared.resilience import or_default
 
 
 def _collect_context(
@@ -52,9 +54,15 @@ def _verification_inputs(
     return context, answer.text
 
 
-async def is_grounded(verify: Classify, context: str, answer: str) -> bool:
-    verdict = await verify(VERIFIER_PROMPT.format(context=context, answer=answer))
-    return "UNGROUNDED" not in verdict.upper()
+class GroundednessVerdict(BaseModel):
+    grounded: bool
+
+
+async def is_grounded(judge: Judge, context: str, answer: str) -> bool:
+    """Whether `answer` is supported by `context`; True if the verifier failed."""
+    prompt = VERIFIER_PROMPT.format(context=context, answer=answer)
+    verdict = await or_default(judge(prompt, GroundednessVerdict), None)
+    return verdict is None or verdict.grounded
 
 
 def _turn_answers(messages: Sequence[BaseMessage]) -> list[AIMessage]:
@@ -77,12 +85,12 @@ class GroundednessGuard(AgentMiddleware):
 
     def __init__(
         self,
-        verifier: Classify,
+        judge: Judge,
         max_revisions: int,
         unverified_tools: frozenset[str] = frozenset(),
     ):
         super().__init__()
-        self._verifier = verifier
+        self._judge = judge
         self._max_revisions = max_revisions
         self._unverified_tools = unverified_tools
 
@@ -104,7 +112,7 @@ class GroundednessGuard(AgentMiddleware):
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
         await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
-        grounded = await is_grounded(self._verifier, *inputs)
+        grounded = await is_grounded(self._judge, *inputs)
         await adispatch_custom_event(
             ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
         )

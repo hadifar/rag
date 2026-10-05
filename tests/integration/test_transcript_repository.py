@@ -11,8 +11,9 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from rag.domain.models import (
+    ArtifactsReady,
     ReasoningDelta,
-    ReferencesReady,
+    SourceArtifact,
     TextDelta,
     Todo,
     TodosUpdated,
@@ -50,7 +51,7 @@ async def test_turns_read_back_in_order_with_every_kind_of_event(
         ToolCall(name="search_kb", status="pending", query="pricing"),
         ToolCall(name="search_kb", status="done", output="facts"),
         TextDelta("It costs 10."),
-        ReferencesReady(references=["pricing.md"]),
+        ArtifactsReady(artifacts=[SourceArtifact(id="pricing.md")]),
     ]
 
     await transcript.append_turn(conversation_id, "How much?", answer)

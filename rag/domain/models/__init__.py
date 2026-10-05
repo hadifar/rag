@@ -9,6 +9,7 @@ from rag.domain.models.agent.agent import (
     ToolKind,
     ToolResult,
 )
+from rag.domain.models.agent.artifact import Artifact, SourceArtifact
 from rag.domain.models.agent.middleware import (
     GroundednessMiddleware,
     OffTopicMiddleware,
@@ -16,8 +17,8 @@ from rag.domain.models.agent.middleware import (
 )
 from rag.domain.models.agent.stream import (
     AnswerVerified,
+    ArtifactsReady,
     ReasoningDelta,
-    ReferencesReady,
     StreamEvent,
     TaggedStreamEvent,
     TextDelta,
@@ -53,6 +54,8 @@ __all__ = [
     "MAX_PREFERENCES",
     "MAX_PREFERENCE_LENGTH",
     "AnswerVerified",
+    "Artifact",
+    "ArtifactsReady",
     "AssistantMessage",
     "Capability",
     "Chunk",
@@ -69,8 +72,8 @@ __all__ = [
     "Preference",
     "RawDocument",
     "ReasoningDelta",
-    "ReferencesReady",
     "RunContext",
+    "SourceArtifact",
     "StreamEvent",
     "TaggedStreamEvent",
     "TextDelta",

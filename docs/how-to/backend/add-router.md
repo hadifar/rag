@@ -19,6 +19,7 @@ Add or change a FastAPI route. Use when you implement a new endpoint, change an 
 
 * Keep the router thin: call the service, shape the result.
 * Return a Pydantic model. Use another response class only for a non-JSON body.
+* Type a request field a user writes free text into as `UserText` (`rag/api/schema/text.py`), so it is normalized before its length is checked.
 * Declare dependencies as `Annotated[T, Depends(...)]` aliases.
 * Put a dependency that every route of a router shares on the `APIRouter(dependencies=[...])`.
 * Put a dependency that only one router uses as a private function in that router module.

@@ -10,8 +10,8 @@ from rag.domain.models import RunContext, StreamEvent, ToolAgentSpec
 class ChatAgentPort(Protocol):
     def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         """Answers `message` in `ctx`'s conversation for its user, remembering the turn
-        for the next: the answer's events as they happen, then the turn's references if
-        it searched.
+        for the next: the answer's events as they happen, then the turn's artifacts if
+        a tool that hands any over ran.
         """
         ...
 

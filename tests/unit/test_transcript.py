@@ -1,7 +1,7 @@
 from rag.domain.models import (
     AnswerVerified,
+    ArtifactsReady,
     ReasoningDelta,
-    ReferencesReady,
     StreamEvent,
     TextDelta,
     ToolCall,
@@ -22,8 +22,8 @@ def test_consecutive_deltas_of_a_kind_are_merged() -> None:
         ReasoningDelta("ing"),
         TextDelta("Hel"),
         TextDelta("lo"),
-        ReferencesReady([]),
-    ) == [ReasoningDelta("Weighing"), TextDelta("Hello"), ReferencesReady([])]
+        ArtifactsReady([]),
+    ) == [ReasoningDelta("Weighing"), TextDelta("Hello"), ArtifactsReady([])]
 
 
 def test_text_on_either_side_of_a_search_stays_apart() -> None:

@@ -12,7 +12,7 @@ graph TD;
 	__start__([<p>__start__</p>]):::first
 	model(model)
 	tools(tools)
-	TopicalGuard\2ebefore_agent(TopicalGuard.before_agent)
+	OffTopicGuard\2ebefore_agent(OffTopicGuard.before_agent)
 	GroundednessGuard\2eafter_model(GroundednessGuard.after_model)
 	TodoListMiddleware\2eafter_model(TodoListMiddleware.after_model)
 	__end__([<p>__end__</p>]):::last
@@ -20,8 +20,9 @@ graph TD;
 	GroundednessGuard\2eafter_model -.-> model;
 	GroundednessGuard\2eafter_model -.-> tools;
 	TodoListMiddleware\2eafter_model --> GroundednessGuard\2eafter_model;
-	TopicalGuard\2ebefore_agent --> model;
-	__start__ --> TopicalGuard\2ebefore_agent;
+	OffTopicGuard\2ebefore_agent -.-> __end__;
+	OffTopicGuard\2ebefore_agent -.-> model;
+	__start__ --> OffTopicGuard\2ebefore_agent;
 	model --> TodoListMiddleware\2eafter_model;
 	tools -.-> model;
 ```

@@ -11,6 +11,7 @@ from rag.domain.models import (
     TodosUpdated,
     ToolCall,
 )
+from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 
 # Only create_agent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their middleware nodes of this same
@@ -21,10 +22,6 @@ _USER_FACING_NODE = "model"
 # TodoListMiddleware's planning tool. Its call is the plan, not a search, so it's sent
 # as the plan itself; it returns a Command whose state update holds the new todos.
 _PLANNING_TOOL = "write_todos"
-
-# Dispatched (as a custom event) by the guard that checks each answer: the check
-# starting, then its verdict.
-ANSWER_VERIFICATION = "answer_verification"
 
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
@@ -85,12 +82,15 @@ class AnswerGate:
 
 
 def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
-    """What the groundedness guard dispatched about the answer: its check starting, then
-    its verdict. Other custom events aren't streamed.
+    """What the guards dispatched: the answer's check starting, then its verdict; or
+    the refusal for a blocked message, sent as the answer's text. Other custom events
+    aren't streamed.
     """
     name, data = raw_event["name"], raw_event["data"]
     if name == ANSWER_VERIFICATION:
         return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
+    if name == INPUT_BLOCKED:
+        return [TextDelta(text=data["message"])]
     return []
 
 

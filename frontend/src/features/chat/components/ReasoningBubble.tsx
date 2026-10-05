@@ -4,9 +4,9 @@ import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { ReasoningContent } from '../types';
 import { BubbleFrame } from './BubbleFrame';
 
-// Shown in full, lighter than the answer so it reads as an aside; the user can fold it.
+// Folded by default, lighter than the answer so it reads as an aside; the user can unfold it.
 export function ReasoningBubble({ text, streaming }: ReasoningContent) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <BubbleFrame>
