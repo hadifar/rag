@@ -9,17 +9,22 @@ class RetrievalService:
         vector_store: VectorStorePort,
         reranker: RerankerPort,
         top_k: int,
+        candidates: int,
     ):
         self._vector_store = vector_store
         self._reranker = reranker
         self._top_k = top_k  # passages a search returns
+        self._candidates = max(candidates, top_k)  # passages the reranker sees
 
     async def search(self, query: str) -> list[tuple[Chunk, float]]:
-        """Finds the best `top_k` passages for `query` and reranks them against it."""
+        """Finds the best `candidates` passages for `query`, reranks them against it
+        and returns the first `top_k`.
+        """
         candidates = await self._vector_store.asimilarity_search_with_score(
-            query, k=self._top_k
+            query, k=self._candidates
         )
-        return await self._reranker.rerank(query, candidates)
+        reranked = await self._reranker.rerank(query, candidates)
+        return reranked[: self._top_k]
 
     async def get_document(self, source_id: str) -> Chunk:
         document = await self._vector_store.aget_document(source_id)

@@ -73,12 +73,14 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
         retry_attempts=eval_settings.LLM.RETRY_ATTEMPTS,
     )
     attempts = eval_settings.LLM.RETRY_ATTEMPTS
-    reranker = (
-        LlmReranker(agent_service, attempts=attempts)
-        if eval_settings.RETRIEVAL.RERANK
-        else NoReranker()
+    rerank = eval_settings.RETRIEVAL.RERANK
+    reranker = LlmReranker(agent_service, attempts=attempts) if rerank else NoReranker()
+    return RetrievalService(
+        kb,
+        reranker,
+        top_k=eval_settings.RAG.TOP_K,
+        candidates=eval_settings.RETRIEVAL.RERANK_CANDIDATES if rerank else 0,
     )
-    return RetrievalService(kb, reranker, top_k=eval_settings.RAG.TOP_K)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -95,9 +97,9 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     mrr = sum(1 / rank for rank in hits) / len(RANKS)
     settings = Settings()  # pyright: ignore[reportCallIssue] — fields come from .env
     terminalreporter.section("retrieval eval")
-    terminalreporter.write_line(
-        f"k={settings.RAG.TOP_K}  rerank={settings.RETRIEVAL.RERANK}"
-    )
+    rerank = settings.RETRIEVAL.RERANK
+    candidates = f" of {settings.RETRIEVAL.RERANK_CANDIDATES}" if rerank else ""
+    terminalreporter.write_line(f"k={settings.RAG.TOP_K}{candidates}  rerank={rerank}")
     terminalreporter.write_line(f"questions: {len(RANKS)}")
     terminalreporter.write_line(f"recall@k:  {recall:.2f}")
     terminalreporter.write_line(f"MRR:       {mrr:.2f}")

@@ -68,6 +68,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 else NoReranker()
             ),
             top_k=settings.RAG.TOP_K,
+            # without a reranker, there is nothing to fetch beyond the top_k for
+            candidates=(
+                settings.RETRIEVAL.RERANK_CANDIDATES if settings.RETRIEVAL.RERANK else 0
+            ),
         )
 
         preference_service = PreferenceService(repository=PreferenceRepository(db_pool))

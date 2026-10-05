@@ -2,19 +2,11 @@ from pydantic import BaseModel, Field
 
 from rag.domain.models import Chunk
 from rag.domain.ports import AgentServicePort
+from rag.services.retrieval_service.prompts import RERANK_PROMPT
 from rag.shared.resilience import or_default
 
-RERANK_PROMPT = (
-    "Rate how relevant each passage below is to the user's question, from 1 (not "
-    "relevant) to 10 (answers it directly). Each passage is shown by its summary; "
-    "score every passage by its index.\n\n"
-    "QUESTION:\n{query}\n\n"
-    "PASSAGES:\n{passages}"
-)
 MIN_SCORE, MAX_SCORE = 1, 10
-# Score of a passage the LLM left unscored: below every scored one.
 UNSCORED = 0
-# Fewer candidates than this have no order to change, so need no LLM call.
 MIN_CANDIDATES = 2
 
 

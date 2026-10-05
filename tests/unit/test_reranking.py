@@ -142,18 +142,30 @@ async def test_a_single_candidate_needs_no_llm_call() -> None:
     assert agent.prompts == []
 
 
-async def test_search_reranks_all_top_k_candidates() -> None:
-    store = _VectorStore(_candidates("a", "b", "c", "d"))
-    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 8)])
-    service = RetrievalService(store, LlmReranker(agent, attempts=1), top_k=3)
+async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
+    store = _VectorStore(_candidates("a", "b", "c", "d", "e"))
+    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 3), (3, 9)])
+    service = RetrievalService(
+        store, LlmReranker(agent, attempts=1), top_k=2, candidates=4
+    )
 
     results = await service.search("q")
 
-    assert _sources(results) == ["doc-2", "doc-1", "doc-0"]
+    assert _sources(results) == ["doc-3", "doc-2"]  # doc-4 never reached the reranker
+    assert "[4]" not in agent.prompts[0]
+
+
+async def test_search_fetches_at_least_top_k_candidates() -> None:
+    store = _VectorStore(_candidates("a", "b", "c"))
+    service = RetrievalService(store, NoReranker(), top_k=3, candidates=1)
+
+    assert len(await service.search("q")) == 3
 
 
 async def test_search_without_reranking_keeps_the_vector_order() -> None:
     candidates = _candidates("a", "b")
-    service = RetrievalService(_VectorStore(candidates), NoReranker(), top_k=3)
+    service = RetrievalService(
+        _VectorStore(candidates), NoReranker(), top_k=3, candidates=0
+    )
 
     assert await service.search("q") == candidates
