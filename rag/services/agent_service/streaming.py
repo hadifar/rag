@@ -11,7 +11,13 @@ from rag.domain.models import (
     TodosUpdated,
     ToolCall,
 )
-from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
+
+# The custom events ChatAgent's guard nodes dispatch, which the stream turns into
+# user-facing events (see _guard_events).
+# verify: the answer's check starting, then its verdict.
+ANSWER_VERIFICATION = "answer_verification"
+# classify: a blocked message, with the refusal sent instead of an answer.
+INPUT_BLOCKED = "input_blocked"
 
 # Only ChatAgent's model node produces the user-facing answer. The guards' own LLM
 # calls (classification, not an answer) run in their own nodes of this same

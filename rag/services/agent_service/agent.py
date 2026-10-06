@@ -27,7 +27,6 @@ from pydantic import BaseModel
 
 from rag.domain.models import AgentMemory, RunContext, StreamEvent, TurnFailed
 from rag.domain.ports import SearchPort
-from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 from rag.services.agent_service.guards.groundedness import (
     is_grounded,
     verification_inputs,
@@ -41,7 +40,12 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     TURN_FAILED_MESSAGE,
 )
-from rag.services.agent_service.streaming import AnswerGate, parse_event
+from rag.services.agent_service.streaming import (
+    ANSWER_VERIFICATION,
+    INPUT_BLOCKED,
+    AnswerGate,
+    parse_event,
+)
 from rag.services.agent_service.tools import search_tool
 from rag.services.agent_service.turn import is_final_answer, remember
 
@@ -60,14 +64,11 @@ _Next = Literal["model", "__end__"]
 
 
 class ChatState(MessagesState):
-    """One turn's state. Only `messages` comes in (the agent's memory of the earlier
-    turns, then the question), so every other field starts unset each turn and never
-    carries over.
-    """
-
-    decision: NotRequired[Decision]  # the off-topic guard's, for this turn's question
-    revisions: NotRequired[int]  # answers sent back to revise this turn
+    decision: NotRequired[
+        Decision
+    ]  # the off-topic guard's verdict on the turn's question
     todos: NotRequired[list[Todo]]  # the plan, which write_todos replaces whole
+    revisions: NotRequired[int]  # answers sent back to revise this turn
 
 
 class ChatAgent:
