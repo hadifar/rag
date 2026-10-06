@@ -15,7 +15,6 @@ Diagram: [System overview](../diagrams/architecture.md#system-overview).
 One Postgres database (`DATABASE_URL`) holds everything.
 
 * The `public` schema belongs to Alembic.
-* The `langgraph` schema is left over from the LangGraph checkpointer. Nothing uses it.
 
 Each turn (`conversation_turns`) is kept two ways.
 

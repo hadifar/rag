@@ -39,7 +39,7 @@ class Container:
 
 
 @asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:
+async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:  # noqa
     """Opens connections and tears it down on exit."""
 
     async with (
@@ -101,6 +101,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             llm_service=llm_service,
         )
 
+        chat_service = ChatService(
+            repository=ConversationRepository(db_pool),
+            rag_service=rag_service,
+        )
+
         yield Container(
             retrieval_service=retrieval_service,
             preference_service=preference_service,
@@ -108,8 +113,5 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             ingestion_service=ingestion_service,
             auth_service=auth_service,
             conversation_service=conversation_service,
-            chat_service=ChatService(
-                repository=ConversationRepository(db_pool),
-                rag_service=rag_service,
-            ),
+            chat_service=chat_service,
         )
