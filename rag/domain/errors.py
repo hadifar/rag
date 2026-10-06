@@ -12,7 +12,6 @@ class DocumentNotFoundError(AppError):
 
     def __init__(self, source_id: str):
         super().__init__(f"No document found for source_id={source_id!r}")
-        self.source_id = source_id
 
 
 class InvalidArchiveError(AppError):
@@ -83,7 +82,6 @@ class UserNotFoundError(AppError):
 
     def __init__(self, user_id: object):
         super().__init__(f"No user found for id={user_id!r}")
-        self.user_id = user_id
 
 
 class UserEmailNotFoundError(AppError):
@@ -132,7 +130,6 @@ class ConversationNotFoundError(AppError):
 
     def __init__(self, conversation_id: object):
         super().__init__(f"No conversation found for id={conversation_id!r}")
-        self.conversation_id = conversation_id
 
 
 class InvalidCursorError(AppError):
