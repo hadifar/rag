@@ -4,7 +4,7 @@
 sequenceDiagram
     participant UI as Frontend (useSendMessage)
     participant R as conversation router
-    participant CS as ConversationService
+    participant CS as ChatService
     participant A as Chat agent
     participant KB as RetrievalService
     participant DB as Postgres

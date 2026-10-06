@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from rag.config import Settings
 from rag.container import Container
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
@@ -52,6 +53,10 @@ def get_conversation_service(container: ContainerDep) -> ConversationService:
     return container.conversation_service
 
 
+def get_chat_service(container: ContainerDep) -> ChatService:
+    return container.chat_service
+
+
 PreferenceServiceDep = Annotated[PreferenceService, Depends(get_preference_service)]
 
 
@@ -67,6 +72,9 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 ConversationServiceDep = Annotated[
     ConversationService, Depends(get_conversation_service)
 ]
+
+
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 
 
 async def get_current_user(

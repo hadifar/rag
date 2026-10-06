@@ -18,6 +18,7 @@ from rag.repository.preference_repository import PreferenceRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
@@ -35,6 +36,7 @@ class Container:
     ingestion_service: IngestionService
     auth_service: AuthService
     conversation_service: ConversationService
+    chat_service: ChatService
 
 
 @asynccontextmanager
@@ -110,4 +112,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             ingestion_service=ingestion_service,
             auth_service=auth_service,
             conversation_service=conversation_service,
+            chat_service=ChatService(
+                repository=ConversationRepository(db_pool),
+                rag_service=rag_service,
+            ),
         )

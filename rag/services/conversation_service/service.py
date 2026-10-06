@@ -1,9 +1,7 @@
-import asyncio
 import base64
 import binascii
 import json
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
@@ -17,7 +15,6 @@ from rag.domain.models import (
     ConversationPage,
     HistoryMessage,
     RunContext,
-    StreamEvent,
     UserMessage,
 )
 from rag.domain.ports import (
@@ -30,13 +27,12 @@ from rag.services.conversation_service.title import (
     fallback_title,
     title_prompt,
 )
-from rag.services.conversation_service.transcript import TranscriptBuilder
 from rag.shared.resilience import or_default
 
 
 class ConversationService:
-    """A user's conversations: each one's turns, run by `chat_agent` and kept as the
-    user saw them (the transcript), and its title, written by `agent_service`'s LLM.
+    """A user's conversations: each one's transcript (written by `chat_service`), and
+    its title, written by `agent_service`'s LLM.
     """
 
     def __init__(
@@ -87,30 +83,6 @@ class ConversationService:
         items = rows[:limit]
         next_cursor = _encode_cursor(items[-1]) if len(rows) > limit else None
         return ConversationPage(items=items, next_cursor=next_cursor)
-
-    async def send_message(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
-    ) -> AsyncIterator[StreamEvent]:
-        """The answer's events as the chat agent streams them. The conversation sorts
-        first in the user's list from the start, not once answered. The turn is saved
-        to the transcript however the stream ends, so a failed or abandoned answer
-        still shows what the user saw of it.
-        """
-        await self.get_owned(user_id, conversation_id)
-        await self._repository.touch(conversation_id)
-        ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
-        transcript = TranscriptBuilder()
-        try:
-            async for event in self._rag_service.stream(message, ctx):
-                transcript.add(event)
-                yield event
-        finally:
-            # Shielded: a client hanging up cancels the stream, not the save.
-            await asyncio.shield(
-                self._repository.append_turn(
-                    conversation_id, message, transcript.events
-                )
-            )
 
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
