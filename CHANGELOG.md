@@ -1,3 +1,45 @@
+## v0.14.0 (2026-10-06)
+
+### Feat
+
+- **cache**: cache query embeddings, search results and off-topic verdicts in Postgres
+- remove user pref
+- **chat**: fold the thought process by default
+- **agent**: replace turn references with typed artifacts
+- **api**: normalize user text before it is validated
+- **agent**: block injection and harmful messages before the model runs
+- **agent**: block injection and harmful messages before the model runs
+- **frontend**: vaporize a sidebar chat when it is deleted
+- **frontend**: vaporize a sidebar chat when it is deleted
+
+### Fix
+
+- **api**: fail when the stream events drift from the domain's
+
+### Refactor
+
+- **frontend**: auth calls through a typed client without the session
+- **agent**: the guards take the LLMPort
+- **errors**: drop error attributes nothing reads
+- **conversation**: reject a blank title with a plain ValueError
+- **retrieval**: RetrievalService owns the top_k rule
+- **conversation**: check ownership in the repository query
+- **config**: drop RetrievalConfig.rerank
+- **container**: drop chat_agent from the Container
+- **agent**: define the guards' custom event names in streaming.py
+- **agent**: fold the graph into ChatAgent and make max revisions a constant
+- **agent**: give the off-topic guard its scope and wording through its spec
+- text.py to common.py
+- **api**: move send-message to its own chat router
+- **chat**: keep the agent's memory in conversation_turns
+- new chat service
+- rename agent service with llm service
+- **conversation**: merge TranscriptRepository into ConversationRepository
+- **conversation**: bump updated_at in send_message; drop /touch
+- **conversation**: move title helpers into conv_title.py.
+- **agent**: drop AgentService._judge; guards fail open themselves
+- **agent**: split agent_service by responsibility
+
 ## v0.13.0 (2026-10-05)
 
 ### Feat
