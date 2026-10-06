@@ -101,9 +101,8 @@ class ConversationService:
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> Conversation:
-        conversation = await self._repository.get(conversation_id)
-        # Same error for "missing" and "someone else's", so ids can't be probed.
-        if conversation is None or conversation.user_id != user_id:
+        conversation = await self._repository.get_owned(user_id, conversation_id)
+        if conversation is None:
             raise ConversationNotFoundError(conversation_id)
         return conversation
 

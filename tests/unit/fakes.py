@@ -197,7 +197,7 @@ class FakeConversationRepository:
             None,
         )
         if empty is not None:
-            touched = await self.touch(empty.id)
+            touched = await self.touch_owned(user_id, empty.id)
             assert touched is not None
             return touched
         now = self._now()
@@ -207,8 +207,13 @@ class FakeConversationRepository:
         self.rows[conversation.id] = conversation
         return conversation
 
-    async def get(self, conversation_id: uuid.UUID) -> Conversation | None:
-        return self.rows.get(conversation_id)
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        conversation = self.rows.get(conversation_id)
+        return (
+            conversation if conversation and conversation.user_id == user_id else None
+        )
 
     async def list_for_user(
         self,
@@ -225,8 +230,10 @@ class FakeConversationRepository:
             mine = [c for c in mine if (c.updated_at, c.id) < before]
         return mine[:limit]
 
-    async def touch(self, conversation_id: uuid.UUID) -> Conversation | None:
-        if conversation_id not in self.rows:
+    async def touch_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        if await self.get_owned(user_id, conversation_id) is None:
             return None
         self.rows[conversation_id] = replace(
             self.rows[conversation_id], updated_at=self._now()

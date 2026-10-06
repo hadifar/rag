@@ -37,9 +37,12 @@ class ConversationRepository(BaseRepository[Conversation]):
         assert conversation is not None  # the INSERT or the UPDATE always returns it
         return conversation
 
-    async def get(self, conversation_id: uuid.UUID) -> Conversation | None:
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
         return await self._fetch_one(
-            f"SELECT {_COLUMNS} FROM conversations WHERE id = %s", (conversation_id,)
+            f"SELECT {_COLUMNS} FROM conversations WHERE id = %s AND user_id = %s",
+            (conversation_id, user_id),
         )
 
     async def list_for_user(
@@ -70,15 +73,16 @@ class ConversationRepository(BaseRepository[Conversation]):
             (user_id, *before, limit),
         )
 
-    async def touch(self, conversation_id: uuid.UUID) -> Conversation | None:
-        """Bumps updated_at; None if the conversation was deleted meanwhile."""
+    async def touch_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
         return await self._fetch_one(
             f"""
             UPDATE conversations SET updated_at = now()
-            WHERE id = %s
+            WHERE id = %s AND user_id = %s
             RETURNING {_COLUMNS}
             """,
-            (conversation_id,),
+            (conversation_id, user_id),
         )
 
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None:

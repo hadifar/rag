@@ -116,7 +116,7 @@ async def test_list_pages_through_the_users_conversations_newest_first() -> None
     service, repository, _ = _service()
     mine = [await _titled(repository, ALICE, f"chat {i}") for i in range(5)]
     await _titled(repository, BOB, "not mine")
-    await repository.touch(mine[0].id)  # most recently used goes first
+    await repository.touch_owned(ALICE, mine[0].id)  # most recently used goes first
 
     first = await service.list_for_user(ALICE, limit=2, cursor=None)
     second = await service.list_for_user(ALICE, limit=2, cursor=first.next_cursor)

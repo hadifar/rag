@@ -30,11 +30,8 @@ class ChatService:
         to the transcript however the stream ends, so a failed or abandoned answer
         still shows what the user saw of it.
         """
-        conversation = await self._repository.get(conversation_id)
-        # Same error for "missing" and "someone else's", so ids can't be probed.
-        if conversation is None or conversation.user_id != user_id:
+        if await self._repository.touch_owned(user_id, conversation_id) is None:
             raise ConversationNotFoundError(conversation_id)
-        await self._repository.touch(conversation_id)
         turns = await self._repository.list_turns(conversation_id)
         history = [turn.memory for turn in turns if turn.memory is not None]
         ctx = RunContext(user_id=user_id, conversation_id=conversation_id)

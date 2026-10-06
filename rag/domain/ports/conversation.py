@@ -12,7 +12,14 @@ class ConversationRepositoryPort(Protocol):
         """
         ...
 
-    async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        """None if it doesn't exist or is another user's: the same for both, so ids
+        can't be probed.
+        """
+        ...
+
     async def list_for_user(
         self,
         user_id: uuid.UUID,
@@ -22,7 +29,12 @@ class ConversationRepositoryPort(Protocol):
         """Newest first by (updated_at, id); `before` is exclusive (keyset pagination)."""
         ...
 
-    async def touch(self, conversation_id: uuid.UUID) -> Conversation | None: ...
+    async def touch_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        """Bumps it to most recently used; None, as `get_owned`, if it isn't the user's."""
+        ...
+
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...
     async def delete(self, conversation_id: uuid.UUID) -> None:
         """Deletes the conversation and its turns."""
