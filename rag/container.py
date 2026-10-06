@@ -28,7 +28,6 @@ from rag.services.retrieval_service.service import RetrievalService
 @dataclass
 class Container:
     retrieval_service: RetrievalService
-    chat_agent: ChatAgent
     ingestion_service: IngestionService
     auth_service: AuthService
     conversation_service: ConversationService
@@ -101,7 +100,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         yield Container(
             retrieval_service=retrieval_service,
-            chat_agent=chat_agent,
             ingestion_service=ingestion_service,
             auth_service=auth_service,
             conversation_service=conversation_service,

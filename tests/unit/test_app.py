@@ -29,7 +29,6 @@ from rag.domain.models import (
     SourceArtifact,
     ToolCall,
 )
-from rag.services.agent_service.agent import ChatAgent
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
@@ -106,7 +105,6 @@ def client() -> Generator[TestClient]:
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        chat_agent=cast(ChatAgent, chat_agent),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
