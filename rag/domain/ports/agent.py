@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from rag.domain.models import RunContext, StreamEvent, ToolAgentSpec
 
 
-class ChatAgentPort(Protocol):
+class RagServicePort(Protocol):
     def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         """Answers `message` in `ctx`'s conversation for its user, remembering the turn
         for the next: the answer's events as they happen, then the turn's artifacts if
@@ -20,7 +20,7 @@ class ChatAgentPort(Protocol):
         ...
 
 
-class AgentServicePort(Protocol):
+class LLMServicePort(Protocol):
     """The LLM: single-shot generation and the agents built on it, so nothing else ever
     holds the model or touches LangChain.
     """
@@ -47,7 +47,7 @@ class AgentServicePort(Protocol):
         """
         ...
 
-    def create_agent(self, spec: ToolAgentSpec) -> ChatAgentPort:
+    def create_agent(self, spec: ToolAgentSpec) -> RagServicePort:
         """A chat agent built as `spec` describes; raises ValueError if two of its
         tools share a name.
         """

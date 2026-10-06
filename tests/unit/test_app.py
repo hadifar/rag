@@ -120,8 +120,8 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            chat_agent=chat_agent,
-            agent_service=generation,
+            rag_service=chat_agent,
+            llm_service=generation,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

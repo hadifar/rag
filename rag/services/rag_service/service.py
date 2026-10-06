@@ -10,7 +10,7 @@ from rag.domain.models import (
     TodolistMiddleware,
     ToolAgentSpec,
 )
-from rag.domain.ports import AgentServicePort, SearchPort
+from rag.domain.ports import LLMServicePort, SearchPort
 from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
 from rag.services.rag_service.tools import search_tool
 
@@ -25,7 +25,7 @@ class RagService:
     def __init__(
         self,
         retrieval_service: SearchPort,
-        agent_service: AgentServicePort,
+        llm_service: LLMServicePort,
         max_revisions: int,
         capabilities: list[Capability],
     ):
@@ -41,7 +41,7 @@ class RagService:
             capabilities=capabilities,
         )
         # create agent
-        self._agent = agent_service.create_agent(agent_spec)
+        self._agent = llm_service.create_agent(agent_spec)
 
     async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
         async for event in self._agent.stream(message, ctx):

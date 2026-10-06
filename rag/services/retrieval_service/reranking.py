@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from rag.domain.models import Chunk
-from rag.domain.ports import AgentServicePort
+from rag.domain.ports import LLMServicePort
 from rag.services.retrieval_service.prompts import RERANK_PROMPT
 from rag.shared.resilience import or_default
 
@@ -34,8 +34,8 @@ class LlmReranker:
     candidates come back as given.
     """
 
-    def __init__(self, agent_service: AgentServicePort, attempts: int):
-        self._agent_service = agent_service
+    def __init__(self, llm_service: LLMServicePort, attempts: int):
+        self._llm_service = llm_service
         self._attempts = attempts
 
     async def rerank(
@@ -50,7 +50,7 @@ class LlmReranker:
         )
         prompt = RERANK_PROMPT.format(query=query, passages=passages)
         reply = await or_default(
-            self._agent_service.generate_structured(
+            self._llm_service.generate_structured(
                 prompt, RerankOutput, attempts=self._attempts
             ),
             None,

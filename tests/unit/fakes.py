@@ -22,7 +22,7 @@ from rag.domain.models import (
     Turn,
     User,
 )
-from rag.domain.ports import ChatAgentPort
+from rag.domain.ports import RagServicePort
 
 
 class FakeEmbeddings:
@@ -279,7 +279,7 @@ class StubGeneration:
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": await self.generate(prompt)})
 
-    def create_agent(self, spec: ToolAgentSpec) -> ChatAgentPort:
+    def create_agent(self, spec: ToolAgentSpec) -> RagServicePort:
         raise NotImplementedError("the stub builds no agent")
 
 

@@ -32,8 +32,8 @@ def _service(
     generation = generation or StubGeneration()
     service = ConversationService(
         repository=repository,
-        chat_agent=chat_agent or StubChatAgent(),
-        agent_service=generation,
+        rag_service=chat_agent or StubChatAgent(),
+        llm_service=generation,
     )
     return service, repository, generation
 

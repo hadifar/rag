@@ -6,8 +6,8 @@ from datetime import timedelta
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
-from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.checkpoint_saver import open_checkpointer
+from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
@@ -52,7 +52,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             build_embeddings(settings),
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
-        agent_service = AgentService(
+        llm_service = AgentService(
             llm=build_llm(settings),
             checkpointer=checkpointer,
             trace_config=trace_config,
@@ -62,7 +62,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         retrieval_service = RetrievalService(
             vector_store=vector_store,
             reranker=(
-                LlmReranker(agent_service, attempts=settings.LLM.RETRY_ATTEMPTS)
+                LlmReranker(llm_service, attempts=settings.LLM.RETRY_ATTEMPTS)
                 if settings.RETRIEVAL.rerank
                 else NoReranker()
             ),
@@ -74,7 +74,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         rag_service = RagService(
             retrieval_service=retrieval_service,
-            agent_service=agent_service,
+            llm_service=llm_service,
             max_revisions=settings.LLM.MAX_REVISIONS,
             capabilities=[preference_service.capability()],
         )
@@ -99,8 +99,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
-            chat_agent=rag_service,
-            agent_service=agent_service,
+            rag_service=rag_service,
+            llm_service=llm_service,
         )
 
         yield Container(

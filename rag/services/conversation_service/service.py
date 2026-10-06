@@ -21,9 +21,9 @@ from rag.domain.models import (
     UserMessage,
 )
 from rag.domain.ports import (
-    AgentServicePort,
-    ChatAgentPort,
     ConversationRepositoryPort,
+    LLMServicePort,
+    RagServicePort,
 )
 from rag.services.conversation_service.title import (
     TitleOutput,
@@ -42,12 +42,12 @@ class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        chat_agent: ChatAgentPort,
-        agent_service: AgentServicePort,
+        rag_service: RagServicePort,
+        llm_service: LLMServicePort,
     ):
         self._repository = repository
-        self._chat_agent = chat_agent
-        self._agent_service = agent_service
+        self._rag_service = rag_service
+        self._llm_service = llm_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -66,7 +66,7 @@ class ConversationService:
         conversation = await self.get_owned(user_id, conversation_id)
         prompt = title_prompt(message)
         reply = await or_default(
-            self._agent_service.generate_structured(
+            self._llm_service.generate_structured(
                 prompt,
                 TitleOutput,
                 trace="title",
@@ -101,7 +101,7 @@ class ConversationService:
         ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
         transcript = TranscriptBuilder()
         try:
-            async for event in self._chat_agent.stream(message, ctx):
+            async for event in self._rag_service.stream(message, ctx):
                 transcript.add(event)
                 yield event
         finally:
@@ -130,7 +130,7 @@ class ConversationService:
         thread nobody can reach (or erase) anymore.
         """
         await self.get_owned(user_id, conversation_id)
-        await self._chat_agent.forget(conversation_id)
+        await self._rag_service.forget(conversation_id)
         await self._repository.delete(conversation_id)
 
     async def get_owned(
