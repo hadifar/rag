@@ -29,7 +29,6 @@ from rag.domain.models import (
     SourceArtifact,
     StreamEvent,
     TextDelta,
-    ToolCall,
     TurnFailed,
 )
 from rag.services.agent_service.guards.groundedness import GroundednessVerdict
@@ -43,8 +42,6 @@ from rag.services.agent_service.prompts import (
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.agent import ChatAgent
-from rag.services.preference_service.service import PreferenceService
-from tests.unit.fakes import FakePreferenceRepository
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -174,16 +171,13 @@ def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
 
 _USER = uuid.uuid4()
 _CONVERSATION = uuid.uuid4()
-_PREFERENCE_TOOLS = ["forget_user_preference", "save_user_preference"]
 
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel, retry_attempts: int = 3):
-        self.preferences = PreferenceService(FakePreferenceRepository())
         self.agent = ChatAgent(
             model,
             _StubRetrievalService(),
-            self.preferences,
             _no_tracing,
             retry_attempts=retry_attempts,
         )
@@ -394,12 +388,11 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
 
     off_topic_call, on_topic_call = model.agent_calls[0], model.agent_calls[1]
     assert OFF_TOPIC_INSTRUCTION in off_topic_call["messages"][0].text
-    # Off-topic, the model keeps only the tools about the user, not the product.
-    assert sorted(off_topic_call["tools"]) == _PREFERENCE_TOOLS
+    # Off-topic, the model gets no tools and isn't told to plan.
+    assert off_topic_call["tools"] == []
+    assert PLANNING_INSTRUCTIONS not in off_topic_call["messages"][0].text
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
-    assert sorted(on_topic_call["tools"]) == sorted(
-        ["search_kb", "write_todos", *_PREFERENCE_TOOLS]
-    )
+    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in chat.saved_messages())
 
@@ -504,114 +497,6 @@ async def test_verifier_only_sees_the_current_turns_context(
     if second_turn_searches:
         assert "facts about security" in model.verifier_calls[1]
         assert "facts about pricing" not in model.verifier_calls[1]
-
-
-def _call(name: str, **args: str) -> AIMessage:
-    return AIMessage(
-        content="", tool_calls=[{"name": name, "args": args, "id": str(uuid.uuid4())}]
-    )
-
-
-async def test_saved_preferences_are_in_every_model_calls_prompt_not_the_thread() -> (
-    None
-):
-    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("Het kost 10.")])
-    chat = _Chat(model)
-    mine = await chat.preferences.add(_USER, "Answer in Dutch")
-    await chat.preferences.add(uuid.uuid4(), "Answer in French")
-
-    await chat.send("How much?")
-
-    prompts = [call["messages"][0].text for call in model.agent_calls]
-    assert all(f"- [{mine.id}] Answer in Dutch" in prompt for prompt in prompts)
-    assert not any("French" in prompt for prompt in prompts)
-    assert not any(isinstance(m, SystemMessage) for m in chat.saved_messages())
-
-
-async def test_a_preference_saved_in_one_turn_applies_from_the_next_call_on() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _call("save_user_preference", text="Keep answers short"),
-            _answer("Noted."),
-            _search("pricing"),
-            _answer("10."),
-        ]
-    )
-    chat = _Chat(model)
-
-    events = await chat.send("Please always keep answers short")
-    await chat.send("How much?")
-
-    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
-        "Keep answers short"
-    ]
-    assert "Keep answers short" not in model.agent_calls[0]["messages"][0].text
-    assert "Keep answers short" in model.agent_calls[1]["messages"][0].text
-    # Saving a preference is no search: the turn cites nothing and isn't verified.
-    assert not any(isinstance(e, ArtifactsReady) for e in events)
-    assert len(model.verifier_calls) == 1  # only the pricing answer
-
-
-async def test_preferences_are_saved_even_on_an_off_topic_turn() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _call("save_user_preference", text="Answer in Dutch"),
-            _answer("Opgeslagen."),
-        ],
-        off_topic_messages={"Always answer in Dutch"},
-    )
-    chat = _Chat(model)
-
-    await chat.send("Always answer in Dutch")
-
-    assert [p.text for p in await chat.preferences.list_for_user(_USER)] == [
-        "Answer in Dutch"
-    ]
-
-
-async def test_forgetting_a_preference_only_reaches_the_users_own() -> None:
-    model = _ScriptedChatModel(answers=[])
-    chat = _Chat(model)
-    mine = await chat.preferences.add(_USER, "Answer in Dutch")
-    theirs = await chat.preferences.add(uuid.uuid4(), "Answer in French")
-    model.answers.extend(
-        [
-            _call("forget_user_preference", preference_id=theirs.id),
-            _call("forget_user_preference", preference_id=mine.id),
-            _answer("Done."),
-        ]
-    )
-
-    events = await chat.send("Forget my preferences")
-
-    outputs = [e.output for e in events if isinstance(e, ToolCall) and e.output]
-    assert outputs == [
-        f"No saved preference has the id {theirs.id}.",
-        f"Forgot preference {mine.id}.",
-    ]
-    assert await chat.preferences.list_for_user(_USER) == []
-
-
-async def test_a_user_without_preferences_is_told_there_are_none() -> None:
-    model = _ScriptedChatModel(answers=[_answer("hi!")])
-
-    await _Chat(model).send("hello")
-
-    assert "(none yet)" in model.agent_calls[0]["messages"][0].text
-
-
-async def test_a_rejected_preference_is_reported_to_the_model_not_raised() -> None:
-    model = _ScriptedChatModel(
-        answers=[_call("save_user_preference", text="   "), _answer("Sorry.")]
-    )
-    chat = _Chat(model)
-
-    events = await chat.send("Remember nothing")
-
-    outputs = [e.output for e in events if isinstance(e, ToolCall) and e.output]
-    assert len(outputs) == 1
-    assert outputs[0].startswith("Not saved: Invalid preference")
-    assert await chat.preferences.list_for_user(_USER) == []
 
 
 async def test_a_blocked_message_gets_the_fixed_refusal_and_no_model_call() -> None:

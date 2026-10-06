@@ -37,8 +37,6 @@ export type IngestionRunResponse = Schemas['IngestionRunResponse'];
 
 // setting.py
 export type SettingsResponse = Schemas['SettingsResponse'];
-export type PreferenceRequest = Schemas['PreferenceRequest'];
-export type PreferenceResponse = Schemas['PreferenceResponse'];
 
 // Every route, with its parameters, body and responses: what the typed `api` client checks
 // each call against (shared/api/client.ts).

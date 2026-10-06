@@ -29,7 +29,6 @@ Known gaps. None of these is addressed yet.
 * `GroundednessGuard` passes an answer with no `search_kb` call.
 * Past `MAX_REVISIONS` (`rag/services/agent_service/agent.py`), an ungrounded answer ships.
 * An answer after any tool call doesn't stream: it shows in one piece after the check.
-* Saved preferences enter the system prompt in the user's own words.
 
 ## Conversations
 
@@ -41,7 +40,6 @@ Known gaps. None of these is addressed yet.
 ## Frontend
 
 * The Settings page Save button persists nothing.
-* A preference saved in another tab shows only after a reload.
 
 ## Security
 

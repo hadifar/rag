@@ -13,7 +13,6 @@ from rag.config import Settings
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
-from rag.repository.preference_repository import PreferenceRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import ChatAgent
 from rag.services.agent_service.service import AgentService
@@ -22,7 +21,6 @@ from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
-from rag.services.preference_service.service import PreferenceService
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -30,7 +28,6 @@ from rag.services.retrieval_service.service import RetrievalService
 @dataclass
 class Container:
     retrieval_service: RetrievalService
-    preference_service: PreferenceService
     chat_agent: ChatAgent
     ingestion_service: IngestionService
     auth_service: AuthService
@@ -66,12 +63,9 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
         )
 
-        preference_service = PreferenceService(repository=PreferenceRepository(db_pool))
-
         chat_agent = ChatAgent(
             llm=llm,
             search=retrieval_service,
-            preferences=preference_service,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
@@ -107,7 +101,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         yield Container(
             retrieval_service=retrieval_service,
-            preference_service=preference_service,
             chat_agent=chat_agent,
             ingestion_service=ingestion_service,
             auth_service=auth_service,

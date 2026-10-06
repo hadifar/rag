@@ -26,4 +26,4 @@ graph TD;
 ```
 
 * `classify` ends the turn for a blocked question; `verify` ends it, or sends a rejected answer back to `model` to revise.
-* `model` builds each call's system prompt (preferences, planning or the off-topic decline) and picks its tools; neither is saved to the thread.
+* `model` builds each call's system prompt (planning or the off-topic decline) and picks its tools; neither is saved to the thread.

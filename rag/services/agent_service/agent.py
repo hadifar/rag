@@ -22,12 +22,11 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
-from langgraph.runtime import Runtime
 from langgraph.types import Command, RetryPolicy
 from pydantic import BaseModel
 
 from rag.domain.models import AgentMemory, RunContext, StreamEvent, TurnFailed
-from rag.domain.ports import PreferencesPort, SearchPort
+from rag.domain.ports import SearchPort
 from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 from rag.services.agent_service.guards.groundedness import (
     is_grounded,
@@ -38,13 +37,12 @@ from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
     OFF_TOPIC_INSTRUCTION,
     PLANNING_INSTRUCTIONS,
-    PREFERENCES_INSTRUCTION,
     RAG_SYSTEM_PROMPT,
     REVISION_INSTRUCTION,
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.streaming import AnswerGate, parse_event
-from rag.services.agent_service.tools import USER_TOOLS, preference_tools, search_tool
+from rag.services.agent_service.tools import search_tool
 from rag.services.agent_service.turn import is_final_answer, remember
 
 logger = logging.getLogger(__name__)
@@ -83,31 +81,27 @@ class ChatAgent:
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times. Every LLM call, the model's and the guards', is tried up to
     `retry_attempts` times; then a model call's error ends the turn (see `AgentTurn`).
-    Instructions for one model call (the user's preferences, declining an off-topic
-    question, revising an answer) are added to that call only, never saved to the
-    thread, so they can't leak into later turns. It keeps nothing between turns.
+    Instructions for one model call (declining an off-topic question, revising an
+    answer) are added to that call only, never saved to the thread, so they can't leak
+    into later turns. It keeps nothing between turns.
     """
 
     def __init__(
         self,
         llm: BaseChatModel,
         search: SearchPort,
-        preferences: PreferencesPort,
         trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
         retry_attempts: int,
     ):
-        tools = [search_tool(search), write_todos, *preference_tools(preferences)]
+        tools = [search_tool(search), write_todos]
         self._on_topic_model = llm.bind_tools(tools)
-        # Off-topic, the model keeps only the tools about the user, not the product.
-        self._off_topic_model = llm.bind_tools(
-            [t for t in tools if t.name in USER_TOOLS]
-        )
+        # Off-topic, the model gets no tools: it is only to decline.
+        self._off_topic_model = llm
         self._llm = llm
-        self._preferences = preferences
         self._trace_config = trace_config
         self._retry_attempts = retry_attempts
 
-        graph = StateGraph(ChatState, context_schema=RunContext)
+        graph = StateGraph(ChatState)
         graph.add_node("classify", self._classify)
         # "model" is the node whose output the user sees (see streaming.parse_event).
         graph.add_node(
@@ -137,7 +131,6 @@ class ChatAgent:
                 "recursion_limit": RECURSION_LIMIT,
                 **self._trace_config("chat", ctx),
             },
-            context=ctx,
             version="v2",
         )
         return AgentTurn(run, question)
@@ -168,33 +161,18 @@ class ChatAgent:
             goto="__end__", update={"messages": [RemoveMessage(id=question.id)]}
         )
 
-    async def _model(
-        self, state: ChatState, runtime: Runtime[RunContext]
-    ) -> dict[str, Any]:
+    async def _model(self, state: ChatState) -> dict[str, Any]:
         off_topic = state.get("decision") == "restrict"
-        system = await self._system_prompt(runtime.context, off_topic=off_topic)
-        messages: list[BaseMessage] = [SystemMessage(system), *state["messages"]]
+        messages: list[BaseMessage] = [
+            SystemMessage(_system_prompt(off_topic=off_topic)),
+            *state["messages"],
+        ]
         # The model only runs right after a final answer when verify rejected it.
         if is_final_answer(state["messages"][-1]):
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
         model = self._off_topic_model if off_topic else self._on_topic_model
         return {"messages": [await model.ainvoke(messages)]}
-
-    async def _system_prompt(self, ctx: RunContext, *, off_topic: bool) -> str:
-        """Read fresh for each call, so a preference saved mid-turn applies from the
-        next call on. Off-topic, the model is told to decline, and not to plan with a
-        tool it doesn't have.
-        """
-        saved = await self._preferences.list_for_user(ctx.user_id)
-        listed = "\n".join(f"- [{p.id}] {p.text}" for p in saved) or "(none yet)"
-        steps = (
-            [OFF_TOPIC_INSTRUCTION]
-            if off_topic
-            else [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
-        )
-        preferences = PREFERENCES_INSTRUCTION.format(preferences=listed)
-        return "\n\n".join([RAG_SYSTEM_PROMPT, *steps, preferences])
 
     async def _verify(self, state: ChatState) -> Command[_Next]:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
@@ -214,6 +192,18 @@ class ChatAgent:
         if grounded:
             return Command(goto="__end__")
         return Command(goto="model", update={"revisions": revisions + 1})
+
+
+def _system_prompt(*, off_topic: bool) -> str:
+    """Off-topic, the model is told to decline, and not to plan with a tool it doesn't
+    have.
+    """
+    steps = (
+        [OFF_TOPIC_INSTRUCTION]
+        if off_topic
+        else [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+    )
+    return "\n\n".join([RAG_SYSTEM_PROMPT, *steps])
 
 
 def _after_model(state: ChatState) -> Literal["tools", "verify"]:

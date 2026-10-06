@@ -15,7 +15,6 @@ from rag.domain.models import (
     IndexedDocument,
     IngestionReport,
     IngestionRun,
-    Preference,
     RunContext,
     StreamEvent,
     TextDelta,
@@ -279,27 +278,6 @@ class StubGeneration:
             raise self.error
         # The reply, as the one field of the structured answer.
         return schema.model_validate({"title": self.reply})
-
-
-class FakePreferenceRepository:
-    """PreferenceRepositoryPort in memory: each user's preferences, oldest first."""
-
-    def __init__(self):
-        self.rows: dict[uuid.UUID, list[Preference]] = {}
-
-    async def list_for_user(self, user_id: uuid.UUID) -> list[Preference]:
-        return list(self.rows.get(user_id, []))
-
-    async def add(self, user_id: uuid.UUID, preference: Preference) -> Preference:
-        self.rows.setdefault(user_id, []).append(preference)
-        return preference
-
-    async def delete(self, user_id: uuid.UUID, preference_id: str) -> bool:
-        kept = [p for p in self.rows.get(user_id, []) if p.id != preference_id]
-        if len(kept) == len(self.rows.get(user_id, [])):
-            return False
-        self.rows[user_id] = kept
-        return True
 
 
 class StubTurn:

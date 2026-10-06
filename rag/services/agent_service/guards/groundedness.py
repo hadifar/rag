@@ -4,7 +4,6 @@ from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel
 
 from rag.services.agent_service.prompts import VERIFIER_PROMPT
-from rag.services.agent_service.tools import USER_TOOLS
 from rag.services.agent_service.turn import turn_tool_messages
 from rag.shared.resilience import or_default
 
@@ -14,13 +13,9 @@ class GroundednessVerdict(BaseModel):
 
 
 def _collect_context(messages: Sequence[BaseMessage]) -> str:
-    """This turn's tool results, but the `USER_TOOLS`': they're about the user, not the
-    product, so they're no context to check an answer against.
-    """
+    """This turn's tool results."""
     return "\n\n".join(
-        str(m.content)
-        for m in turn_tool_messages(messages)
-        if m.content and m.name not in USER_TOOLS
+        str(m.content) for m in turn_tool_messages(messages) if m.content
     )
 
 

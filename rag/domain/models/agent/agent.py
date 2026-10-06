@@ -5,9 +5,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class RunContext:
-    """Who a chat turn is for, and where: given to the agent's every tool and
-    middleware for that turn.
-    """
+    """Who a chat turn is for, and where: the turn's trace is tagged with it."""
 
     user_id: uuid.UUID
     conversation_id: uuid.UUID

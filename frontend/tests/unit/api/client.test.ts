@@ -3,48 +3,50 @@ import { describe, expect, it } from 'vitest';
 
 import { ApiError, api, setAccessToken, unwrap } from '@/shared/api/client';
 import { errorDetail, errorMessage, errorStatus, ignoreNotFound } from '@/shared/api/errors';
-import type { PreferenceRequest } from '@/shared/types';
+import type { MessageRequest } from '@/shared/types';
 import { server } from '../../server';
 
-const URL = '/api/settings/preferences';
+const URL = '/api/conversations/:id/title';
+const PATH = '/api/conversations/{conversation_id}/title';
+const params = { path: { conversation_id: 'c1' } };
 
 describe('the typed api client', () => {
   it('refreshes an expired session and resends the request, body included', async () => {
-    const seen: { auth: string | null; body: PreferenceRequest }[] = [];
+    const seen: { auth: string | null; body: MessageRequest }[] = [];
     server.use(
       http.post(URL, async ({ request }) => {
-        seen.push({ auth: request.headers.get('Authorization'), body: (await request.json()) as PreferenceRequest });
+        seen.push({ auth: request.headers.get('Authorization'), body: (await request.json()) as MessageRequest });
         return seen.length === 1
           ? new HttpResponse(null, { status: 401 })
-          : HttpResponse.json({ id: 'p1', text: 'Be brief' });
+          : HttpResponse.json({ id: 'c1', title: 'Pricing' });
       }),
       http.post('/api/auth/refresh', () => HttpResponse.json({ access_token: 'new', token_type: 'bearer' })),
     );
     setAccessToken('old');
 
-    const saved = await unwrap(api.POST(URL, { body: { text: 'Be brief' } }));
+    const titled = await unwrap(api.POST(PATH, { params, body: { message: 'How much?' } }));
 
-    expect(saved).toEqual({ id: 'p1', text: 'Be brief' });
+    expect(titled).toEqual({ id: 'c1', title: 'Pricing' });
     expect(seen).toEqual([
-      { auth: 'Bearer old', body: { text: 'Be brief' } },
-      { auth: 'Bearer new', body: { text: 'Be brief' } },
+      { auth: 'Bearer old', body: { message: 'How much?' } },
+      { auth: 'Bearer new', body: { message: 'How much?' } },
     ]);
   });
 
   it("throws an ApiError carrying the backend's reason", async () => {
-    server.use(http.post(URL, () => HttpResponse.json({ detail: 'Too many preferences' }, { status: 409 })));
+    server.use(http.post(URL, () => HttpResponse.json({ detail: 'Conversation is busy' }, { status: 409 })));
 
-    const err = await unwrap(api.POST(URL, { body: { text: 'x' } })).catch((e: unknown) => e);
+    const err = await unwrap(api.POST(PATH, { params, body: { message: 'x' } })).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(ApiError);
     expect(errorStatus(err)).toBe(409);
-    expect(errorDetail(err)).toBe('Too many preferences');
+    expect(errorDetail(err)).toBe('Conversation is busy');
   });
 
   it('has no reason to give for an error page that is not JSON', async () => {
     server.use(http.post(URL, () => new HttpResponse('<html>413</html>', { status: 413 })));
 
-    const err = await unwrap(api.POST(URL, { body: { text: 'x' } })).catch((e: unknown) => e);
+    const err = await unwrap(api.POST(PATH, { params, body: { message: 'x' } })).catch((e: unknown) => e);
 
     expect(errorStatus(err)).toBe(413);
     expect(errorDetail(err)).toBeNull();

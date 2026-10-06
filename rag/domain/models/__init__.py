@@ -30,17 +30,10 @@ from rag.domain.models.ingestion import (
     IngestionRunStatus,
     RawDocument,
 )
-from rag.domain.models.preference import (
-    MAX_PREFERENCE_LENGTH,
-    MAX_PREFERENCES,
-    Preference,
-)
 from rag.domain.models.retrieval import Chunk
 
 __all__ = [
     "AgentMemory",
-    "MAX_PREFERENCES",
-    "MAX_PREFERENCE_LENGTH",
     "AnswerVerified",
     "Artifact",
     "ArtifactsReady",
@@ -53,7 +46,6 @@ __all__ = [
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
-    "Preference",
     "RawDocument",
     "ReasoningDelta",
     "RunContext",
