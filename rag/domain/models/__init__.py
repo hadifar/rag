@@ -1,7 +1,7 @@
 """The domain's data types, grouped by area; import them from here."""
 
 from rag.domain.models.agent.agent import AgentMemory, RunContext
-from rag.domain.models.agent.artifact import Artifact, SourceArtifact
+from rag.domain.models.agent.artifact import ARTIFACTS, Artifact, SourceArtifact
 from rag.domain.models.agent.stream import (
     AnswerVerified,
     ArtifactsReady,
@@ -33,6 +33,7 @@ from rag.domain.models.ingestion import (
 from rag.domain.models.retrieval import Chunk
 
 __all__ = [
+    "ARTIFACTS",
     "AgentMemory",
     "AnswerVerified",
     "Artifact",

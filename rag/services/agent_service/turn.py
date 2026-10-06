@@ -9,11 +9,7 @@ from langchain_core.messages import (
     ToolMessage,
     messages_to_dict,
 )
-from pydantic import TypeAdapter
-
-from rag.domain.models import AgentMemory, Artifact, ArtifactsReady
-
-_ARTIFACTS = TypeAdapter(list[Artifact])
+from rag.domain.models import ARTIFACTS, AgentMemory, Artifact, ArtifactsReady
 
 # Guards inject their instructions per model call instead of saving them to the
 # thread, so every HumanMessage in state is the user's and marks the start of a turn.
@@ -67,5 +63,5 @@ def _artifacts(turn: Sequence[BaseMessage]) -> list[Artifact] | None:
     ]
     if not handed_over:
         return None
-    artifacts = _ARTIFACTS.validate_python([a for each in handed_over for a in each])
+    artifacts = ARTIFACTS.validate_python([a for each in handed_over for a in each])
     return list(dict.fromkeys(artifacts))

@@ -1,8 +1,9 @@
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel
 
+from rag.domain.ports import LLMPort
 from rag.services.agent_service.prompts import VERIFIER_PROMPT
 from rag.services.agent_service.turn import turn_tool_messages
 from rag.shared.resilience import or_default
@@ -35,7 +36,7 @@ def verification_inputs(messages: Sequence[BaseMessage]) -> tuple[str, str] | No
 
 
 async def is_grounded(
-    judge: Callable[[str, type[GroundednessVerdict]], Awaitable[GroundednessVerdict]],
+    llm: LLMPort,
     context: str,
     answer: str,
 ) -> bool:
@@ -43,5 +44,7 @@ async def is_grounded(
     open).
     """
     prompt = VERIFIER_PROMPT.format(context=context, answer=answer)
-    verdict = await or_default(judge(prompt, GroundednessVerdict), None)
+    verdict = await or_default(
+        llm.generate_structured(prompt, GroundednessVerdict), None
+    )
     return verdict is None or verdict.grounded

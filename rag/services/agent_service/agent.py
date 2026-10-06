@@ -94,9 +94,9 @@ class RagAgent:
         self._on_topic_model = llm.model.bind_tools(tools)
         # Off-topic, the model gets no tools: it is only to decline.
         self._off_topic_model = llm.model
-        # The guards' LLM calls. Run inside the turn, so they join its trace; each
-        # raises once its retries run out, and each guard fails open.
-        self._judge = llm.generate_structured
+        # For the guards' LLM calls. Untraced of their own, they join the turn's trace;
+        # each raises once its retries run out, and each guard fails open.
+        self._llm = llm
         self._trace_config = llm.trace_config
 
         graph = StateGraph(ChatState)
@@ -137,7 +137,7 @@ class RagAgent:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
-        decision = await classify_input(self._judge, state["messages"])
+        decision = await classify_input(self._llm, state["messages"])
         if decision != "block":
             return Command(goto="model", update={"decision": decision})
 
@@ -173,7 +173,7 @@ class RagAgent:
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
         await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
-        grounded = await is_grounded(self._judge, *inputs)
+        grounded = await is_grounded(self._llm, *inputs)
         await adispatch_custom_event(
             ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
         )

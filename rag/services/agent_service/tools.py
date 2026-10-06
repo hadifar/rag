@@ -2,12 +2,8 @@ from typing import Any
 
 from langchain.tools import tool
 from langchain_core.tools import BaseTool
-from pydantic import TypeAdapter
-
-from rag.domain.models import Artifact, SourceArtifact
+from rag.domain.models import ARTIFACTS, SourceArtifact
 from rag.domain.ports import SearchPort
-
-_ARTIFACTS = TypeAdapter(list[Artifact])
 
 
 def search_tool(knowledge_base: SearchPort) -> BaseTool:
@@ -33,6 +29,6 @@ def search_tool(knowledge_base: SearchPort) -> BaseTool:
         sources = [
             SourceArtifact(id=str(doc.metadata["source_id"])) for doc in documents
         ]
-        return content, _ARTIFACTS.dump_python(sources, mode="json")
+        return content, ARTIFACTS.dump_python(sources, mode="json")
 
     return search_kb

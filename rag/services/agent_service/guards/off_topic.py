@@ -1,10 +1,11 @@
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from typing import Literal
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
 
+from rag.domain.ports import LLMPort
 from rag.services.agent_service.prompts import GUARDRAIL_PROMPT, OFF_TOPIC_SCOPE
 from rag.services.agent_service.turn import is_final_answer, split_turns
 from rag.shared.resilience import or_default
@@ -41,7 +42,7 @@ def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
 
 
 async def classify_input(
-    judge: Callable[[str, type[InputVerdict]], Awaitable[InputVerdict]],
+    llm: LLMPort,
     messages: Sequence[BaseMessage],
 ) -> Decision:
     """The decision for the latest user message, with the turns before it for context;
@@ -54,7 +55,7 @@ async def classify_input(
     prompt = GUARDRAIL_PROMPT.format(
         scope=OFF_TOPIC_SCOPE, history=_history(turns[:-1]), message=message
     )
-    verdict = await or_default(judge(prompt, InputVerdict), None)
+    verdict = await or_default(llm.generate_structured(prompt, InputVerdict), None)
     if verdict is None:
         return "allow"
     if verdict.decision == "block":
