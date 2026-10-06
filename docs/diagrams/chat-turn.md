@@ -10,7 +10,7 @@ sequenceDiagram
     participant DB as Postgres
     participant LLM as LLM provider
 
-    UI->>R: POST /api/conversations/{id}/messages
+    UI->>R: POST /api/chat/{id}
     R->>CS: send_message
     CS->>DB: load earlier turns' agent memory
     CS->>A: run turn (with that memory)

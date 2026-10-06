@@ -277,7 +277,7 @@ def _send(
     """Posts a message and returns the whole SSE body of its answer."""
     with client.stream(
         "POST",
-        f"/api/conversations/{conversation_id}/messages",
+        f"/api/chat/{conversation_id}",
         json={"message": message},
         headers=headers,
     ) as response:
@@ -406,7 +406,7 @@ def test_send_message_404s_for_a_conversation_the_user_does_not_own(
     conversation_id = _create_conversation(client, _login(client, _OTHER_EMAIL))
 
     response = client.post(
-        f"/api/conversations/{conversation_id}/messages",
+        f"/api/chat/{conversation_id}",
         json={"message": "hijack"},
         headers=auth_headers,
     )
@@ -526,7 +526,7 @@ def test_conversations_of_another_user_are_invisible(
         ("GET", "/api/conversations"),
         ("POST", "/api/conversations"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
-        ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
+        ("POST", f"/api/chat/{uuid.uuid4()}"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],

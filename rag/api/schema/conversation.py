@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from rag.api.schema.agent import StreamEventResponse
+from rag.api.schema.chat import StreamEventResponse
 from rag.api.schema.text import UserText
 from rag.domain.models import HistoryMessage
 

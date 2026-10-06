@@ -42,7 +42,7 @@ describe('ChatPage', () => {
       http.post('/api/conversations', () =>
         HttpResponse.json(newConversation),
       ),
-      http.post('/api/conversations/:id/messages', async ({ params, request }) => {
+      http.post('/api/chat/:id', async ({ params, request }) => {
         expect(params.id).toBe(newConversation.id);
         sent = (await request.json()) as MessageRequest;
         return sse([
@@ -77,7 +77,7 @@ describe('ChatPage', () => {
       http.post('/api/conversations', () =>
         HttpResponse.json(newConversation),
       ),
-      http.post('/api/conversations/:id/messages', () => new HttpResponse(null, { status: 500 })),
+      http.post('/api/chat/:id', () => new HttpResponse(null, { status: 500 })),
     );
     const { user } = renderChat('/chat');
 
@@ -150,7 +150,7 @@ describe('ChatPage', () => {
           { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
         ]),
       ),
-      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Sure.' }])),
+      http.post('/api/chat/:id', () => sse([{ type: 'text', text: 'Sure.' }])),
     );
     const { user } = renderChat('/chat/c1');
     await screen.findByText('Hello!');
@@ -165,7 +165,7 @@ describe('ChatPage', () => {
   it('starts the next new chat empty', async () => {
     server.use(
       http.post('/api/conversations', () => HttpResponse.json(newConversation)),
-      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Hi there.' }])),
+      http.post('/api/chat/:id', () => sse([{ type: 'text', text: 'Hi there.' }])),
       http.post('/api/conversations/:id/title', () => HttpResponse.json(newConversation)),
     );
     const { router, user } = renderChat('/chat');

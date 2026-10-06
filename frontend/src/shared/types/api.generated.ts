@@ -137,11 +137,7 @@ export interface paths {
         /** Get Messages */
         get: operations["get_messages_api_conversations__conversation_id__messages_get"];
         put?: never;
-        /**
-         * Send Message
-         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
-         */
-        post: operations["send_message_api_conversations__conversation_id__messages_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -182,6 +178,26 @@ export interface paths {
         post?: never;
         /** Delete Conversation */
         delete: operations["delete_conversation_api_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Message
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
+         */
+        post: operations["send_message_api_chat__conversation_id__post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -861,41 +877,6 @@ export interface operations {
             };
         };
     };
-    send_message_api_conversations__conversation_id__messages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     generate_title_api_conversations__conversation_id__title_post: {
         parameters: {
             query?: never;
@@ -948,6 +929,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_chat__conversation_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
