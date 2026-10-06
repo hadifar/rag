@@ -27,7 +27,7 @@ Known gaps. None of these is addressed yet.
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.
 * Both guards fail open: if their LLM call fails, the message or answer passes.
 * `GroundednessGuard` passes an answer with no `search_kb` call.
-* Past `LLM__MAX_REVISIONS`, an ungrounded answer ships.
+* Past `MAX_REVISIONS` (`rag/services/agent_service/agent.py`), an ungrounded answer ships.
 * An answer after any tool call doesn't stream: it shows in one piece after the check.
 * Saved preferences enter the system prompt in the user's own words.
 

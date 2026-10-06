@@ -3,7 +3,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentMemory, RunContext, StreamEvent, ToolAgentSpec
+from rag.domain.models import AgentMemory, RunContext, StreamEvent
 
 
 class ChatTurnPort(Protocol):
@@ -17,7 +17,7 @@ class ChatTurnPort(Protocol):
     def memory(self) -> AgentMemory | None: ...
 
 
-class RagServicePort(Protocol):
+class ChatAgentPort(Protocol):
     def stream(
         self, message: str, history: Sequence[AgentMemory], ctx: RunContext
     ) -> ChatTurnPort:
@@ -29,15 +29,9 @@ class RagServicePort(Protocol):
 
 
 class LLMServicePort(Protocol):
-    """The LLM: single-shot generation and the agents built on it, so nothing else ever
-    holds the model or touches LangChain.
+    """The LLM's single-shot generation, so nothing else ever holds the model or
+    touches LangChain.
     """
-
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
-        """One-shot completion as plain text, tried up to `attempts` times; raises if
-        all fail. To bound the time, wrap the call in `asyncio.timeout`.
-        """
-        ...
 
     async def generate_structured[T: BaseModel](
         self,
@@ -52,11 +46,5 @@ class LLMServicePort(Protocol):
         instance of it; raises if all `attempts` fail or the reply is rejected. `trace`
         names and tags the call as a trace of its own, under `ctx`'s user and
         conversation; leave it out inside an agent's run, whose trace already has it.
-        """
-        ...
-
-    def create_agent(self, spec: ToolAgentSpec) -> RagServicePort:
-        """A chat agent built as `spec` describes; raises ValueError if two of its
-        tools share a name.
         """
         ...

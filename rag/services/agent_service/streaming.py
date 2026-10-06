@@ -13,14 +13,15 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 
-# Only create_agent's model node produces the user-facing answer. The guards' own LLM
-# calls (classification, not an answer) run in their middleware nodes of this same
+# Only ChatAgent's model node produces the user-facing answer. The guards' own LLM
+# calls (classification, not an answer) run in their own nodes of this same
 # graph and would otherwise leak into the text stream too, since astream_events
 # captures every chat model call in the run, not just this one.
 _USER_FACING_NODE = "model"
 
-# TodoListMiddleware's planning tool. Its call is the plan, not a search, so it's sent
-# as the plan itself; it returns a Command whose state update holds the new todos.
+# LangChain's planning tool, which ChatAgent uses as is. Its call is the plan, not a
+# search, so it's sent as the plan itself; it returns a Command whose state update holds
+# the new todos.
 _PLANNING_TOOL = "write_todos"
 
 

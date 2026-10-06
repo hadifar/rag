@@ -1,6 +1,6 @@
 # Agent graph
 
-Output of `graph.get_graph().draw_mermaid()` for the chat agent.
+Output of `graph.get_graph().draw_mermaid()` for the chat agent (`ChatAgent.graph` in `rag/services/agent_service/agent.py`).
 
 ```mermaid
 ---
@@ -10,22 +10,20 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
+	classify(classify)
 	model(model)
 	tools(tools)
-	OffTopicGuard\2ebefore_agent(OffTopicGuard.before_agent)
-	GroundednessGuard\2eafter_model(GroundednessGuard.after_model)
-	TodoListMiddleware\2eafter_model(TodoListMiddleware.after_model)
+	verify(verify)
 	__end__([<p>__end__</p>]):::last
-	GroundednessGuard\2eafter_model -.-> __end__;
-	GroundednessGuard\2eafter_model -.-> model;
-	GroundednessGuard\2eafter_model -.-> tools;
-	TodoListMiddleware\2eafter_model --> GroundednessGuard\2eafter_model;
-	OffTopicGuard\2ebefore_agent -.-> __end__;
-	OffTopicGuard\2ebefore_agent -.-> model;
-	__start__ --> OffTopicGuard\2ebefore_agent;
-	model --> TodoListMiddleware\2eafter_model;
-	tools -.-> model;
+	__start__ --> classify;
+	classify -.-> __end__;
+	classify -.-> model;
+	model -.-> tools;
+	model -.-> verify;
+	tools --> model;
+	verify -.-> __end__;
+	verify -.-> model;
 ```
 
-* `CapabilityInstructions` and `ModelRetryMiddleware` wrap each model call and add no node.
-* `after_model` hooks run in reverse middleware order.
+* `classify` ends the turn for a blocked question; `verify` ends it, or sends a rejected answer back to `model` to revise.
+* `model` builds each call's system prompt (preferences, planning or the off-topic decline) and picks its tools; neither is saved to the thread.

@@ -14,7 +14,7 @@ sequenceDiagram
     R->>CS: send_message
     CS->>DB: load earlier turns' agent memory
     CS->>A: run turn (with that memory)
-    A->>LLM: OffTopicGuard classify
+    A->>LLM: classify (off-topic guard)
     A->>LLM: model call
     A->>KB: search_kb
     KB->>DB: vector search
@@ -23,7 +23,7 @@ sequenceDiagram
     CS-->>R: events
     R-->>UI: SSE data: {type, ...}
     A-->>UI: verification pending
-    A->>LLM: GroundednessGuard check
+    A->>LLM: verify (groundedness check)
     A-->>UI: verification done (grounded or not)
     alt grounded
         A-->>UI: answer

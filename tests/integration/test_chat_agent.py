@@ -10,7 +10,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         tool_calls = []
 
         ctx = RunContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4())
-        async for event in container.rag_service.stream(message, [], ctx):
+        async for event in container.chat_agent.stream(message, [], ctx):
             if isinstance(event, TextDelta):
                 answer += event.text
             elif isinstance(event, ToolCall) and event.status == "pending":

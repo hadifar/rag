@@ -31,13 +31,13 @@ from rag.domain.models import (
     SourceArtifact,
     ToolCall,
 )
+from rag.services.agent_service.agent import ChatAgent
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.preference_service.service import PreferenceService
-from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
@@ -111,7 +111,7 @@ def client() -> Generator[TestClient]:
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
         preference_service=PreferenceService(FakePreferenceRepository()),
-        rag_service=cast(RagService, chat_agent),
+        chat_agent=cast(ChatAgent, chat_agent),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -124,7 +124,7 @@ def client() -> Generator[TestClient]:
             llm_service=generation,
         ),
         chat_service=ChatService(
-            repository=conversation_repository, rag_service=chat_agent
+            repository=conversation_repository, chat_agent=chat_agent
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

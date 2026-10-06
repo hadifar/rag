@@ -19,11 +19,9 @@ from rag.domain.models import (
     RunContext,
     StreamEvent,
     TextDelta,
-    ToolAgentSpec,
     Turn,
     User,
 )
-from rag.domain.ports import RagServicePort
 
 
 class FakeEmbeddings:
@@ -258,7 +256,7 @@ class FakeConversationRepository:
 
 
 class StubGeneration:
-    """AgentServicePort without agents: answers every prompt with `reply`, or raises
+    """LLMServicePort without a model: answers every prompt with `reply`, or raises
     `error`, and records the prompts.
     """
 
@@ -266,12 +264,6 @@ class StubGeneration:
         self.reply = reply
         self.error = error
         self.prompts: list[str] = []
-
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
-        self.prompts.append(prompt)
-        if self.error is not None:
-            raise self.error
-        return self.reply
 
     async def generate_structured[T: BaseModel](
         self,
@@ -282,11 +274,11 @@ class StubGeneration:
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
+        self.prompts.append(prompt)
+        if self.error is not None:
+            raise self.error
         # The reply, as the one field of the structured answer.
-        return schema.model_validate({"title": await self.generate(prompt)})
-
-    def create_agent(self, spec: ToolAgentSpec) -> RagServicePort:
-        raise NotImplementedError("the stub builds no agent")
+        return schema.model_validate({"title": self.reply})
 
 
 class FakePreferenceRepository:
@@ -325,7 +317,7 @@ class StubTurn:
 
 
 class StubChatAgent:
-    """RagServicePort without a model: echoes the message, then `extra_events`, then
+    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
     history each turn was given.
     """

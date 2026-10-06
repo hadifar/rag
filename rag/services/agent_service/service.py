@@ -1,37 +1,25 @@
 from collections.abc import Callable
-from functools import partial
 from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
-from rag.domain.models import RunContext, ToolAgentSpec
-from rag.services.agent_service.agent import Agent
-from rag.services.agent_service.builder import build_tool_agent
+from rag.domain.models import RunContext
 
 
 class AgentService:
-    """The only holder of the LLM, and the only place LangChain is used: single-shot
-    generation, and the agents built on the model.
+    """Single-shot structured generation on the LLM (an LLMServicePort), for the
+    features outside the chat agent (titles, reranking).
     """
 
     def __init__(
         self,
         llm: BaseChatModel,
         trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
-        retry_attempts: int,  # tries per LLM call before an agent's turn fails or a guard falls back
     ):
         self._llm = llm
         self._trace_config = trace_config
-        self._retry_attempts = retry_attempts
-
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
-        """One-shot completion as plain text, tried up to `attempts` times; raises if
-        all fail. To bound the time, wrap the call in `asyncio.timeout`.
-        """
-        llm = self._llm.with_retry(stop_after_attempt=attempts)
-        return (await llm.ainvoke(prompt)).text
 
     async def generate_structured[T: BaseModel](
         self,
@@ -50,12 +38,3 @@ class AgentService:
         # cut the call from the run's trace.
         config = self._trace_config(trace, ctx) if trace is not None else None
         return cast(T, await llm.ainvoke(prompt, config=config))
-
-    def create_agent(self, spec: ToolAgentSpec) -> Agent:
-        """A chat agent built as `spec` describes"""
-
-        # The guards' LLM call (a `Judge`), retried like the agent's own model calls.
-        judge = partial(self.generate_structured, attempts=self._retry_attempts)
-        graph = build_tool_agent(self._llm, spec, judge, self._retry_attempts)
-
-        return Agent(graph, self._trace_config)

@@ -2,10 +2,16 @@ from collections.abc import Sequence
 from itertools import pairwise
 from typing import TypeGuard
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+    messages_to_dict,
+)
 from pydantic import TypeAdapter
 
-from rag.domain.models import Artifact
+from rag.domain.models import AgentMemory, Artifact, ArtifactsReady
 
 _ARTIFACTS = TypeAdapter(list[Artifact])
 
@@ -28,11 +34,20 @@ def turn_tool_messages(messages: Sequence[BaseMessage]) -> list[ToolMessage]:
     return [m for m in current_turn(messages) if isinstance(m, ToolMessage)]
 
 
-def turn_artifacts(messages: Sequence[BaseMessage]) -> list[Artifact] | None:
-    """What the tools handed the user this turn, deduplicated in the order they did;
-    empty if they found nothing, None if no tool that hands anything over ran.
+def remember(
+    messages: Sequence[BaseMessage], question: HumanMessage
+) -> tuple[AgentMemory | None, ArtifactsReady | None]:
+    """What the agent is to remember of the turn `question` started (its messages, from
+    the question on), and what its tools handed the user, if any tool that hands
+    anything over ran; neither if the question was dropped (a blocked one).
     """
-    return _artifacts(current_turn(messages))
+    ids = [m.id for m in messages]
+    if question.id not in ids:
+        return None, None
+    turn = messages[ids.index(question.id) :]
+    artifacts = _artifacts(turn)
+    handed_over = None if artifacts is None else ArtifactsReady(artifacts=artifacts)
+    return messages_to_dict(turn), handed_over
 
 
 def split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]:
@@ -42,6 +57,9 @@ def split_turns(messages: Sequence[BaseMessage]) -> list[Sequence[BaseMessage]]:
 
 
 def _artifacts(turn: Sequence[BaseMessage]) -> list[Artifact] | None:
+    """What the tools handed the user in `turn`, deduplicated in the order they did;
+    empty if they found nothing, None if no tool that hands anything over ran.
+    """
     handed_over = [
         message.artifact
         for message in turn

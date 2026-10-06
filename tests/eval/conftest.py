@@ -65,11 +65,7 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
     """The app's search over `kb`, reranked as `RETRIEVAL__RERANK_CANDIDATES` says, as
     in the container. The reranker's one-shot LLM call needs no tracing.
     """
-    agent_service = AgentService(
-        build_llm(eval_settings),
-        _no_tracing,
-        retry_attempts=eval_settings.LLM.RETRY_ATTEMPTS,
-    )
+    agent_service = AgentService(build_llm(eval_settings), _no_tracing)
     attempts = eval_settings.LLM.RETRY_ATTEMPTS
     retrieval = eval_settings.RETRIEVAL
     reranker = (

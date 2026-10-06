@@ -24,7 +24,7 @@ def _service(
 ) -> tuple[ChatService, FakeConversationRepository]:
     repository = FakeConversationRepository()
     service = ChatService(
-        repository=repository, rag_service=chat_agent or StubChatAgent()
+        repository=repository, chat_agent=chat_agent or StubChatAgent()
     )
     return service, repository
 

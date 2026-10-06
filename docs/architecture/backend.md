@@ -24,7 +24,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 ## Services
 
-`agent_service` is the only LangChain user. `rag_service` is the chat agent built on it.
+`agent_service` is the only LangChain user: single-shot generation (`LLMServicePort`) and the chat agent (`ChatAgentPort`).
 
 `retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned.
 
@@ -33,12 +33,11 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
 * Free text a user types (a chat message, a preference) is a `UserText` field (`rag/api/schema/text.py`): `normalize_text` (`rag/shared/text_normalizer.py`) applies NFKC, drops control, invisible and bidi-override characters, and tidies whitespace before the length checks run.
-* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/builder.py`) turns the spec into a LangChain `create_agent` graph: `tools.py` adapts the tools, and `middleware/` maps each spec middleware to its guard (`middleware/factory.py`).
-* `OffTopicGuard` classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`, against the `scope` of its `OffTopicMiddleware` spec. Restrict (off-topic): it adds the spec's `decline_instruction` and keeps only `kind="user"` tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets the spec's `refusal`, and the agent does not remember the message. `RagService` sets all three (`rag/services/rag_service/prompts.py`).
+* `ChatAgent` (`rag/services/agent_service/agent.py`) is the agent: a LangGraph `StateGraph` with four nodes, `classify` → `model` ⇄ `tools`, then `verify`, and `stream()`, which runs it one turn at a time (`AgentTurn`). Its tools are in `tools.py`, its prompts in `prompts.py`, and the guards' checks are plain functions in `guards/`. `AgentService` is only single-shot generation, for titles and reranking.
+* `classify` (`guards/off_topic.py`) classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`, against `OFF_TOPIC_SCOPE`. Restrict (off-topic): the `model` node adds `OFF_TOPIC_INSTRUCTION` and binds only the `USER_TOOLS` (the preference tools). Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the agent does not remember the message. All three are in `rag/services/agent_service/prompts.py`.
 * Both guards get a structured verdict (a Pydantic schema) from their LLM call. A failed call passes the message or answer (fail open).
-* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `LLM__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
-* `CapabilityInstructions` adds each capability's instructions on every model call.
-* A `Capability` gives the agent a feature: tools plus instructions. The owning service creates it. `agent_service` knows no feature by name.
+* `verify` (`guards/groundedness.py`) checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
+* The `model` node adds the user's saved preferences on every model call, read fresh each time. The preference tools (`save_user_preference`, `forget_user_preference`) and the instructions reach `PreferenceService` through `PreferencesPort`.
 
 ## Streaming
 
@@ -50,9 +49,9 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 
 Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `artifacts`, `error`. History replays the stored events through the same `applyEvent`.
 
-`artifacts` is sent once the turn is done, if a tool returned `ToolResult.artifacts`: what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so its memory of the turn holds no domain classes.
+`artifacts` is sent once the turn is done, if a tool returned an artifact (`response_format="content_and_artifact"`): what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so its memory of the turn holds no domain classes.
 
-A turn whose tool or model fails (after `ModelRetryMiddleware`'s retries) ends with an `error` event carrying a user-facing message, never the exception. The agent does not remember the failed turn (its `memory` stays `None`), so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.
+A turn whose tool or model fails (after the `model` node's `RetryPolicy` retries) ends with an `error` event carrying a user-facing message, never the exception. The agent does not remember the failed turn (its `memory` stays `None`), so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.
 
 ## Errors
 

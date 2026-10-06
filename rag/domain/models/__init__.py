@@ -1,21 +1,7 @@
 """The domain's data types, grouped by area; import them from here."""
 
-from rag.domain.models.agent.agent import (
-    AgentMemory,
-    Capability,
-    Middleware,
-    RunContext,
-    Tool,
-    ToolAgentSpec,
-    ToolKind,
-    ToolResult,
-)
+from rag.domain.models.agent.agent import AgentMemory, RunContext
 from rag.domain.models.agent.artifact import Artifact, SourceArtifact
-from rag.domain.models.agent.middleware import (
-    GroundednessMiddleware,
-    OffTopicMiddleware,
-    TodolistMiddleware,
-)
 from rag.domain.models.agent.stream import (
     AnswerVerified,
     ArtifactsReady,
@@ -59,18 +45,14 @@ __all__ = [
     "Artifact",
     "ArtifactsReady",
     "AssistantMessage",
-    "Capability",
     "Chunk",
     "Conversation",
     "ConversationPage",
-    "GroundednessMiddleware",
     "HistoryMessage",
     "IndexedDocument",
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
-    "Middleware",
-    "OffTopicMiddleware",
     "Preference",
     "RawDocument",
     "ReasoningDelta",
@@ -80,13 +62,8 @@ __all__ = [
     "TaggedStreamEvent",
     "TextDelta",
     "Todo",
-    "TodolistMiddleware",
     "TodosUpdated",
-    "Tool",
-    "ToolAgentSpec",
     "ToolCall",
-    "ToolKind",
-    "ToolResult",
     "Turn",
     "TurnFailed",
     "User",
