@@ -86,18 +86,6 @@ async def send_message(
         yield to_stream_event(event)
 
 
-@router.post("/{conversation_id}/touch", status_code=204)
-async def touch_conversation(
-    conversation_id: uuid.UUID,
-    current_user: AuthenticatedUserDep,
-    conversation_service: ConversationServiceDep,
-) -> None:
-    """Marks the conversation as just used, so it sorts first in the list; the client
-    calls it as it sends a message.
-    """
-    await conversation_service.touch(current_user.id, conversation_id)
-
-
 @router.post("/{conversation_id}/title")
 async def generate_title(
     conversation_id: uuid.UUID,

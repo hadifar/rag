@@ -143,7 +143,6 @@ describe('ChatPage', () => {
   });
 
   it('adds a follow-up to a saved conversation below its history', async () => {
-    let touched = false;
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
@@ -151,10 +150,6 @@ describe('ChatPage', () => {
           { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
         ]),
       ),
-      http.post('/api/conversations/:id/touch', () => {
-        touched = true;
-        return new HttpResponse(null, { status: 204 });
-      }),
       http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Sure.' }])),
     );
     const { user } = renderChat('/chat/c1');
@@ -165,7 +160,6 @@ describe('ChatPage', () => {
     expect(await screen.findByText('Sure.')).toBeInTheDocument();
     expect(screen.getByText('Hello!')).toBeInTheDocument();
     expect(screen.getByText('One more thing')).toBeInTheDocument();
-    expect(touched).toBe(true);
   });
 
   it('starts the next new chat empty', async () => {

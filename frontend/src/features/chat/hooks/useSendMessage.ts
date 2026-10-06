@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   createConversation,
   generateTitle,
-  touchConversation,
   useConversationCache,
 } from '@/features/conversations';
 import { errorMessage } from '@/shared/api/errors';
@@ -92,7 +91,7 @@ export function useSendMessage(conversationId: string | undefined) {
 
       try {
         if (conversationId) {
-          await touchConversation(conversationId, controller.signal);
+          // The server lists it first too, as it takes the message.
           bump(conversationId);
         } else {
           const conversation = await createConversation(controller.signal);

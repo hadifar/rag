@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from rag.adapters.lang_llm_client import build_embeddings, build_llm
+from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.config import Settings
 from rag.domain.models import RunContext
 from rag.repository.document_repository import DocumentRepository

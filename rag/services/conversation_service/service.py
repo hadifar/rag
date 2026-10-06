@@ -58,12 +58,6 @@ class ConversationService:
         """
         return await self._repository.get_or_create_empty(user_id)
 
-    async def touch(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
-        """Marks the user's conversation as just used, so it sorts first in their list."""
-        await self.get_owned(user_id, conversation_id)
-        if await self._repository.touch(conversation_id) is None:
-            raise ConversationNotFoundError(conversation_id)  # deleted meanwhile
-
     async def generate_title(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> Conversation:
@@ -100,11 +94,13 @@ class ConversationService:
     async def send_message(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> AsyncIterator[StreamEvent]:
-        """The answer's events as the chat agent streams them. The turn is saved to the
-        transcript however the stream ends, so a failed or abandoned answer still
-        shows what the user saw of it.
+        """The answer's events as the chat agent streams them. The conversation sorts
+        first in the user's list from the start, not once answered. The turn is saved
+        to the transcript however the stream ends, so a failed or abandoned answer
+        still shows what the user saw of it.
         """
         await self.get_owned(user_id, conversation_id)
+        await self._repository.touch(conversation_id)
         ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
         transcript = TranscriptBuilder()
         try:

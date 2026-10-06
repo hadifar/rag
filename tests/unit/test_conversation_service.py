@@ -105,12 +105,12 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
     assert title.endswith("…")
 
 
-async def test_touch_moves_the_conversation_to_the_top_of_the_list() -> None:
+async def test_a_message_moves_the_conversation_to_the_top_of_the_list() -> None:
     service, repository, _ = _service()
     first = await _titled(repository, ALICE, "first")
     await _titled(repository, ALICE, "second")
 
-    await service.touch(ALICE, first.id)
+    await _chat(service, first.id, "again")
 
     page = await service.list_for_user(ALICE, limit=10, cursor=None)
     assert [c.title for c in page.items] == ["first", "second"]
@@ -121,8 +121,6 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
     service, repository, _ = _service(chat_agent=chat_agent)
     conversation_id = (await repository.get_or_create_empty(BOB)).id
 
-    with pytest.raises(ConversationNotFoundError):
-        await service.touch(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.generate_title(ALICE, conversation_id, "hi")
     with pytest.raises(ConversationNotFoundError):
@@ -139,8 +137,6 @@ async def test_cannot_read_or_delete_a_conversation_that_does_not_exist() -> Non
     service, _, _ = _service(chat_agent=chat_agent)
     conversation_id = uuid.uuid4()
 
-    with pytest.raises(ConversationNotFoundError):
-        await service.touch(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):

@@ -433,15 +433,14 @@ def test_conversations_list_is_newest_first_and_paginated(
     assert page2["next_cursor"] is None
 
 
-def test_touch_moves_a_conversation_to_the_top_of_the_list(
+def test_a_message_moves_a_conversation_to_the_top_of_the_list(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     first = _start_conversation(client, auth_headers, "first")
     second = _start_conversation(client, auth_headers, "second")
 
-    response = client.post(f"/api/conversations/{first}/touch", headers=auth_headers)
+    _send(client, auth_headers, first, "again")
 
-    assert response.status_code == 204
     listed = client.get("/api/conversations", headers=auth_headers).json()
     assert [c["id"] for c in listed["items"]] == [first, second]
 
@@ -515,12 +514,6 @@ def test_conversations_of_another_user_are_invisible(
         == 404
     )
     assert (
-        client.post(
-            f"/api/conversations/{others}/touch", headers=auth_headers
-        ).status_code
-        == 404
-    )
-    assert (
         client.delete(f"/api/conversations/{others}", headers=auth_headers).status_code
         == 404
     )
@@ -534,7 +527,6 @@ def test_conversations_of_another_user_are_invisible(
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
-        ("POST", f"/api/conversations/{uuid.uuid4()}/touch"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )
