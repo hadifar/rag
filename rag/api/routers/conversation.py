@@ -6,6 +6,7 @@ from fastapi.sse import EventSourceResponse
 
 from rag.api.deps import (
     AuthenticatedUserDep,
+    ChatServiceDep,
     ConversationServiceDep,
     get_current_user,
 )
@@ -77,10 +78,10 @@ async def send_message(
     conversation_id: uuid.UUID,
     message_request: MessageRequest,
     current_user: AuthenticatedUserDep,
-    conversation_service: ConversationServiceDep,
+    chat_service: ChatServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
     """Streams the answer as server-sent events, one `StreamEventResponse` each."""
-    async for event in conversation_service.send_message(
+    async for event in chat_service.send_message(
         current_user.id, conversation_id, message_request.message
     ):
         yield to_stream_event(event)

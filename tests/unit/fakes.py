@@ -1,6 +1,6 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
+    AgentMemory,
     Artifact,
     ArtifactsReady,
     Conversation,
@@ -243,9 +244,14 @@ class FakeConversationRepository:
         self.turns.pop(conversation_id, None)
 
     async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+        self,
+        conversation_id: uuid.UUID,
+        question: str,
+        answer: list[StreamEvent],
+        memory: AgentMemory | None = None,
     ) -> None:
-        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
+        turn = Turn(question, list(answer), memory)
+        self.turns.setdefault(conversation_id, []).append(turn)
 
     async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
         return list(self.turns.get(conversation_id, []))
@@ -304,9 +310,24 @@ class FakePreferenceRepository:
         return True
 
 
+class StubTurn:
+    """ChatTurnPort for a scripted turn: streams `events`, then remembers `memory`."""
+
+    def __init__(self, events: list[StreamEvent], memory: AgentMemory):
+        self._events = events
+        self._memory = memory
+        self.memory: AgentMemory | None = None
+
+    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
+        for event in self._events:
+            yield event
+        self.memory = self._memory
+
+
 class StubChatAgent:
-    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
-    `artifacts` if given; records the conversations it was told to forget.
+    """RagServicePort without a model: echoes the message, then `extra_events`, then
+    `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
+    history each turn was given.
     """
 
     def __init__(
@@ -316,14 +337,16 @@ class StubChatAgent:
     ):
         self.extra_events = extra_events or []
         self.artifacts = artifacts
-        self.forgotten: list[uuid.UUID] = []
+        self.histories: list[list[AgentMemory]] = []
 
-    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        yield TextDelta(text=f"echo: {message}")
-        for event in self.extra_events:
-            yield event
+    def stream(
+        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+    ) -> StubTurn:
+        self.histories.append(list(history))
+        events: list[StreamEvent] = [
+            TextDelta(text=f"echo: {message}"),
+            *self.extra_events,
+        ]
         if self.artifacts is not None:
-            yield ArtifactsReady(artifacts=self.artifacts)
-
-    async def forget(self, conversation_id: uuid.UUID) -> None:
-        self.forgotten.append(conversation_id)
+            events.append(ArtifactsReady(artifacts=self.artifacts))
+        return StubTurn(events, [{"said": message}])

@@ -31,7 +31,7 @@ graph LR
     api -->|users, conversations, transcripts| postgres
     api -->|uploaded zips| archives
     api --> agent
-    agent -->|checkpoints, search_kb| postgres
+    agent -->|search_kb| postgres
     agent -->|chat, embeddings| llm
     agent -.->|traces| langfuse
 ```

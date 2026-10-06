@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import Conversation, StreamEvent, Turn
+from rag.domain.models import AgentMemory, Conversation, StreamEvent, Turn
 
 
 class ConversationRepositoryPort(Protocol):
@@ -28,10 +28,14 @@ class ConversationRepositoryPort(Protocol):
         """Deletes the conversation and its turns."""
         ...
 
-    # The transcript: what the user saw of the conversation, turn by turn. Separate
-    # from what the chat agent remembers of it (its own messages, kept by the agent).
+    # The transcript: what the user saw of the conversation, turn by turn, each turn
+    # beside what the chat agent remembers of it (its own messages).
     async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+        self,
+        conversation_id: uuid.UUID,
+        question: str,
+        answer: list[StreamEvent],
+        memory: AgentMemory | None = None,
     ) -> None: ...
     async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
         """Oldest first; empty for a conversation without any."""

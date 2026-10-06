@@ -32,6 +32,7 @@ from rag.domain.models import (
     ToolCall,
 )
 from rag.services.auth_service.service import AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
@@ -120,8 +121,10 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            rag_service=chat_agent,
             llm_service=generation,
+        ),
+        chat_service=ChatService(
+            repository=conversation_repository, rag_service=chat_agent
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

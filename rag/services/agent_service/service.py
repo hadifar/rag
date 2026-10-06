@@ -4,7 +4,6 @@ from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel
 
 from rag.domain.models import RunContext, ToolAgentSpec
@@ -20,12 +19,10 @@ class AgentService:
     def __init__(
         self,
         llm: BaseChatModel,
-        checkpointer: BaseCheckpointSaver,
         trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
         retry_attempts: int,  # tries per LLM call before an agent's turn fails or a guard falls back
     ):
         self._llm = llm
-        self._checkpointer = checkpointer
         self._trace_config = trace_config
         self._retry_attempts = retry_attempts
 
@@ -59,8 +56,6 @@ class AgentService:
 
         # The guards' LLM call (a `Judge`), retried like the agent's own model calls.
         judge = partial(self.generate_structured, attempts=self._retry_attempts)
-        graph = build_tool_agent(
-            self._llm, spec, judge, self._checkpointer, self._retry_attempts
-        )
+        graph = build_tool_agent(self._llm, spec, judge, self._retry_attempts)
 
-        return Agent(graph, self._checkpointer, self._trace_config)
+        return Agent(graph, self._trace_config)

@@ -1,9 +1,7 @@
-import asyncio
 import base64
 import binascii
 import json
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
@@ -17,36 +15,31 @@ from rag.domain.models import (
     ConversationPage,
     HistoryMessage,
     RunContext,
-    StreamEvent,
     UserMessage,
 )
 from rag.domain.ports import (
     ConversationRepositoryPort,
     LLMServicePort,
-    RagServicePort,
 )
 from rag.services.conversation_service.title import (
     TitleOutput,
     fallback_title,
     title_prompt,
 )
-from rag.services.conversation_service.transcript import TranscriptBuilder
 from rag.shared.resilience import or_default
 
 
 class ConversationService:
-    """A user's conversations: each one's turns, run by `chat_agent` and kept as the
-    user saw them (the transcript), and its title, written by `agent_service`'s LLM.
+    """A user's conversations: each one's transcript (written by `chat_service`), and
+    its title, written by `agent_service`'s LLM.
     """
 
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        rag_service: RagServicePort,
         llm_service: LLMServicePort,
     ):
         self._repository = repository
-        self._rag_service = rag_service
         self._llm_service = llm_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
@@ -88,30 +81,6 @@ class ConversationService:
         next_cursor = _encode_cursor(items[-1]) if len(rows) > limit else None
         return ConversationPage(items=items, next_cursor=next_cursor)
 
-    async def send_message(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
-    ) -> AsyncIterator[StreamEvent]:
-        """The answer's events as the chat agent streams them. The conversation sorts
-        first in the user's list from the start, not once answered. The turn is saved
-        to the transcript however the stream ends, so a failed or abandoned answer
-        still shows what the user saw of it.
-        """
-        await self.get_owned(user_id, conversation_id)
-        await self._repository.touch(conversation_id)
-        ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
-        transcript = TranscriptBuilder()
-        try:
-            async for event in self._rag_service.stream(message, ctx):
-                transcript.add(event)
-                yield event
-        finally:
-            # Shielded: a client hanging up cancels the stream, not the save.
-            await asyncio.shield(
-                self._repository.append_turn(
-                    conversation_id, message, transcript.events
-                )
-            )
-
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
@@ -125,12 +94,8 @@ class ConversationService:
         return history
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
-        """The transcript goes with the row; the agent's memory of it first: if that
-        fails, the row is still there to retry the delete, rather than a row-less
-        thread nobody can reach (or erase) anymore.
-        """
+        """Its turns, and the agent's memory of them, go with the row."""
         await self.get_owned(user_id, conversation_id)
-        await self._rag_service.forget(conversation_id)
         await self._repository.delete(conversation_id)
 
     async def get_owned(

@@ -4,7 +4,7 @@
 sequenceDiagram
     participant UI as Frontend (useSendMessage)
     participant R as conversation router
-    participant CS as ConversationService
+    participant CS as ChatService
     participant A as Chat agent
     participant KB as RetrievalService
     participant DB as Postgres
@@ -12,7 +12,8 @@ sequenceDiagram
 
     UI->>R: POST /api/conversations/{id}/messages
     R->>CS: send_message
-    CS->>A: run turn (thread = conversation id)
+    CS->>DB: load earlier turns' agent memory
+    CS->>A: run turn (with that memory)
     A->>LLM: OffTopicGuard classify
     A->>LLM: model call
     A->>KB: search_kb
@@ -31,5 +32,5 @@ sequenceDiagram
         A-->>UI: revised answer
     end
     A-->>UI: artifacts (sources)
-    CS->>DB: save turn to conversation_turns
+    CS->>DB: save turn and its agent memory to conversation_turns
 ```

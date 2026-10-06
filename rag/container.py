@@ -6,7 +6,6 @@ from datetime import timedelta
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
-from rag.adapters.langchain.checkpoint_saver import open_checkpointer
 from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
@@ -18,6 +17,7 @@ from rag.repository.preference_repository import PreferenceRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
@@ -35,14 +35,14 @@ class Container:
     ingestion_service: IngestionService
     auth_service: AuthService
     conversation_service: ConversationService
+    chat_service: ChatService
 
 
 @asynccontextmanager
-async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:
+async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:  # noqa
     """Opens connections and tears it down on exit."""
 
     async with (
-        open_checkpointer(settings) as checkpointer,
         open_trace_config(settings) as trace_config,
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
@@ -54,7 +54,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
         llm_service = AgentService(
             llm=build_llm(settings),
-            checkpointer=checkpointer,
             trace_config=trace_config,
             retry_attempts=settings.LLM.RETRY_ATTEMPTS,
         )
@@ -99,8 +98,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
-            rag_service=rag_service,
             llm_service=llm_service,
+        )
+
+        chat_service = ChatService(
+            repository=ConversationRepository(db_pool),
+            rag_service=rag_service,
         )
 
         yield Container(
@@ -110,4 +113,5 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             ingestion_service=ingestion_service,
             auth_service=auth_service,
             conversation_service=conversation_service,
+            chat_service=chat_service,
         )

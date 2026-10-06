@@ -16,8 +16,8 @@ class Settings(BaseSettings):
         env_file=".env", env_nested_delimiter="__", case_sensitive=True, extra="forbid"
     )
 
-    # The one Postgres database behind everything: users, conversations, knowledge-base
-    # chunks (schema by Alembic) and conversation messages (LangGraph's checkpointer).
+    # The one Postgres database behind everything: users, conversations and their
+    # turns, knowledge-base chunks; its schema is Alembic's.
     DATABASE_URL: SecretStr
 
     AUTH: AuthConfig

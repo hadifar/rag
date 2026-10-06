@@ -12,8 +12,8 @@ _ARTIFACTS = TypeAdapter(list[Artifact])
 def _to_langchain_tool(tool: Tool) -> BaseTool:
     """The model reads the result's content; its artifacts ride along as the
     ToolMessage's artifact, where the turn's artifacts are collected from. They're kept
-    there as plain JSON, which the checkpointer saves as is, rather than as domain
-    classes it would have to be told it may load. The turn's RunContext is injected by
+    there as plain JSON, which the agent's memory of the turn saves as is, rather than
+    as domain classes. The turn's RunContext is injected by
     LangChain, so the model never sees it as an argument.
     """
     fields: dict[str, Any] = {tool.parameter: (str, ...)}

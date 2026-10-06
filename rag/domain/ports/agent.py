@@ -1,22 +1,30 @@
-import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import RunContext, StreamEvent, ToolAgentSpec
+from rag.domain.models import AgentMemory, RunContext, StreamEvent, ToolAgentSpec
+
+
+class ChatTurnPort(Protocol):
+    """A chat turn as it runs: iterate it for the answer's events. Once they end,
+    `memory` is what the agent is to remember of the turn; None for one it is to
+    forget (blocked, failed, or cut short by its caller).
+    """
+
+    def __aiter__(self) -> AsyncIterator[StreamEvent]: ...
+    @property
+    def memory(self) -> AgentMemory | None: ...
 
 
 class RagServicePort(Protocol):
-    def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        """Answers `message` in `ctx`'s conversation for its user, remembering the turn
-        for the next: the answer's events as they happen, then the turn's artifacts if
-        a tool that hands any over ran.
+    def stream(
+        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+    ) -> ChatTurnPort:
+        """Answers `message` in `ctx`'s conversation for its user, remembering
+        `history`, the `memory` of each earlier turn, oldest first: the answer's events
+        as they happen, then the turn's artifacts if a tool that hands any over ran.
         """
-        ...
-
-    async def forget(self, conversation_id: uuid.UUID) -> None:
-        """Drops what the agent remembers of the conversation (its messages)."""
         ...
 
 

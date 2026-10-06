@@ -126,12 +126,14 @@ async def test_turns_read_back_in_order_with_every_kind_of_event(
         ArtifactsReady(artifacts=[SourceArtifact(id="pricing.md")]),
     ]
 
-    await repository.append_turn(conversation.id, "How much?", answer)
+    memory = [{"type": "human", "data": {"content": "How much?"}}]
+
+    await repository.append_turn(conversation.id, "How much?", answer, memory)
     await repository.append_turn(conversation.id, "thanks", [])
 
     assert await repository.list_turns(conversation.id) == [
-        Turn("How much?", answer),
-        Turn("thanks", []),
+        Turn("How much?", answer, memory),
+        Turn("thanks", [], None),
     ]
     assert await repository.list_turns(uuid.uuid4()) == []
 
