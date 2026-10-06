@@ -7,34 +7,33 @@ from pydantic import BaseModel
 
 from rag.domain.models import RunContext
 
+TraceConfig = Callable[[str | None, RunContext | None], RunnableConfig]
 
-class AgentService:
-    """Single-shot structured generation on the LLM (an LLMServicePort), for the
-    features outside the chat agent (titles, reranking).
+
+class Llm:
+    """The LLM (an LLMPort): the one holder of the model, with its tracing and retries.
+    Others get single-shot structured generation from it; the agent also binds its
+    tools to `model`.
     """
 
-    def __init__(
-        self,
-        llm: BaseChatModel,
-        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
-    ):
-        self._llm = llm
-        self._trace_config = trace_config
+    def __init__(self, model: BaseChatModel, trace_config: TraceConfig, attempts: int):
+        self.model = model
+        self.trace_config = trace_config
+        self.attempts = attempts  # tries per call
 
     async def generate_structured[T: BaseModel](
         self,
         prompt: str,
         schema: type[T],
         *,
-        attempts: int = 1,
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class)"""
-        llm = self._llm.with_structured_output(schema).with_retry(
-            stop_after_attempt=attempts
+        llm = self.model.with_structured_output(schema).with_retry(
+            stop_after_attempt=self.attempts
         )
         # Its own trace only if named: inside an agent's run, a config of its own would
         # cut the call from the run's trace.
-        config = self._trace_config(trace, ctx) if trace is not None else None
+        config = self.trace_config(trace, ctx) if trace is not None else None
         return cast(T, await llm.ainvoke(prompt, config=config))

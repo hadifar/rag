@@ -24,7 +24,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 ## Services
 
-`agent_service` is the only LangChain user: single-shot generation (`LLMServicePort`) and the chat agent (`ChatAgentPort`).
+`agent_service` is the only LangChain user. `Llm` (`llm.py`, an `LLMPort`) is the one holder of the model, with its tracing and `LLM__RETRY_ATTEMPTS` tries per call: it gives titles, reranking and the agent's guards single-shot structured generation. `RagAgent` (an `AgentPort`) is the agent, built on that `Llm`; `chat_service` runs it for a conversation's turn.
 
 `retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned.
 
@@ -33,7 +33,7 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
 * Free text a user types (a chat message) is a `UserText` field (`rag/api/schema/common.py`): `normalize_text` (`rag/shared/text_normalizer.py`) applies NFKC, drops control, invisible and bidi-override characters, and tidies whitespace before the length checks run.
-* `ChatAgent` (`rag/services/agent_service/agent.py`) is the agent: a LangGraph `StateGraph` with four nodes, `classify` → `model` ⇄ `tools`, then `verify`, and `stream()`, which runs it one turn at a time (`AgentTurn`). Its tools are in `tools.py`, its prompts in `prompts.py`, and the guards' checks are plain functions in `guards/`. `AgentService` is only single-shot generation, for titles and reranking.
+* `RagAgent` (`rag/services/agent_service/agent.py`) is the agent: a LangGraph `StateGraph` with four nodes, `classify` → `model` ⇄ `tools`, then `verify`, and `stream()`, which runs it one turn at a time (`AgentTurn`). Its tools are in `tools.py`, its prompts in `prompts.py`, and the guards' checks are plain functions in `guards/`.
 * `classify` (`guards/off_topic.py`) classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`, against `OFF_TOPIC_SCOPE`. Restrict (off-topic): the `model` node adds `OFF_TOPIC_INSTRUCTION` and binds no tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the agent does not remember the message. All three are in `rag/services/agent_service/prompts.py`.
 * Both guards get a structured verdict (a Pydantic schema) from their LLM call. A failed call passes the message or answer (fail open).
 * `verify` (`guards/groundedness.py`) checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.

@@ -255,7 +255,7 @@ class FakeConversationRepository:
 
 
 class StubGeneration:
-    """LLMServicePort without a model: answers every prompt with `reply`, or raises
+    """LLMPort without a model: answers every prompt with `reply`, or raises
     `error`, and records the prompts.
     """
 
@@ -269,7 +269,6 @@ class StubGeneration:
         prompt: str,
         schema: type[T],
         *,
-        attempts: int = 1,
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
@@ -294,8 +293,8 @@ class StubTurn:
         self.memory = self._memory
 
 
-class StubChatAgent:
-    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
+class StubAgent:
+    """AgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
     history each turn was given.
     """

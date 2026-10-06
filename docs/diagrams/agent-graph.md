@@ -1,6 +1,6 @@
 # Agent graph
 
-Output of `graph.get_graph().draw_mermaid()` for the chat agent (`ChatAgent.graph` in `rag/services/agent_service/agent.py`).
+Output of `graph.get_graph().draw_mermaid()` for the chat agent (`RagAgent.graph` in `rag/services/agent_service/agent.py`).
 
 ```mermaid
 ---

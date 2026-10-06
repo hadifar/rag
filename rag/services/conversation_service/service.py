@@ -19,7 +19,7 @@ from rag.domain.models import (
 )
 from rag.domain.ports import (
     ConversationRepositoryPort,
-    LLMServicePort,
+    LLMPort,
 )
 from rag.services.conversation_service.title import (
     TitleOutput,
@@ -31,16 +31,16 @@ from rag.shared.resilience import or_default
 
 class ConversationService:
     """A user's conversations: each one's transcript (written by `chat_service`), and
-    its title, written by `agent_service`'s LLM.
+    its title, written by the LLM (`llm`).
     """
 
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        llm_service: LLMServicePort,
+        llm: LLMPort,
     ):
         self._repository = repository
-        self._llm_service = llm_service
+        self._llm = llm
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
         """The user's empty conversation, new or the one they already have, so empty
@@ -59,7 +59,7 @@ class ConversationService:
         conversation = await self.get_owned(user_id, conversation_id)
         prompt = title_prompt(message)
         reply = await or_default(
-            self._llm_service.generate_structured(
+            self._llm.generate_structured(
                 prompt,
                 TitleOutput,
                 trace="title",

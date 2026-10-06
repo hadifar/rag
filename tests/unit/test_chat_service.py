@@ -13,19 +13,17 @@ from rag.domain.models import (
     Turn,
 )
 from rag.services.chat_service.service import ChatService
-from tests.unit.fakes import FakeConversationRepository, StubChatAgent, StubTurn
+from tests.unit.fakes import FakeConversationRepository, StubAgent, StubTurn
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
 
 
 def _service(
-    chat_agent: StubChatAgent | None = None,
+    agent: StubAgent | None = None,
 ) -> tuple[ChatService, FakeConversationRepository]:
     repository = FakeConversationRepository()
-    service = ChatService(
-        repository=repository, chat_agent=chat_agent or StubChatAgent()
-    )
+    service = ChatService(repository=repository, agent=agent or StubAgent())
     return service, repository
 
 
@@ -50,7 +48,7 @@ async def test_a_message_moves_the_conversation_to_the_top_of_the_list() -> None
 
 async def test_each_turn_is_saved_as_it_was_streamed() -> None:
     service, repository = _service(
-        StubChatAgent(extra_events=[TextDelta(text="!")], artifacts=[])
+        StubAgent(extra_events=[TextDelta(text="!")], artifacts=[])
     )
     conversation_id = (await repository.get_or_create_empty(ALICE)).id
 
@@ -78,8 +76,8 @@ async def test_each_turn_is_saved_as_it_was_streamed() -> None:
 
 
 async def test_the_agent_is_given_its_memory_of_the_earlier_turns() -> None:
-    chat_agent = StubChatAgent()
-    service, repository = _service(chat_agent)
+    agent = StubAgent()
+    service, repository = _service(agent)
     conversation_id = (await repository.get_or_create_empty(ALICE)).id
     # A turn the agent forgot (blocked, failed) is no part of its memory.
     await repository.append_turn(conversation_id, "blocked", [], None)
@@ -87,7 +85,7 @@ async def test_the_agent_is_given_its_memory_of_the_earlier_turns() -> None:
     await _chat(service, conversation_id, "first")
     await _chat(service, conversation_id, "second")
 
-    assert chat_agent.histories == [[], [[{"said": "first"}]]]
+    assert agent.histories == [[], [[{"said": "first"}]]]
 
 
 class _FailingTurn(StubTurn):
@@ -96,7 +94,7 @@ class _FailingTurn(StubTurn):
         raise RuntimeError("the model went away")
 
 
-class _FailingChatAgent(StubChatAgent):
+class _FailingAgent(StubAgent):
     def stream(
         self, message: str, history: Sequence[AgentMemory], ctx: RunContext
     ) -> StubTurn:
@@ -104,7 +102,7 @@ class _FailingChatAgent(StubChatAgent):
 
 
 async def test_a_turn_that_fails_midway_is_saved_as_far_as_it_got() -> None:
-    service, repository = _service(_FailingChatAgent())
+    service, repository = _service(_FailingAgent())
     conversation_id = (await repository.get_or_create_empty(ALICE)).id
 
     with pytest.raises(RuntimeError):

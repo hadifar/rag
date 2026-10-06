@@ -1,6 +1,6 @@
 """The Protocols services depend on, grouped by area; import them from here."""
 
-from rag.domain.ports.agent import ChatAgentPort, ChatTurnPort, LLMServicePort
+from rag.domain.ports.agent import AgentPort, ChatTurnPort, LLMPort
 from rag.domain.ports.auth import PasswordHasherPort, TokenCodecPort, UserRepositoryPort
 from rag.domain.ports.conversation import (
     ConversationRepositoryPort,
@@ -19,15 +19,15 @@ from rag.domain.ports.retrieval import (
 )
 
 __all__ = [
-    "LLMServicePort",
+    "AgentPort",
     "ArchiveStorePort",
-    "ChatAgentPort",
     "ChatTurnPort",
     "ChunkerPort",
     "ConversationRepositoryPort",
     "DocumentIndexPort",
     "EmbeddingsPort",
     "IngestionRunRepositoryPort",
+    "LLMPort",
     "PasswordHasherPort",
     "RerankerPort",
     "SearchPort",

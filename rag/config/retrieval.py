@@ -10,10 +10,6 @@ class RetrievalConfig(BaseModel):
     RERANK_CANDIDATES: int = Field(default=3, ge=0)
 
     @property
-    def rerank(self) -> bool:
-        return self.RERANK_CANDIDATES > 0
-
-    @property
     def top_k(self) -> int:
         """Passages a search returns: the reranker's pick, or every fetched one."""
         return self.RERANK_CANDIDATES or self.RETRIEVAL_CANDIDATES

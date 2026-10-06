@@ -41,7 +41,8 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     TURN_FAILED_MESSAGE,
 )
-from rag.services.agent_service.agent import ChatAgent
+from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.llm import Llm
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -175,11 +176,8 @@ _CONVERSATION = uuid.uuid4()
 
 class _Chat:
     def __init__(self, model: _ScriptedChatModel, retry_attempts: int = 3):
-        self.agent = ChatAgent(
-            model,
-            _StubRetrievalService(),
-            _no_tracing,
-            retry_attempts=retry_attempts,
+        self.agent = RagAgent(
+            Llm(model, _no_tracing, attempts=retry_attempts), _StubRetrievalService()
         )
         self.history: list[AgentMemory] = []
 

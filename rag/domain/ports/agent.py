@@ -17,7 +17,7 @@ class ChatTurnPort(Protocol):
     def memory(self) -> AgentMemory | None: ...
 
 
-class ChatAgentPort(Protocol):
+class AgentPort(Protocol):
     def stream(
         self, message: str, history: Sequence[AgentMemory], ctx: RunContext
     ) -> ChatTurnPort:
@@ -28,9 +28,9 @@ class ChatAgentPort(Protocol):
         ...
 
 
-class LLMServicePort(Protocol):
-    """The LLM's single-shot generation, so nothing else ever holds the model or
-    touches LangChain.
+class LLMPort(Protocol):
+    """The LLM's single-shot generation, so nothing outside the agent service ever
+    holds the model or touches LangChain.
     """
 
     async def generate_structured[T: BaseModel](
@@ -38,12 +38,11 @@ class LLMServicePort(Protocol):
         prompt: str,
         schema: type[T],
         *,
-        attempts: int = 1,
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
-        instance of it; raises if all `attempts` fail or the reply is rejected. `trace`
+        instance of it; raises once its retries run out or the reply is rejected. `trace`
         names and tags the call as a trace of its own, under `ctx`'s user and
         conversation; leave it out inside an agent's run, whose trace already has it.
         """

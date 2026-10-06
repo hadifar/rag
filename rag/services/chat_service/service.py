@@ -4,12 +4,12 @@ from collections.abc import AsyncIterator
 
 from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import RunContext, StreamEvent
-from rag.domain.ports import ChatAgentPort, ConversationRepositoryPort
+from rag.domain.ports import AgentPort, ConversationRepositoryPort
 from rag.services.chat_service.transcript import TranscriptBuilder
 
 
 class ChatService:
-    """A chat turn: the user's message answered by the chat agent (`chat_agent`),
+    """A chat turn: the user's message answered by the agent (`agent`),
     given its memory of the earlier turns, streamed back, and kept in the
     conversation's transcript as the user saw it, beside the agent's memory of it.
     """
@@ -17,15 +17,15 @@ class ChatService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        chat_agent: ChatAgentPort,
+        agent: AgentPort,
     ):
         self._repository = repository
-        self._chat_agent = chat_agent
+        self._agent = agent
 
     async def send_message(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, message: str
     ) -> AsyncIterator[StreamEvent]:
-        """The answer's events as the chat agent streams them. The conversation sorts
+        """The answer's events as the agent streams them. The conversation sorts
         first in the user's list from the start, not once answered. The turn is saved
         to the transcript however the stream ends, so a failed or abandoned answer
         still shows what the user saw of it.
@@ -38,7 +38,7 @@ class ChatService:
         turns = await self._repository.list_turns(conversation_id)
         history = [turn.memory for turn in turns if turn.memory is not None]
         ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
-        answer = self._chat_agent.stream(message, history, ctx)
+        answer = self._agent.stream(message, history, ctx)
         transcript = TranscriptBuilder()
         try:
             async for event in answer:

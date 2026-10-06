@@ -1,6 +1,6 @@
 import logging
 import uuid
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, Literal, NotRequired, cast
 
 from langchain.agents.middleware.todo import (
@@ -9,7 +9,6 @@ from langchain.agents.middleware.todo import (
     write_todos,
 )
 from langchain_core.callbacks import adispatch_custom_event
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -19,11 +18,9 @@ from langchain_core.messages import (
     SystemMessage,
     messages_from_dict,
 )
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, RetryPolicy
-from pydantic import BaseModel
 
 from rag.domain.models import AgentMemory, RunContext, StreamEvent, TurnFailed
 from rag.domain.ports import SearchPort
@@ -32,6 +29,7 @@ from rag.services.agent_service.guards.groundedness import (
     verification_inputs,
 )
 from rag.services.agent_service.guards.off_topic import Decision, classify_input
+from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
     OFF_TOPIC_INSTRUCTION,
@@ -71,8 +69,8 @@ class ChatState(MessagesState):
     revisions: NotRequired[int]  # answers sent back to revise this turn
 
 
-class ChatAgent:
-    """The chat agent (a ChatAgentPort), grounded in the knowledge base, on this graph:
+class RagAgent:
+    """The RAG agent (an AgentPort), grounded in the knowledge base, on this graph:
 
         START -> classify -> model <-> tools
                     |          |
@@ -81,7 +79,7 @@ class ChatAgent:
     `classify` ends a blocked question's turn before the model runs; `verify` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times. Every LLM call, the model's and the guards', is tried up to
-    `retry_attempts` times; then a model call's error ends the turn (see `AgentTurn`).
+    `llm.attempts` times; then a model call's error ends the turn (see `AgentTurn`).
     Instructions for one model call (declining an off-topic question, revising an
     answer) are added to that call only, never saved to the thread, so they can't leak
     into later turns. It keeps nothing between turns.
@@ -89,18 +87,17 @@ class ChatAgent:
 
     def __init__(
         self,
-        llm: BaseChatModel,
+        llm: Llm,
         search: SearchPort,
-        trace_config: Callable[[str | None, RunContext | None], RunnableConfig],
-        retry_attempts: int,
     ):
         tools = [search_tool(search), write_todos]
-        self._on_topic_model = llm.bind_tools(tools)
+        self._on_topic_model = llm.model.bind_tools(tools)
         # Off-topic, the model gets no tools: it is only to decline.
-        self._off_topic_model = llm
-        self._llm = llm
-        self._trace_config = trace_config
-        self._retry_attempts = retry_attempts
+        self._off_topic_model = llm.model
+        # The guards' LLM calls. Run inside the turn, so they join its trace; each
+        # raises once its retries run out, and each guard fails open.
+        self._judge = llm.generate_structured
+        self._trace_config = llm.trace_config
 
         graph = StateGraph(ChatState)
         graph.add_node("classify", self._classify)
@@ -108,7 +105,7 @@ class ChatAgent:
         graph.add_node(
             "model",
             self._model,
-            retry_policy=RetryPolicy(max_attempts=retry_attempts, retry_on=Exception),
+            retry_policy=RetryPolicy(max_attempts=llm.attempts, retry_on=Exception),
         )
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("verify", self._verify)
@@ -135,16 +132,6 @@ class ChatAgent:
             version="v2",
         )
         return AgentTurn(run, question)
-
-    async def _judge[T: BaseModel](self, prompt: str, schema: type[T]) -> T:
-        """The guards' LLM call: the reply to `prompt`, parsed into `schema`. Run
-        inside the turn, so it joins the turn's trace; raises once its retries run out,
-        and each guard fails open.
-        """
-        llm = self._llm.with_structured_output(schema).with_retry(
-            stop_after_attempt=self._retry_attempts
-        )
-        return cast(T, await llm.ainvoke(prompt))
 
     async def _classify(self, state: ChatState) -> Command[_Next]:
         """A blocked question gets the fixed refusal and is dropped from the thread, so

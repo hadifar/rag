@@ -14,8 +14,8 @@ from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
-from rag.services.agent_service.agent import ChatAgent
-from rag.services.agent_service.service import AgentService
+from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.llm import Llm
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
@@ -48,26 +48,24 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             build_embeddings(settings),
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
-        llm = build_llm(settings)
-        llm_service = AgentService(llm=llm, trace_config=trace_config)
+        llm = Llm(
+            model=build_llm(settings),
+            trace_config=trace_config,
+            attempts=settings.LLM.RETRY_ATTEMPTS,
+        )
 
         retrieval_service = RetrievalService(
             vector_store=vector_store,
             reranker=(
-                LlmReranker(llm_service, attempts=settings.LLM.RETRY_ATTEMPTS)
-                if settings.RETRIEVAL.rerank
+                LlmReranker(llm)
+                if settings.RETRIEVAL.RERANK_CANDIDATES
                 else NoReranker()
             ),
             top_k=settings.RETRIEVAL.top_k,
             candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
         )
 
-        chat_agent = ChatAgent(
-            llm=llm,
-            search=retrieval_service,
-            trace_config=trace_config,
-            retry_attempts=settings.LLM.RETRY_ATTEMPTS,
-        )
+        rag_agent = RagAgent(llm=llm, search=retrieval_service)
 
         ingestion_service = IngestionService(
             index=vector_store,
@@ -90,12 +88,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         conversation_repo = ConversationRepository(db_pool)
         conversation_service = ConversationService(
             repository=conversation_repo,
-            llm_service=llm_service,
+            llm=llm,
         )
 
         chat_service = ChatService(
             repository=conversation_repo,
-            chat_agent=chat_agent,
+            agent=rag_agent,
         )
 
         yield Container(

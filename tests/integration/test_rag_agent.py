@@ -5,7 +5,8 @@ from langchain_core.runnables import RunnableConfig
 from rag.adapters.langchain.llm_client import build_llm
 from rag.container import build_container
 from rag.domain.models import RunContext, TextDelta, ToolCall
-from rag.services.agent_service.agent import ChatAgent
+from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.llm import Llm
 
 
 def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
@@ -16,17 +17,17 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
     async with build_container(integration_settings) as container:
         # The agent alone, over the app's search: through `chat_service`, the turn
         # would need a real user and conversation.
-        chat_agent = ChatAgent(
-            llm=build_llm(integration_settings),
-            search=container.retrieval_service,
-            trace_config=_no_tracing,
-            retry_attempts=integration_settings.LLM.RETRY_ATTEMPTS,
+        llm = Llm(
+            build_llm(integration_settings),
+            _no_tracing,
+            attempts=integration_settings.LLM.RETRY_ATTEMPTS,
         )
+        agent = RagAgent(llm, search=container.retrieval_service)
         answer = ""
         tool_calls = []
 
         ctx = RunContext(user_id=uuid.uuid4(), conversation_id=uuid.uuid4())
-        async for event in chat_agent.stream(message, [], ctx):
+        async for event in agent.stream(message, [], ctx):
             if isinstance(event, TextDelta):
                 answer += event.text
             elif isinstance(event, ToolCall) and event.status == "pending":

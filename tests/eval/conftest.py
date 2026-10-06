@@ -11,7 +11,7 @@ from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.config import Settings
 from rag.domain.models import RunContext
 from rag.repository.document_repository import DocumentRepository
-from rag.services.agent_service.service import AgentService
+from rag.services.agent_service.llm import Llm
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -65,14 +65,9 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
     """The app's search over `kb`, reranked as `RETRIEVAL__RERANK_CANDIDATES` says, as
     in the container. The reranker's one-shot LLM call needs no tracing.
     """
-    agent_service = AgentService(build_llm(eval_settings), _no_tracing)
-    attempts = eval_settings.LLM.RETRY_ATTEMPTS
+    llm = Llm(build_llm(eval_settings), _no_tracing, eval_settings.LLM.RETRY_ATTEMPTS)
     retrieval = eval_settings.RETRIEVAL
-    reranker = (
-        LlmReranker(agent_service, attempts=attempts)
-        if retrieval.rerank
-        else NoReranker()
-    )
+    reranker = LlmReranker(llm) if retrieval.RERANK_CANDIDATES else NoReranker()
     return RetrievalService(
         kb,
         reranker,
@@ -98,7 +93,7 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     retrieval = settings.RETRIEVAL
     terminalreporter.write_line(
         f"k={retrieval.top_k} of {retrieval.RETRIEVAL_CANDIDATES}"
-        f"  rerank={retrieval.rerank}"
+        f"  rerank={retrieval.RERANK_CANDIDATES > 0}"
     )
     terminalreporter.write_line(f"questions: {len(RANKS)}")
     terminalreporter.write_line(f"recall@k:  {recall:.2f}")

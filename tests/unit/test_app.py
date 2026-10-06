@@ -42,7 +42,7 @@ from tests.unit.fakes import (
     FakeIngestionRunRepository,
     FakePasswordHasher,
     FakeUserRepository,
-    StubChatAgent,
+    StubAgent,
     StubGeneration,
 )
 
@@ -96,7 +96,7 @@ def client() -> Generator[TestClient]:
 
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
-    chat_agent = StubChatAgent(
+    agent = StubAgent(
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
@@ -114,11 +114,9 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            llm_service=generation,
+            llm=generation,
         ),
-        chat_service=ChatService(
-            repository=conversation_repository, chat_agent=chat_agent
-        ),
+        chat_service=ChatService(repository=conversation_repository, agent=agent),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
