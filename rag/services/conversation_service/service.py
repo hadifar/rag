@@ -7,10 +7,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
-
 from rag.domain.errors import (
-    BlankTitleError,
     ConversationNotFoundError,
     InvalidCursorError,
 )
@@ -29,35 +26,13 @@ from rag.domain.ports import (
     ConversationRepositoryPort,
     TranscriptRepositoryPort,
 )
+from rag.services.conversation_service.title import (
+    TitleOutput,
+    fallback_title,
+    title_prompt,
+)
 from rag.services.conversation_service.transcript import TranscriptBuilder
 from rag.shared.resilience import or_default
-
-TITLE_PROMPT = (
-    "Write a title for a support conversation that starts with the message below.\n\n"
-    "USER:\n{message}"
-)
-# Only the start of the message is needed to title it; caps the title call's cost.
-TITLE_MESSAGE_EXCERPT = 1000
-MAX_TITLE_LENGTH = 80  # cap on an LLM-written title
-FALLBACK_TITLE_LENGTH = (
-    60  # the title cut from the message when the LLM can't write one
-)
-
-
-class TitleOutput(BaseModel):
-    """The LLM's title, tidied on the way in: trimmed and capped in length, and a blank
-    one is rejected (`BlankTitleError`), so a `TitleOutput` always holds a usable title.
-    """
-
-    title: str = Field(description="At most 6 words, no quotes and no trailing period.")
-
-    @field_validator("title")
-    @classmethod
-    def _tidy(cls, title: str) -> str:
-        title = title.strip()[:MAX_TITLE_LENGTH]
-        if not title:
-            raise BlankTitleError
-        return title
 
 
 class ConversationService:
@@ -98,7 +73,7 @@ class ConversationService:
         the user's empty draft (see `create`).
         """
         conversation = await self.get_owned(user_id, conversation_id)
-        prompt = TITLE_PROMPT.format(message=message[:TITLE_MESSAGE_EXCERPT])
+        prompt = title_prompt(message)
         reply = await or_default(
             self._agent_service.generate_structured(
                 prompt,
@@ -108,7 +83,7 @@ class ConversationService:
             ),
             None,
         )
-        title = reply.title if reply is not None else _fallback_title(message)
+        title = reply.title if reply is not None else fallback_title(message)
         await self._repository.set_title(conversation_id, title)
         return replace(conversation, title=title)
 
@@ -173,13 +148,6 @@ class ConversationService:
         if conversation is None or conversation.user_id != user_id:
             raise ConversationNotFoundError(conversation_id)
         return conversation
-
-
-def _fallback_title(message: str) -> str:
-    title = " ".join(message.split())
-    if len(title) <= FALLBACK_TITLE_LENGTH:
-        return title
-    return title[: FALLBACK_TITLE_LENGTH - 1].rstrip() + "…"
 
 
 def _encode_cursor(conversation: Conversation) -> str:
