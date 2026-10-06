@@ -16,14 +16,11 @@ from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
+from rag.domain.models import OffTopicMiddleware
 from rag.services.agent_service.events import INPUT_BLOCKED
 from rag.services.agent_service.middleware.instructions import with_instructions
 from rag.services.agent_service.middleware.judge import Judge
-from rag.services.agent_service.middleware.prompts import (
-    BLOCKED_MESSAGE,
-    GUARDRAIL_PROMPT,
-    OFF_TOPIC_INSTRUCTION,
-)
+from rag.services.agent_service.middleware.prompts import GUARDRAIL_PROMPT
 from rag.services.agent_service.turn import is_final_answer, split_turns
 from rag.shared.resilience import or_default
 
@@ -56,15 +53,19 @@ def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
     return "\n".join(lines) or "(none)"
 
 
-async def classify_input(judge: Judge, messages: Sequence[BaseMessage]) -> Decision:
-    """The decision for the latest user message; allow if there's none or the
-    classifier failed.
+async def classify_input(
+    judge: Judge, messages: Sequence[BaseMessage], scope: str
+) -> Decision:
+    """The decision for the latest user message, for an agent about `scope`; allow if
+    there's none or the classifier failed.
     """
     turns = split_turns(messages)
     if not turns or not (message := turns[-1][0].text):
         return "allow"
 
-    prompt = GUARDRAIL_PROMPT.format(history=_history(turns[:-1]), message=message)
+    prompt = GUARDRAIL_PROMPT.format(
+        scope=scope, history=_history(turns[:-1]), message=message
+    )
     verdict = await or_default(judge(prompt, InputVerdict), None)
     if verdict is None:
         return "allow"
@@ -84,27 +85,36 @@ class OffTopicState(AgentState):
 class OffTopicGuard(AgentMiddleware[OffTopicState]):
     """Classifies each user message once per turn, with the turns before it for context.
     Blocked (an injection, jailbreak or harmful request): the turn ends before the model
-    runs, the user gets a fixed refusal, and the message is dropped from the thread so
-    no later turn's model call sees it. Restricted (harmless but off-topic): the model
-    is told to decline and gets no tools but `kept_tools` (ones about the user, not the
-    product, e.g. saving a preference). The instruction is added to that model call
-    only, never saved to the thread, so it can't leak into later turns.
+    runs, the user gets the spec's fixed `refusal`, and the message is dropped from the
+    thread so no later turn's model call sees it. Restricted (harmless but off-topic):
+    the model is given the spec's `decline_instruction` and no tools but `kept_tools`
+    (ones about the user, not the product, e.g. saving a preference). The instruction
+    is added to that model call only, never saved to the thread, so it can't leak into
+    later turns.
     """
 
     state_schema = OffTopicState
 
-    def __init__(self, judge: Judge, kept_tools: frozenset[str] = frozenset()):
+    def __init__(
+        self,
+        judge: Judge,
+        spec: OffTopicMiddleware,
+        kept_tools: frozenset[str] = frozenset(),
+    ):
         super().__init__()
         self._judge = judge
+        self._spec = spec
         self._kept_tools = kept_tools
 
     @hook_config(can_jump_to=["end"])
     async def abefore_agent(
         self, state: OffTopicState, runtime: Runtime
     ) -> dict[str, Any] | None:
-        decision = await classify_input(self._judge, state["messages"])
+        decision = await classify_input(
+            self._judge, state["messages"], self._spec.scope
+        )
         if decision == "block":
-            await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
+            await adispatch_custom_event(INPUT_BLOCKED, {"message": self._spec.refusal})
             question = state["messages"][-1]
             # The thread's reducer gives every message an id.
             assert question.id is not None
@@ -118,7 +128,7 @@ class OffTopicGuard(AgentMiddleware[OffTopicState]):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         if request.state.get("off_topic"):
-            request = with_instructions(request, OFF_TOPIC_INSTRUCTION).override(
-                tools=[t for t in request.tools if _name(t) in self._kept_tools]
-            )
+            request = with_instructions(
+                request, self._spec.decline_instruction
+            ).override(tools=[t for t in request.tools if _name(t) in self._kept_tools])
         return await handler(request)

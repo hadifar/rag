@@ -7,6 +7,25 @@ RAG_SYSTEM_PROMPT = (
     "parts you couldn't find."
 )
 
+# The chat agent's off-topic guard: what it answers about, and what it says otherwise.
+OFF_TOPIC_SCOPE = (
+    "the AtlasFlow product (workflows, integrations, billing, security, API, etc.) "
+    "or its support"
+)
+
+OFF_TOPIC_INSTRUCTION = (
+    "The user's question is unrelated to AtlasFlow. Politely explain that you can only "
+    "help with AtlasFlow questions, and ask them to rephrase around AtlasFlow's product, "
+    "features, or support topics. Do not attempt to answer the question itself."
+)
+
+# Sent instead of an answer to a blocked message; no model call writes it, so nothing
+# in the message can steer it.
+BLOCKED_MESSAGE = (
+    "I can't help with that. I can answer questions about AtlasFlow's product, "
+    "features, and support."
+)
+
 # The chat agent's Planning: when to plan with write_todos, which only it can see.
 PLANNING_INSTRUCTIONS = (
     "Always use write_todos first to list one todo per question or search. "

@@ -10,7 +10,13 @@ from rag.domain.models import (
     ToolAgentSpec,
 )
 from rag.domain.ports import ChatTurnPort, LLMServicePort, SearchPort
-from rag.services.rag_service.prompts import PLANNING_INSTRUCTIONS, RAG_SYSTEM_PROMPT
+from rag.services.rag_service.prompts import (
+    BLOCKED_MESSAGE,
+    OFF_TOPIC_INSTRUCTION,
+    OFF_TOPIC_SCOPE,
+    PLANNING_INSTRUCTIONS,
+    RAG_SYSTEM_PROMPT,
+)
 from rag.services.rag_service.tools import search_tool
 
 
@@ -33,7 +39,11 @@ class RagService:
             system_prompt=RAG_SYSTEM_PROMPT,
             tools=[search_tool(retrieval_service)],
             middleware=[
-                OffTopicMiddleware(),
+                OffTopicMiddleware(
+                    scope=OFF_TOPIC_SCOPE,
+                    decline_instruction=OFF_TOPIC_INSTRUCTION,
+                    refusal=BLOCKED_MESSAGE,
+                ),
                 GroundednessMiddleware(max_revisions),
                 TodolistMiddleware(PLANNING_INSTRUCTIONS),
             ],

@@ -21,7 +21,7 @@ def _to_langchain_middleware(
 ) -> AgentMiddleware[Any, Any]:
     match middleware:
         case OffTopicMiddleware():
-            return OffTopicGuard(judge, kept_tools=user_tools)
+            return OffTopicGuard(judge, middleware, kept_tools=user_tools)
         case GroundednessMiddleware(max_revisions=max_revisions):
             return GroundednessGuard(
                 judge, max_revisions=max_revisions, unverified_tools=user_tools

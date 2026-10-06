@@ -8,6 +8,10 @@ class OffTopicMiddleware:
     model; for an off-topic one the agent is told to decline and gets no tools.
     """
 
+    scope: str  # what the agent answers about, as the classifier is told
+    decline_instruction: str  # added to the model call for an off-topic message
+    refusal: str  # sent instead of an answer for a blocked message
+
 
 @dataclass(frozen=True)
 class GroundednessMiddleware:
