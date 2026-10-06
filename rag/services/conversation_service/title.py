@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
 
-from rag.domain.errors import BlankTitleError
-
 TITLE_PROMPT = (
     "Write a title for a support conversation that starts with the message below.\n\n"
     "USER:\n{message}"
@@ -16,7 +14,7 @@ FALLBACK_TITLE_LENGTH = (
 
 class TitleOutput(BaseModel):
     """The LLM's title, tidied on the way in: trimmed and capped in length, and a blank
-    one is rejected (`BlankTitleError`), so a `TitleOutput` always holds a usable title.
+    one fails validation, so a `TitleOutput` always holds a usable title.
     """
 
     title: str = Field(description="At most 6 words, no quotes and no trailing period.")
@@ -26,7 +24,7 @@ class TitleOutput(BaseModel):
     def _tidy(cls, title: str) -> str:
         title = title.strip()[:MAX_TITLE_LENGTH]
         if not title:
-            raise BlankTitleError
+            raise ValueError("blank title")
         return title
 
 

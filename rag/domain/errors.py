@@ -142,12 +142,3 @@ class InvalidCursorError(AppError):
 
     def __init__(self):
         super().__init__("Invalid pagination cursor")
-
-
-class BlankTitleError(AppError):
-    """Raised when the LLM's conversation title is blank."""
-
-    status_code: ClassVar[int] = 502
-
-    def __init__(self):
-        super().__init__("The LLM returned a blank conversation title")
