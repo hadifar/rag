@@ -2,7 +2,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from rag.config import RetrievalConfig
 from rag.domain.models import Chunk, RunContext
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
@@ -134,7 +133,9 @@ async def test_a_single_candidate_needs_no_llm_call() -> None:
 async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
     store = _VectorStore(_candidates("a", "b", "c", "d", "e"))
     agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 3), (3, 9)])
-    service = RetrievalService(store, LlmReranker(agent), top_k=2, candidates=4)
+    service = RetrievalService(
+        store, LlmReranker(agent), candidates=4, rerank_candidates=2
+    )
 
     results = await service.search("q")
 
@@ -142,16 +143,19 @@ async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
     assert "[4]" not in agent.prompts[0]
 
 
-async def test_search_fetches_at_least_top_k_candidates() -> None:
+async def test_search_fetches_at_least_as_many_candidates_as_it_keeps() -> None:
     store = _VectorStore(_candidates("a", "b", "c"))
-    service = RetrievalService(store, NoReranker(), top_k=3, candidates=1)
+    service = RetrievalService(store, NoReranker(), candidates=1, rerank_candidates=3)
 
     assert len(await service.search("q")) == 3
 
 
 def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
-    reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=5)
-    not_reranked = RetrievalConfig(RETRIEVAL_CANDIDATES=10, RERANK_CANDIDATES=0)
+    store = _VectorStore([])
+    reranked = RetrievalService(store, NoReranker(), candidates=10, rerank_candidates=5)
+    not_reranked = RetrievalService(
+        store, NoReranker(), candidates=10, rerank_candidates=0
+    )
 
     assert reranked.top_k == 5
     assert not_reranked.top_k == 10
@@ -160,7 +164,7 @@ def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
 async def test_search_without_reranking_keeps_the_vector_order() -> None:
     candidates = _candidates("a", "b")
     service = RetrievalService(
-        _VectorStore(candidates), NoReranker(), top_k=3, candidates=0
+        _VectorStore(candidates), NoReranker(), candidates=3, rerank_candidates=0
     )
 
     assert await service.search("q") == candidates

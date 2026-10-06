@@ -9,12 +9,10 @@ class SettingsResponse(BaseModel):
     top_k: int
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "SettingsResponse":
+    def from_settings(cls, settings: Settings, top_k: int) -> "SettingsResponse":
         match settings.LLM:
             case OpenAILLMConfig() as llm:
                 model = llm.MODEL
             case AzureOpenAILLMConfig() as llm:
                 model = llm.DEPLOYMENT
-        return cls(
-            model=model, temperature=llm.TEMPERATURE, top_k=settings.RETRIEVAL.top_k
-        )
+        return cls(model=model, temperature=llm.TEMPERATURE, top_k=top_k)

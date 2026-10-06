@@ -8,13 +8,16 @@ class RetrievalService:
         self,
         vector_store: VectorStorePort,
         reranker: RerankerPort,
-        top_k: int,
         candidates: int,
+        rerank_candidates: int,
     ):
+        """`candidates` passages are fetched; the reranker keeps `rerank_candidates` of
+        them, or all of them at 0 (no reranking).
+        """
         self._vector_store = vector_store
         self._reranker = reranker
-        self._top_k = top_k  # passages a search returns
-        self._candidates = max(candidates, top_k)  # passages the reranker sees
+        self.top_k = rerank_candidates or candidates  # passages a search returns
+        self._candidates = max(candidates, self.top_k)  # passages the reranker sees
 
     async def search(self, query: str) -> list[tuple[Chunk, float]]:
         """Finds the best `candidates` passages for `query`, reranks them against it
@@ -24,7 +27,7 @@ class RetrievalService:
             query, k=self._candidates
         )
         reranked = await self._reranker.rerank(query, candidates)
-        return reranked[: self._top_k]
+        return reranked[: self.top_k]
 
     async def get_document(self, source_id: str) -> Chunk:
         document = await self._vector_store.aget_document(source_id)

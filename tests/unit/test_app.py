@@ -53,6 +53,8 @@ _ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
+    top_k = 3
+
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
         return [(Chunk(text="stub chunk", metadata={}), 1.0)]
 
@@ -157,7 +159,7 @@ def test_settings_endpoint_returns_config(
     body = response.json()
     assert body["model"] == "gpt-4o-mini"
     assert body["temperature"] == 0.2
-    assert body["top_k"] == 3  # the reranker's pick of the 10 fetched
+    assert body["top_k"] == 3  # the search's
 
 
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:

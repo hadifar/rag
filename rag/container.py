@@ -61,8 +61,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 if settings.RETRIEVAL.RERANK_CANDIDATES
                 else NoReranker()
             ),
-            top_k=settings.RETRIEVAL.top_k,
             candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
+            rerank_candidates=settings.RETRIEVAL.RERANK_CANDIDATES,
         )
 
         rag_agent = RagAgent(llm=llm, search=retrieval_service)

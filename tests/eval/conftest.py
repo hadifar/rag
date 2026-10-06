@@ -71,8 +71,8 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
     return RetrievalService(
         kb,
         reranker,
-        top_k=retrieval.top_k,
         candidates=retrieval.RETRIEVAL_CANDIDATES,
+        rerank_candidates=retrieval.RERANK_CANDIDATES,
     )
 
 
@@ -92,8 +92,8 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     terminalreporter.section("retrieval eval")
     retrieval = settings.RETRIEVAL
     terminalreporter.write_line(
-        f"k={retrieval.top_k} of {retrieval.RETRIEVAL_CANDIDATES}"
-        f"  rerank={retrieval.RERANK_CANDIDATES > 0}"
+        f"fetched={retrieval.RETRIEVAL_CANDIDATES}"
+        f"  reranked to={retrieval.RERANK_CANDIDATES or 'off'}"
     )
     terminalreporter.write_line(f"questions: {len(RANKS)}")
     terminalreporter.write_line(f"recall@k:  {recall:.2f}")
