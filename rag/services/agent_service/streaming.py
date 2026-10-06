@@ -11,16 +11,23 @@ from rag.domain.models import (
     TodosUpdated,
     ToolCall,
 )
-from rag.services.agent_service.events import ANSWER_VERIFICATION, INPUT_BLOCKED
 
-# Only create_agent's model node produces the user-facing answer. The guards' own LLM
-# calls (classification, not an answer) run in their middleware nodes of this same
+# The custom events RagAgent's guard nodes dispatch, which the stream turns into
+# user-facing events (see _guard_events).
+# verify: the answer's check starting, then its verdict.
+ANSWER_VERIFICATION = "answer_verification"
+# classify: a blocked message, with the refusal sent instead of an answer.
+INPUT_BLOCKED = "input_blocked"
+
+# Only RagAgent's model node produces the user-facing answer. The guards' own LLM
+# calls (classification, not an answer) run in their own nodes of this same
 # graph and would otherwise leak into the text stream too, since astream_events
 # captures every chat model call in the run, not just this one.
 _USER_FACING_NODE = "model"
 
-# TodoListMiddleware's planning tool. Its call is the plan, not a search, so it's sent
-# as the plan itself; it returns a Command whose state update holds the new todos.
+# LangChain's planning tool, which RagAgent uses as is. Its call is the plan, not a
+# search, so it's sent as the plan itself; it returns a Command whose state update holds
+# the new todos.
 _PLANNING_TOOL = "write_todos"
 
 

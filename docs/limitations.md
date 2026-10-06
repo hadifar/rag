@@ -27,21 +27,19 @@ Known gaps. None of these is addressed yet.
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.
 * Both guards fail open: if their LLM call fails, the message or answer passes.
 * `GroundednessGuard` passes an answer with no `search_kb` call.
-* Past `LLM__MAX_REVISIONS`, an ungrounded answer ships.
+* Past `MAX_REVISIONS` (`rag/services/agent_service/agent.py`), an ungrounded answer ships.
 * An answer after any tool call doesn't stream: it shows in one piece after the check.
-* Saved preferences enter the system prompt in the user's own words.
 
 ## Conversations
 
 * A failed title request leaves the conversation untitled. The next new chat reopens it.
 * Paging by `(updated_at, id)` can repeat a conversation across pages.
-* Deleting a user does not delete the user's checkpoint threads.
-* The whole thread goes to the LLM every turn. Long threads can exceed the context window.
+* The agent's whole memory of the conversation goes to the LLM every turn. Long conversations can exceed the context window.
+* Turns from before migration `0014` have no agent memory: the agent starts those conversations afresh.
 
 ## Frontend
 
 * The Settings page Save button persists nothing.
-* A preference saved in another tab shows only after a reload.
 
 ## Security
 
@@ -54,7 +52,6 @@ Known gaps. None of these is addressed yet.
 
 * `search_kb` has no retry: a failed search fails the turn (see [Streaming](architecture/backend.md#streaming)).
 * The SSE stream has no `done` event.
-* A stream abandoned mid-tool-call (client hung up) is not rolled back from the agent's thread.
 * `ChatOpenAI` has no request timeout.
 * `/api/health/ready` does not check the embedding API.
 
@@ -66,7 +63,6 @@ Known gaps. None of these is addressed yet.
 ## Scalability
 
 * `rag serve` runs one uvicorn worker.
-* `AsyncPostgresSaver` serializes checkpoint queries per process.
 * The App Service Plan has no autoscale rule.
 * nginx rate limits are per replica.
 

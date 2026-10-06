@@ -5,6 +5,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from rag.config.auth import AuthConfig
+from rag.config.cache import CacheConfig
 from rag.config.kb_storage import KbStorageConfig, LocalKbStorageConfig
 from rag.config.llm import LLMConfig
 from rag.config.observability import LoggingObservabilityConfig, ObservabilityConfig
@@ -16,8 +17,8 @@ class Settings(BaseSettings):
         env_file=".env", env_nested_delimiter="__", case_sensitive=True, extra="forbid"
     )
 
-    # The one Postgres database behind everything: users, conversations, knowledge-base
-    # chunks (schema by Alembic) and conversation messages (LangGraph's checkpointer).
+    # The one Postgres database behind everything: users, conversations and their
+    # turns, knowledge-base chunks; its schema is Alembic's.
     DATABASE_URL: SecretStr
 
     AUTH: AuthConfig
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
 
     LLM: LLMConfig
     RETRIEVAL: RetrievalConfig = RetrievalConfig()
+    CACHE: CacheConfig = CacheConfig()
     OBSERVABILITY: ObservabilityConfig = LoggingObservabilityConfig()
 
     HOST: str = "0.0.0.0"

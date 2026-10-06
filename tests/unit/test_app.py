@@ -25,18 +25,15 @@ from rag.config import (
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.models import (
-    MAX_PREFERENCE_LENGTH,
-    MAX_PREFERENCES,
     Chunk,
     SourceArtifact,
     ToolCall,
 )
 from rag.services.auth_service.service import AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
-from rag.services.preference_service.service import PreferenceService
-from rag.services.rag_service.service import RagService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
@@ -44,10 +41,8 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
-    FakePreferenceRepository,
-    FakeTranscriptRepository,
     FakeUserRepository,
-    StubChatAgent,
+    StubAgent,
     StubGeneration,
 )
 
@@ -58,6 +53,8 @@ _ADMIN_EMAIL = "admin@example.com"
 
 
 class _StubRetrievalService:
+    top_k = 3
+
     async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
         return [(Chunk(text="stub chunk", metadata={}), 1.0)]
 
@@ -101,7 +98,7 @@ def client() -> Generator[TestClient]:
 
     conversation_repository = FakeConversationRepository()
     generation = StubGeneration("Greeting")
-    chat_agent = StubChatAgent(
+    agent = StubAgent(
         extra_events=[
             ToolCall(name="search", status="pending", query="hi"),
             ToolCall(name="search", status="done", output="stub result"),
@@ -110,8 +107,6 @@ def client() -> Generator[TestClient]:
     )
     container = Container(
         retrieval_service=cast(RetrievalService, _StubRetrievalService()),
-        preference_service=PreferenceService(FakePreferenceRepository()),
-        rag_service=cast(RagService, chat_agent),
         ingestion_service=IngestionService(
             FakeDocumentIndex(),
             WholeDocumentChunker(),
@@ -121,10 +116,9 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            transcript=FakeTranscriptRepository(),
-            chat_agent=chat_agent,
-            agent_service=generation,
+            llm=generation,
         ),
+        chat_service=ChatService(repository=conversation_repository, agent=agent),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -165,7 +159,7 @@ def test_settings_endpoint_returns_config(
     body = response.json()
     assert body["model"] == "gpt-4o-mini"
     assert body["temperature"] == 0.2
-    assert body["top_k"] == 3  # the reranker's pick of the 10 fetched
+    assert body["top_k"] == 3  # the search's
 
 
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:
@@ -276,7 +270,7 @@ def _send(
     """Posts a message and returns the whole SSE body of its answer."""
     with client.stream(
         "POST",
-        f"/api/conversations/{conversation_id}/messages",
+        f"/api/chat/{conversation_id}",
         json={"message": message},
         headers=headers,
     ) as response:
@@ -405,7 +399,7 @@ def test_send_message_404s_for_a_conversation_the_user_does_not_own(
     conversation_id = _create_conversation(client, _login(client, _OTHER_EMAIL))
 
     response = client.post(
-        f"/api/conversations/{conversation_id}/messages",
+        f"/api/chat/{conversation_id}",
         json={"message": "hijack"},
         headers=auth_headers,
     )
@@ -433,15 +427,14 @@ def test_conversations_list_is_newest_first_and_paginated(
     assert page2["next_cursor"] is None
 
 
-def test_touch_moves_a_conversation_to_the_top_of_the_list(
+def test_a_message_moves_a_conversation_to_the_top_of_the_list(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     first = _start_conversation(client, auth_headers, "first")
     second = _start_conversation(client, auth_headers, "second")
 
-    response = client.post(f"/api/conversations/{first}/touch", headers=auth_headers)
+    _send(client, auth_headers, first, "again")
 
-    assert response.status_code == 204
     listed = client.get("/api/conversations", headers=auth_headers).json()
     assert [c["id"] for c in listed["items"]] == [first, second]
 
@@ -515,12 +508,6 @@ def test_conversations_of_another_user_are_invisible(
         == 404
     )
     assert (
-        client.post(
-            f"/api/conversations/{others}/touch", headers=auth_headers
-        ).status_code
-        == 404
-    )
-    assert (
         client.delete(f"/api/conversations/{others}", headers=auth_headers).status_code
         == 404
     )
@@ -532,9 +519,8 @@ def test_conversations_of_another_user_are_invisible(
         ("GET", "/api/conversations"),
         ("POST", "/api/conversations"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
-        ("POST", f"/api/conversations/{uuid.uuid4()}/messages"),
+        ("POST", f"/api/chat/{uuid.uuid4()}"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
-        ("POST", f"/api/conversations/{uuid.uuid4()}/touch"),
         ("DELETE", f"/api/conversations/{uuid.uuid4()}"),
     ],
 )
@@ -635,68 +621,3 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
-
-
-def test_preferences_are_added_listed_and_deleted_per_user(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    other = _login(client, _OTHER_EMAIL)
-    added = client.post(
-        "/api/settings/preferences",
-        headers=auth_headers,
-        json={"text": "Answer in Dutch"},
-    )
-    assert added.status_code == 200
-    preference = added.json()
-
-    # The same text again, in other case, is the same preference.
-    again = client.post(
-        "/api/settings/preferences",
-        headers=auth_headers,
-        json={"text": "answer in dutch"},
-    )
-    assert again.json() == preference
-    assert client.get("/api/settings/preferences", headers=auth_headers).json() == [
-        preference
-    ]
-    assert client.get("/api/settings/preferences", headers=other).json() == []
-
-    url = f"/api/settings/preferences/{preference['id']}"
-    assert client.delete(url, headers=other).status_code == 404
-    assert client.delete(url, headers=auth_headers).status_code == 204
-    assert client.get("/api/settings/preferences", headers=auth_headers).json() == []
-    assert client.delete(url, headers=auth_headers).status_code == 404
-
-
-@pytest.mark.parametrize("text", ["", "x" * (MAX_PREFERENCE_LENGTH + 1)])
-def test_an_empty_or_too_long_preference_is_rejected(
-    client: TestClient, auth_headers: dict[str, str], text: str
-) -> None:
-    response = client.post(
-        "/api/settings/preferences", headers=auth_headers, json={"text": text}
-    )
-    assert response.status_code == 422
-
-
-def test_a_blank_preference_is_rejected(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    response = client.post(
-        "/api/settings/preferences", headers=auth_headers, json={"text": " \u200b "}
-    )
-    # Blank once normalized, so the request itself is invalid.
-    assert response.status_code == 422
-
-
-def test_a_preference_past_the_cap_is_409(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    for i in range(MAX_PREFERENCES):
-        client.post(
-            "/api/settings/preferences", headers=auth_headers, json={"text": f"p{i}"}
-        )
-
-    response = client.post(
-        "/api/settings/preferences", headers=auth_headers, json={"text": "one too many"}
-    )
-    assert response.status_code == 409

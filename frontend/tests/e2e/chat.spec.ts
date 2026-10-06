@@ -15,7 +15,7 @@ test('asking a question streams back a sourced answer that is saved', async ({ p
     .waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        /\/api\/conversations\/[^/]+\/messages$/.test(response.url()),
+        /\/api\/chat\/[^/]+$/.test(response.url()),
     )
     .then((response) => response.finished());
 

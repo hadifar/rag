@@ -56,7 +56,7 @@ fused AS (
         + COALESCE(1.0 / (%(rrf_k)s + keyword.rank), 0) AS score
     FROM semantic LEFT JOIN keyword USING (id)
 )
-SELECT content, metadata, score
+SELECT id, content, metadata, score
 FROM fused JOIN chunks USING (id)
 ORDER BY score DESC, id
 LIMIT %(k)s
@@ -102,7 +102,8 @@ class DocumentRepository:
     ) -> None:
         """Embeds before opening the transaction, so no connection is held while
         waiting on the embedding API. Deleting a `documents` row cascades to its
-        chunks, so a document that shrank leaves no stale chunks behind.
+        chunks, so a document that shrank leaves no stale chunks behind. Cached search
+        results go in the same transaction, so none outlives the index it came from.
         """
         if not documents and not removed:
             return
@@ -120,8 +121,8 @@ class DocumentRepository:
                 chunk.metadata["chunk_index"],
                 chunk.text,
                 Jsonb(chunk.metadata),
-                _to_vector_literal(vector),
-                _to_vector_literal(next(summary_vectors)) if summary else None,
+                to_vector_literal(vector),
+                to_vector_literal(next(summary_vectors)) if summary else None,
             )
             for chunk, summary, vector in zip(
                 chunks, summaries, vectors[: len(chunks)], strict=True
@@ -148,6 +149,7 @@ class DocumentRepository:
                 )
             if chunk_rows:
                 await cur.executemany(_INSERT_CHUNK, chunk_rows)
+            await cur.execute("DELETE FROM search_cache")
 
     async def asimilarity_search_with_score(
         self, query: str, k: int
@@ -158,7 +160,7 @@ class DocumentRepository:
                 _HYBRID_SEARCH,
                 {
                     "query": query,
-                    "embedding": _to_vector_literal(embedding),
+                    "embedding": to_vector_literal(embedding),
                     "summary_weight": self._summary_weight,
                     "rrf_k": _RRF_K,
                     "k": k,
@@ -166,8 +168,8 @@ class DocumentRepository:
             )
             rows = await cur.fetchall()
         return [
-            (Chunk(text=content, metadata=metadata), float(score))
-            for content, metadata, score in rows
+            (Chunk(text=content, metadata=metadata, id=chunk_id), float(score))
+            for chunk_id, content, metadata, score in rows
         ]
 
     async def aget_document(self, source_id: str) -> Chunk | None:
@@ -196,7 +198,7 @@ class DocumentRepository:
             await conn.execute("SELECT 1 FROM chunks LIMIT 1")
 
 
-def _to_vector_literal(vector: Sequence[float]) -> str:
+def to_vector_literal(vector: Sequence[float]) -> str:
     """pgvector's text input format, cast with ::vector in SQL. Avoids registering the
     vector type on every pooled connection, which would fail before the migration ran
     and take auth down with it, since the pool is shared.

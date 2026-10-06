@@ -5,5 +5,4 @@ export {
   createConversation,
   fetchConversationMessages,
   generateTitle,
-  touchConversation,
 } from './api/conversations';

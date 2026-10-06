@@ -18,8 +18,8 @@ Add a backend service, or add a method to one. Use for new business logic.
 
 ## Rules
 
-* Do not import another service. Depend on a port: `ChatAgentPort`, `AgentServicePort`, `SearchPort`.
+* Do not import another service. Depend on a port: `AgentPort`, `LLMPort`, `SearchPort`.
 * Do not import LangChain outside `rag/services/agent_service/`.
 * Do not construct an adapter or a repository inside a service.
-* Check ownership of a user-owned resource in the service. Return the same not-found error for a missing resource and another user's resource. Example: `ConversationService.get_owned`.
+* Check ownership of a user-owned resource in the repository query: filter by the user (`WHERE id = %s AND user_id = %s`), so a missing resource and another user's both come back as None. The service raises one not-found error for both. Example: `ConversationRepository.get_owned`, `ConversationService.get_owned`.
 * Add a new variant as a new class that satisfies a port. Do not branch on type with `if kind == ...` or `isinstance`.

@@ -25,7 +25,7 @@ server {
     # service on one side, the backend Web App's hostname (main.bicep) on the other.
     location /api/ {
         proxy_pass ${BACKEND_URL};
-        # POST /api/conversations/{id}/messages is SSE: don't buffer or time out mid-response.
+        # POST /api/chat/{id} is SSE: don't buffer or time out mid-response.
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 300s;

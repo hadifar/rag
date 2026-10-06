@@ -1,47 +1,34 @@
 from typing import Any
 
-from langchain.tools import ToolRuntime
-from langchain_core.tools import BaseTool, StructuredTool
-from pydantic import TypeAdapter, create_model
-
-from rag.domain.models import Artifact, RunContext, Tool
-
-_ARTIFACTS = TypeAdapter(list[Artifact])
+from langchain.tools import tool
+from langchain_core.tools import BaseTool
+from rag.domain.models import ARTIFACTS, SourceArtifact
+from rag.domain.ports import SearchPort
 
 
-def _to_langchain_tool(tool: Tool) -> BaseTool:
-    """The model reads the result's content; its artifacts ride along as the
-    ToolMessage's artifact, where the turn's artifacts are collected from. They're kept
-    there as plain JSON, which the checkpointer saves as is, rather than as domain
-    classes it would have to be told it may load. The turn's RunContext is injected by
-    LangChain, so the model never sees it as an argument.
+def search_tool(knowledge_base: SearchPort) -> BaseTool:
+    """search_kb: the passages the knowledge base finds, each tagged with its source
+    id. The sources ride along as the ToolMessage's artifact, as plain JSON the agent's
+    memory of the turn saves as is; the turn hands them to the user.
     """
-    fields: dict[str, Any] = {tool.parameter: (str, ...)}
-    args_schema = create_model(f"{tool.name}_args", **fields)
 
-    async def run(
-        runtime: ToolRuntime[RunContext], **args: str
-    ) -> tuple[str, list[dict[str, Any]] | None]:
-        result = await tool.run(args[tool.parameter], runtime.context)
-        if result.artifacts is None:
-            return result.content, None
-        return result.content, _ARTIFACTS.dump_python(result.artifacts, mode="json")
-
-    return StructuredTool.from_function(
-        coroutine=run,
-        name=tool.name,
-        description=tool.description,
-        args_schema=args_schema,
+    @tool(
+        "search_kb",
+        description="Search the AtlasFlow knowledge base for relevant documentation.",
         response_format="content_and_artifact",
     )
+    async def search_kb(query: str) -> tuple[str, list[dict[str, Any]]]:
+        results = await knowledge_base.search(query)
+        if not results:
+            return "No relevant documentation found.", []
 
+        documents = [doc for doc, _score in results]
+        content = "\n\n".join(
+            f"[source: {doc.metadata['source_id']}]\n{doc.text}" for doc in documents
+        )
+        sources = [
+            SourceArtifact(id=str(doc.metadata["source_id"])) for doc in documents
+        ]
+        return content, ARTIFACTS.dump_python(sources, mode="json")
 
-def to_langchain_tools(tools: list[Tool]) -> list[BaseTool]:
-    """Raises ValueError if two tools share a name, which LangChain would otherwise only
-    trip over once the agent runs.
-    """
-    names = [tool.name for tool in tools]
-    if duplicates := sorted({name for name in names if names.count(name) > 1}):
-        raise ValueError(f"tool names must be unique: {', '.join(duplicates)}")
-
-    return [_to_langchain_tool(tool) for tool in tools]
+    return search_kb

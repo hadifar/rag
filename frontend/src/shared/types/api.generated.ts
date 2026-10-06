@@ -137,32 +137,7 @@ export interface paths {
         /** Get Messages */
         get: operations["get_messages_api_conversations__conversation_id__messages_get"];
         put?: never;
-        /**
-         * Send Message
-         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
-         */
-        post: operations["send_message_api_conversations__conversation_id__messages_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/touch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Touch Conversation
-         * @description Marks the conversation as just used, so it sorts first in the list; the client
-         *     calls it as it sends a message.
-         */
-        post: operations["touch_conversation_api_conversations__conversation_id__touch_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -203,6 +178,26 @@ export interface paths {
         post?: never;
         /** Delete Conversation */
         delete: operations["delete_conversation_api_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Message
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
+         */
+        post: operations["send_message_api_chat__conversation_id__post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -292,49 +287,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/preferences": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Preferences
-         * @description What the caller wants of every answer, oldest first; the chat agent applies
-         *     them, and saves or forgets them when asked to in a conversation too.
-         */
-        get: operations["list_preferences_api_settings_preferences_get"];
-        put?: never;
-        /**
-         * Add Preference
-         * @description Saves the preference; one the caller already has (ignoring case) comes back
-         *     as it is. 409 once they have the most allowed.
-         */
-        post: operations["add_preference_api_settings_preferences_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/preferences/{preference_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Preference */
-        delete: operations["delete_preference_api_settings_preferences__preference_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -472,18 +424,6 @@ export interface components {
         MessageRequest: {
             /** Message */
             message: string;
-        };
-        /** PreferenceRequest */
-        PreferenceRequest: {
-            /** Text */
-            text: string;
-        };
-        /** PreferenceResponse */
-        PreferenceResponse: {
-            /** Id */
-            id: string;
-            /** Text */
-            text: string;
         };
         /**
          * ReasoningEvent
@@ -882,70 +822,6 @@ export interface operations {
             };
         };
     };
-    send_message_api_conversations__conversation_id__messages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    touch_conversation_api_conversations__conversation_id__touch_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     generate_title_api_conversations__conversation_id__title_post: {
         parameters: {
             query?: never;
@@ -998,6 +874,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_chat__conversation_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
@@ -1141,88 +1052,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
-                };
-            };
-        };
-    };
-    list_preferences_api_settings_preferences_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferenceResponse"][];
-                };
-            };
-        };
-    };
-    add_preference_api_settings_preferences_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PreferenceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreferenceResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_preference_api_settings_preferences__preference_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                preference_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

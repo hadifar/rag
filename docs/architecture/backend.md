@@ -24,35 +24,43 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 ## Services
 
-`agent_service` is the only LangChain user. `rag_service` is the chat agent built on it.
+`agent_service` is the only LangChain user. `Llm` (`llm.py`, an `LLMPort`) is the one holder of the model, with its tracing and `LLM__RETRY_ATTEMPTS` tries per call: it gives titles, reranking and the agent's guards single-shot structured generation. `RagAgent` (an `AgentPort`) is the agent, built on that `Llm`; `chat_service` runs it for a conversation's turn.
 
-`retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned.
+`retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned. If the reranker's call fails, the search returns the passages in their search order.
+
+## Caching
+
+Three caches in Postgres (`rag/repository/cache_repository.py`, `CachePort`), under the `CACHE__*` settings: a query's embedding (`CachedEmbeddings` wraps the embeddings, queries only), a search's reranked result (`RetrievalService`, by its normalized query), and the off-topic guard's verdict (`classify_input`, by its whole prompt, history included).
+
+* Each row is keyed by the model that made it and a sha256 of its input, so a new model misses every older row. A search's key also holds the retrieval settings.
+* The tables are `UNLOGGED`. Each entry lives `CACHE__*_TTL_DAYS`; each write deletes a batch of expired rows.
+* A search keeps chunk ids, not text: a hit reads the chunks, leaving out any removed. Ingestion empties `search_cache` in the transaction that replaces the chunks.
+* Nothing is cached from a failure: a fail-open verdict or an unreranked search is computed afresh next time.
+* A cache that fails is a miss; it never fails the request. `CACHE__ENABLED=false` swaps every cache for `NoCache`.
 
 ## Chat agent
 
 Diagrams: [Agent graph](../diagrams/agent-graph.md), [Chat turn](../diagrams/chat-turn.md).
 
-* Free text a user types (a chat message, a preference) is a `UserText` field (`rag/api/schema/text.py`): `normalize_text` (`rag/shared/text.py`) applies NFKC, drops control, invisible and bidi-override characters, and tidies whitespace before the length checks run.
-* `RagService` defines a `ToolAgentSpec`. `build_tool_agent` (`rag/services/agent_service/builder.py`) turns the spec into a LangChain `create_agent` graph: `tools.py` adapts the tools, and `middleware/` maps each spec middleware to its guard (`middleware/factory.py`).
-* `OffTopicGuard` classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`. Restrict (off-topic): it adds a decline instruction and keeps only `kind="user"` tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the message is dropped from the thread.
+* Free text a user types (a chat message) is a `UserText` field (`rag/api/schema/common.py`): `normalize_text` (`rag/shared/text_normalizer.py`) applies NFKC, drops control, invisible and bidi-override characters, and tidies whitespace before the length checks run.
+* `RagAgent` (`rag/services/agent_service/agent.py`) is the agent: a LangGraph `StateGraph` with four nodes, `classify` → `model` ⇄ `tools`, then `verify`, and `stream()`, which runs it one turn at a time (`AgentTurn`). Its tools are in `tools.py`, its prompts in `prompts.py`, and the guards' checks are plain functions in `guards/`.
+* `classify` (`guards/off_topic.py`) classifies each user message, with the two turns before it, as `allow`, `restrict` or `block`, against `OFF_TOPIC_SCOPE`. Restrict (off-topic): the `model` node adds `OFF_TOPIC_INSTRUCTION` and binds no tools. Block (injection, jailbreak, harmful): the turn ends before the model runs, the user gets `BLOCKED_MESSAGE`, and the agent does not remember the message. All three are in `rag/services/agent_service/prompts.py`.
 * Both guards get a structured verdict (a Pydantic schema) from their LLM call. A failed call passes the message or answer (fail open).
-* `GroundednessGuard` checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `LLM__MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
-* `CapabilityInstructions` adds each capability's instructions on every model call.
-* A `Capability` gives the agent a feature: tools plus instructions. The owning service creates it. `agent_service` knows no feature by name.
+* `verify` (`guards/groundedness.py`) checks each answer against this turn's `search_kb` results. Ungrounded: it sends the answer back, at most `MAX_REVISIONS` times. `AnswerGate` holds the answer back from the stream until the verdict, so a rejected answer never reaches the user.
 
 ## Streaming
 
 A chat answer streams as Server-Sent Events: one JSON `data:` line per event, told apart by `type`.
 
 1. `parse_event` (`rag/services/agent_service/streaming.py`) turns LangGraph events into domain events (`rag/domain/models/agent/stream.py`).
-2. `to_stream_event` (`rag/api/schema/agent.py`) turns them into API models.
+2. `to_stream_event` (`rag/api/schema/chat.py`) turns them into API models.
 3. `applyEvent` (`frontend/src/features/chat/model/transcript.ts`) turns them into chat bubbles.
 
 Event types: `text`, `reasoning`, `tool`, `todos`, `verification`, `artifacts`, `error`. History replays the stored events through the same `applyEvent`.
 
-`artifacts` is sent once the turn is done, if a tool returned `ToolResult.artifacts`: what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so the checkpointer stores no domain classes.
+`artifacts` is sent once the turn is done, if a tool returned an artifact (`response_format="content_and_artifact"`): what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so its memory of the turn holds no domain classes.
 
-A turn whose tool or model fails (after `ModelRetryMiddleware`'s retries) ends with an `error` event carrying a user-facing message, never the exception. `Agent.stream` also removes the failed turn from the agent's thread, so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.
+A turn whose tool or model fails (after the `model` node's `RetryPolicy` retries) ends with an `error` event carrying a user-facing message, never the exception. The agent does not remember the failed turn (its `memory` stays `None`), so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.
 
 ## Errors
 

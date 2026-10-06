@@ -1,6 +1,4 @@
 import uuid
-from collections.abc import AsyncIterator
-
 import pytest
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
@@ -8,7 +6,6 @@ from rag.domain.models import (
     ArtifactsReady,
     AssistantMessage,
     Conversation,
-    RunContext,
     StreamEvent,
     TextDelta,
     UserMessage,
@@ -16,8 +13,6 @@ from rag.domain.models import (
 from rag.services.conversation_service.service import ConversationService
 from tests.unit.fakes import (
     FakeConversationRepository,
-    FakeTranscriptRepository,
-    StubChatAgent,
     StubGeneration,
 )
 
@@ -27,16 +22,10 @@ BOB = uuid.uuid4()
 
 def _service(
     generation: StubGeneration | None = None,
-    chat_agent: StubChatAgent | None = None,
 ) -> tuple[ConversationService, FakeConversationRepository, StubGeneration]:
     repository = FakeConversationRepository()
     generation = generation or StubGeneration()
-    service = ConversationService(
-        repository=repository,
-        transcript=FakeTranscriptRepository(),
-        chat_agent=chat_agent or StubChatAgent(),
-        agent_service=generation,
-    )
+    service = ConversationService(repository=repository, llm=generation)
     return service, repository, generation
 
 
@@ -46,12 +35,6 @@ async def _titled(
     conversation = await repository.get_or_create_empty(user_id)
     await repository.set_title(conversation.id, title)
     return conversation
-
-
-async def _chat(
-    service: ConversationService, conversation_id: uuid.UUID, message: str
-) -> list[StreamEvent]:
-    return [e async for e in service.send_message(ALICE, conversation_id, message)]
 
 
 async def test_create_returns_the_users_one_empty_conversation() -> None:
@@ -105,24 +88,10 @@ async def test_long_first_message_is_truncated_for_the_fallback_title() -> None:
     assert title.endswith("…")
 
 
-async def test_touch_moves_the_conversation_to_the_top_of_the_list() -> None:
-    service, repository, _ = _service()
-    first = await _titled(repository, ALICE, "first")
-    await _titled(repository, ALICE, "second")
-
-    await service.touch(ALICE, first.id)
-
-    page = await service.list_for_user(ALICE, limit=10, cursor=None)
-    assert [c.title for c in page.items] == ["first", "second"]
-
-
 async def test_cannot_use_a_conversation_someone_else_owns() -> None:
-    chat_agent = StubChatAgent()
-    service, repository, _ = _service(chat_agent=chat_agent)
+    service, repository, _ = _service()
     conversation_id = (await repository.get_or_create_empty(BOB)).id
 
-    with pytest.raises(ConversationNotFoundError):
-        await service.touch(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.generate_title(ALICE, conversation_id, "hi")
     with pytest.raises(ConversationNotFoundError):
@@ -130,29 +99,24 @@ async def test_cannot_use_a_conversation_someone_else_owns() -> None:
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
     assert repository.rows[conversation_id].title is None
-    assert chat_agent.forgotten == []
     assert repository.rows[conversation_id].user_id == BOB
 
 
 async def test_cannot_read_or_delete_a_conversation_that_does_not_exist() -> None:
-    chat_agent = StubChatAgent()
-    service, _, _ = _service(chat_agent=chat_agent)
+    service, _, _ = _service()
     conversation_id = uuid.uuid4()
 
-    with pytest.raises(ConversationNotFoundError):
-        await service.touch(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.history(ALICE, conversation_id)
     with pytest.raises(ConversationNotFoundError):
         await service.delete(ALICE, conversation_id)
-    assert chat_agent.forgotten == []
 
 
 async def test_list_pages_through_the_users_conversations_newest_first() -> None:
     service, repository, _ = _service()
     mine = [await _titled(repository, ALICE, f"chat {i}") for i in range(5)]
     await _titled(repository, BOB, "not mine")
-    await repository.touch(mine[0].id)  # most recently used goes first
+    await repository.touch_owned(ALICE, mine[0].id)  # most recently used goes first
 
     first = await service.list_for_user(ALICE, limit=2, cursor=None)
     second = await service.list_for_user(ALICE, limit=2, cursor=first.next_cursor)
@@ -182,71 +146,34 @@ async def test_list_rejects_a_malformed_cursor(cursor: str) -> None:
         await service.list_for_user(ALICE, limit=2, cursor=cursor)
 
 
-async def test_delete_has_the_agent_forget_it_and_removes_the_row() -> None:
-    chat_agent = StubChatAgent()
-    service, repository, _ = _service(chat_agent=chat_agent)
+async def test_delete_removes_the_row_and_its_turns() -> None:
+    service, repository, _ = _service()
     conversation_id = (await service.create(ALICE)).id
-    await _chat(service, conversation_id, "hi")
+    await repository.append_turn(
+        conversation_id, "hi", [TextDelta(text="hello")], [{"said": "hi"}]
+    )
 
     await service.delete(ALICE, conversation_id)
 
-    assert chat_agent.forgotten == [conversation_id]
     assert conversation_id not in repository.rows
+    assert await repository.list_turns(conversation_id) == []
 
 
-async def test_history_is_each_turn_as_it_was_streamed() -> None:
-    service, _, _ = _service(
-        chat_agent=StubChatAgent(extra_events=[TextDelta(text="!")], artifacts=[])
-    )
+async def test_history_is_each_question_then_its_answer() -> None:
+    service, repository, _ = _service()
     conversation_id = (await service.create(ALICE)).id
-
-    streamed = await _chat(service, conversation_id, "hi")
-    await _chat(service, conversation_id, "again")
-
-    assert streamed == [
+    answer: list[StreamEvent] = [
         TextDelta(text="echo: hi"),
-        TextDelta(text="!"),
         ArtifactsReady(artifacts=[]),
     ]
-    # Saved as the user saw it, the text's deltas merged.
-    assert await service.history(ALICE, conversation_id) == [
-        UserMessage(text="hi"),
-        AssistantMessage(
-            events=[TextDelta(text="echo: hi!"), ArtifactsReady(artifacts=[])]
-        ),
-        UserMessage(text="again"),
-        AssistantMessage(
-            events=[TextDelta(text="echo: again!"), ArtifactsReady(artifacts=[])]
-        ),
-    ]
-
-
-class _FailingChatAgent(StubChatAgent):
-    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        yield TextDelta(text="half an ans")
-        raise RuntimeError("the model went away")
-
-
-async def test_a_turn_that_fails_midway_is_saved_as_far_as_it_got() -> None:
-    service, _, _ = _service(chat_agent=_FailingChatAgent())
-    conversation_id = (await service.create(ALICE)).id
-
-    with pytest.raises(RuntimeError):
-        await _chat(service, conversation_id, "hi")
+    await repository.append_turn(conversation_id, "hi", answer)
+    await repository.append_turn(conversation_id, "unanswered", [])
 
     assert await service.history(ALICE, conversation_id) == [
         UserMessage(text="hi"),
-        AssistantMessage(events=[TextDelta(text="half an ans")]),
+        AssistantMessage(events=answer),
+        UserMessage(text="unanswered"),
     ]
-
-
-async def test_sending_to_someone_elses_conversation_is_not_found() -> None:
-    service, _, _ = _service()
-    conversation_id = (await service.create(BOB)).id
-
-    with pytest.raises(ConversationNotFoundError):
-        await _chat(service, conversation_id, "hijack")
-    assert await service.history(BOB, conversation_id) == []
 
 
 async def test_blank_generated_title_falls_back_to_the_message() -> None:

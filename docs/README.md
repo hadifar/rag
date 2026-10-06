@@ -59,9 +59,6 @@ This is the primary technical reference for AI coding agents implementing or upd
 
 * [Known gaps](limitations.md): what is not addressed yet
 
-## Decisions
-
-* [Architecture decisions](decisions/README.md)
 
 ## For humans
 

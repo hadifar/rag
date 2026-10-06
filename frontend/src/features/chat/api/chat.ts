@@ -19,7 +19,7 @@ export function streamChat({
   signal,
   ...request
 }: StreamChatArgs): Promise<void> {
-  const path = `conversations/${encodeURIComponent(conversationId)}/messages`;
+  const path = `chat/${encodeURIComponent(conversationId)}`;
   return fetchEventSource(apiUrl(path), {
     ...jsonPostInit(request),
     // A 401 arrives before any event, so refresh-and-retry can't replay a partial stream.

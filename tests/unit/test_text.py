@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 
 from rag.api.schema.conversation import MAX_MESSAGE_LENGTH, MessageRequest
-from rag.api.schema.setting import PreferenceRequest
 from rag.shared.text_normalizer import normalize_text
 
 
@@ -52,7 +51,3 @@ def test_a_message_is_measured_after_it_is_normalized() -> None:
     padded = "a" * MAX_MESSAGE_LENGTH + "​" * 10 + "   "
 
     assert MessageRequest(message=padded).message == "a" * MAX_MESSAGE_LENGTH
-
-
-def test_a_preference_is_normalized() -> None:
-    assert PreferenceRequest(text=" Answer  in​ Dutch ").text == "Answer in Dutch"

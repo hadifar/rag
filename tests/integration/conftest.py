@@ -9,7 +9,7 @@ from psycopg_pool import AsyncConnectionPool
 from pydantic import ValidationError
 
 from rag.adapters.kb_archive_store import LocalArchiveStore
-from rag.adapters.lang_llm_client import build_embeddings
+from rag.adapters.langchain.llm_client import build_embeddings
 from rag.config import RetrievalConfig, Settings
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository

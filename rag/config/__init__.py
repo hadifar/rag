@@ -7,6 +7,7 @@ Unprefixed fields (DATABASE_URL, HOST, ...) sit on `Settings` itself, in setting
 """
 
 from rag.config.auth import AuthConfig
+from rag.config.cache import CacheConfig
 from rag.config.kb_storage import (
     AzureBlobKbStorageConfig,
     KbStorageConfig,
@@ -25,6 +26,7 @@ __all__ = [
     "AuthConfig",
     "AzureBlobKbStorageConfig",
     "AzureOpenAILLMConfig",
+    "CacheConfig",
     "KbStorageConfig",
     "LLMConfig",
     "LangfuseObservabilityConfig",

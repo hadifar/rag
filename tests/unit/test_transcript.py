@@ -6,7 +6,7 @@ from rag.domain.models import (
     TextDelta,
     ToolCall,
 )
-from rag.services.conversation_service.transcript import TranscriptBuilder
+from rag.services.chat_service.transcript import TranscriptBuilder
 
 
 def _built(*events: StreamEvent) -> list[StreamEvent]:
