@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch';
 
-import type { ApiPaths, TokenResponse } from '@/shared/types';
+import type { ApiPaths } from '@/shared/types';
 
 // Absolute: a relative 'api' would resolve under nested routes like /chat/:id.
 const API_BASE = '/api';
@@ -65,11 +65,9 @@ export function onSessionExpired(listener: () => void): () => void {
  * expired. Concurrent callers share one request, so a burst of 401s refreshes once.
  */
 export function refreshSession(): Promise<boolean> {
-  pendingRefresh ??= fetch(apiUrl('auth/refresh'), { method: 'POST', credentials: 'include' })
-    .then(async (res) => {
-      if (!res.ok) throw new Error(`refresh failed: ${res.status}`);
-      const body: TokenResponse = await res.json();
-      setAccessToken(body.access_token);
+  pendingRefresh ??= unwrap(publicApi.POST('/api/auth/refresh'))
+    .then(({ access_token }) => {
+      setAccessToken(access_token);
       return true;
     })
     .catch(() => {
@@ -122,6 +120,17 @@ export const api = createClient<ApiPaths>({
   // Absolute: the client builds a `Request`, which can't take a relative URL everywhere.
   baseUrl: window.location.origin,
   fetch: authFetch,
+});
+
+/**
+ * The same typed client without the bearer token or its refresh: for the auth calls
+ * themselves, where a 401 means wrong credentials or no session, not one to renew.
+ */
+export const publicApi = createClient<ApiPaths>({
+  baseUrl: window.location.origin,
+  credentials: 'include',
+  // Looked up per call, not captured here, so a fetch swapped in later (tests) is used.
+  fetch: (request) => fetch(request),
 });
 
 /** A typed call's data; throws an `ApiError` (with the backend's `detail`) if it failed. */

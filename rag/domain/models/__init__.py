@@ -1,23 +1,12 @@
 """The domain's data types, grouped by area; import them from here."""
 
-from rag.domain.models.agent.agent import (
-    Capability,
-    Middleware,
-    RunContext,
-    Tool,
-    ToolAgentSpec,
-    ToolKind,
-    ToolResult,
-)
-from rag.domain.models.agent.middleware import (
-    GroundednessMiddleware,
-    OffTopicMiddleware,
-    TodolistMiddleware,
-)
+from rag.domain.models.agent.agent import AgentMemory, RunContext
+from rag.domain.models.agent.artifact import ARTIFACTS, Artifact, SourceArtifact
+from rag.domain.models.agent.guard import InputDecision, InputVerdict
 from rag.domain.models.agent.stream import (
     AnswerVerified,
+    ArtifactsReady,
     ReasoningDelta,
-    ReferencesReady,
     StreamEvent,
     TaggedStreamEvent,
     TextDelta,
@@ -42,46 +31,35 @@ from rag.domain.models.ingestion import (
     IngestionRunStatus,
     RawDocument,
 )
-from rag.domain.models.preference import (
-    MAX_PREFERENCE_LENGTH,
-    MAX_PREFERENCES,
-    Preference,
-)
 from rag.domain.models.retrieval import Chunk
 
 __all__ = [
-    "MAX_PREFERENCES",
-    "MAX_PREFERENCE_LENGTH",
+    "ARTIFACTS",
+    "AgentMemory",
     "AnswerVerified",
+    "Artifact",
+    "ArtifactsReady",
     "AssistantMessage",
-    "Capability",
     "Chunk",
     "Conversation",
     "ConversationPage",
-    "GroundednessMiddleware",
     "HistoryMessage",
     "IndexedDocument",
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
-    "Middleware",
-    "OffTopicMiddleware",
-    "Preference",
+    "InputDecision",
+    "InputVerdict",
     "RawDocument",
     "ReasoningDelta",
-    "ReferencesReady",
     "RunContext",
+    "SourceArtifact",
     "StreamEvent",
     "TaggedStreamEvent",
     "TextDelta",
     "Todo",
-    "TodolistMiddleware",
     "TodosUpdated",
-    "Tool",
-    "ToolAgentSpec",
     "ToolCall",
-    "ToolKind",
-    "ToolResult",
     "Turn",
     "TurnFailed",
     "User",

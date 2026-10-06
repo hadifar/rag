@@ -6,9 +6,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from rag.config import Settings
 from rag.container import Container
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
+from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.service import IngestionService
-from rag.services.preference_service.service import PreferenceService
 from rag.services.retrieval_service.service import RetrievalService
 
 # A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
@@ -32,10 +32,6 @@ def get_app_settings(request: Request) -> Settings:
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
-def get_preference_service(container: ContainerDep) -> PreferenceService:
-    return container.preference_service
-
-
 def get_retrieval_service(container: ContainerDep) -> RetrievalService:
     return container.retrieval_service
 
@@ -52,7 +48,8 @@ def get_conversation_service(container: ContainerDep) -> ConversationService:
     return container.conversation_service
 
 
-PreferenceServiceDep = Annotated[PreferenceService, Depends(get_preference_service)]
+def get_chat_service(container: ContainerDep) -> ChatService:
+    return container.chat_service
 
 
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
@@ -67,6 +64,9 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 ConversationServiceDep = Annotated[
     ConversationService, Depends(get_conversation_service)
 ]
+
+
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 
 
 async def get_current_user(

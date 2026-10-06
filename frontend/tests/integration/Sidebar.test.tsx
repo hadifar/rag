@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -78,7 +78,7 @@ describe('Sidebar delete chat', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('deletes the chat once confirmed', async () => {
+  it('vaporizes the chat once confirmed, then removes it', async () => {
     server.use(http.delete('/api/conversations/:id', () => new HttpResponse(null, { status: 204 })));
     const user = renderSidebar();
 
@@ -86,7 +86,14 @@ describe('Sidebar delete chat', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // Gone for assistive tech at once; still on screen while its exit plays.
     expect(screen.queryByRole('link', { name: 'Plans and pricing' })).not.toBeInTheDocument();
+    const row = screen.getByText('Plans and pricing').parentElement!;
+    expect(row).toHaveClass('animate-vaporize');
+
+    fireEvent.animationEnd(row);
+
+    await waitFor(() => expect(screen.queryByText('Plans and pricing')).not.toBeInTheDocument());
   });
 
   it('shows a failed delete in the dialog so the user can retry', async () => {

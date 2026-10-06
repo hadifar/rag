@@ -6,7 +6,8 @@ from typing import Annotated, Literal
 from fastapi import Query
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from rag.api.schema.agent import StreamEventResponse
+from rag.api.schema.chat import StreamEventResponse
+from rag.api.schema.common import UserText
 from rag.domain.models import HistoryMessage
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
@@ -62,4 +63,4 @@ def to_history_message(message: HistoryMessage) -> HistoryMessageResponse:
 
 
 class MessageRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    message: UserText = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)

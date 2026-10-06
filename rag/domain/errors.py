@@ -12,7 +12,6 @@ class DocumentNotFoundError(AppError):
 
     def __init__(self, source_id: str):
         super().__init__(f"No document found for source_id={source_id!r}")
-        self.source_id = source_id
 
 
 class InvalidArchiveError(AppError):
@@ -83,7 +82,6 @@ class UserNotFoundError(AppError):
 
     def __init__(self, user_id: object):
         super().__init__(f"No user found for id={user_id!r}")
-        self.user_id = user_id
 
 
 class UserEmailNotFoundError(AppError):
@@ -132,7 +130,6 @@ class ConversationNotFoundError(AppError):
 
     def __init__(self, conversation_id: object):
         super().__init__(f"No conversation found for id={conversation_id!r}")
-        self.conversation_id = conversation_id
 
 
 class InvalidCursorError(AppError):
@@ -142,43 +139,3 @@ class InvalidCursorError(AppError):
 
     def __init__(self):
         super().__init__("Invalid pagination cursor")
-
-
-class BlankTitleError(AppError):
-    """Raised when the LLM's conversation title is blank."""
-
-    status_code: ClassVar[int] = 502
-
-    def __init__(self):
-        super().__init__("The LLM returned a blank conversation title")
-
-
-class InvalidPreferenceError(AppError):
-    """Raised when a preference is blank or too long."""
-
-    status_code: ClassVar[int] = 400
-
-    def __init__(self, reason: str):
-        super().__init__(f"Invalid preference: {reason}")
-
-
-class PreferenceNotFoundError(AppError):
-    """Raised when a user has no preference with the given id (another user's
-    included, so ids can't be probed).
-    """
-
-    status_code: ClassVar[int] = 404
-
-    def __init__(self, preference_id: str):
-        super().__init__(f"No preference found for id={preference_id!r}")
-
-
-class TooManyPreferencesError(AppError):
-    """Raised when a user who already has the most preferences allowed adds another."""
-
-    status_code: ClassVar[int] = 409
-
-    def __init__(self, max_preferences: int):
-        super().__init__(
-            f"You can keep at most {max_preferences} preferences; remove one first"
-        )

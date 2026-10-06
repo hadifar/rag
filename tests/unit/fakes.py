@@ -1,6 +1,6 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
@@ -8,20 +8,19 @@ from pydantic import BaseModel
 
 from rag.domain.errors import IngestionInProgressError
 from rag.domain.models import (
+    AgentMemory,
+    Artifact,
+    ArtifactsReady,
     Conversation,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
-    Preference,
-    ReferencesReady,
     RunContext,
     StreamEvent,
     TextDelta,
-    ToolAgentSpec,
     Turn,
     User,
 )
-from rag.domain.ports import ChatAgentPort
 
 
 class FakeEmbeddings:
@@ -43,6 +42,28 @@ class FakeEmbeddings:
         seed = hashlib.sha256(text.encode()).digest()
         raw = (seed * (self.DIMENSIONS // len(seed) + 1))[: self.DIMENSIONS]
         return [(b / 127.5) - 1 for b in raw]
+
+
+class FakeCache[T]:
+    """In-memory CachePort that never expires; records its puts. With `failing`, every
+    call raises, as a cache whose database is down.
+    """
+
+    def __init__(self, *, failing: bool = False):
+        self.values: dict[str, T] = {}
+        self.puts: list[str] = []
+        self.failing = failing
+
+    async def get(self, key: str) -> T | None:
+        if self.failing:
+            raise RuntimeError("cache down")
+        return self.values.get(key)
+
+    async def put(self, key: str, value: T) -> None:
+        if self.failing:
+            raise RuntimeError("cache down")
+        self.puts.append(key)
+        self.values[key] = value
 
 
 class FakePasswordHasher:
@@ -185,6 +206,7 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
+        self.turns: dict[uuid.UUID, list[Turn]] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -197,7 +219,7 @@ class FakeConversationRepository:
             None,
         )
         if empty is not None:
-            touched = await self.touch(empty.id)
+            touched = await self.touch_owned(user_id, empty.id)
             assert touched is not None
             return touched
         now = self._now()
@@ -207,8 +229,13 @@ class FakeConversationRepository:
         self.rows[conversation.id] = conversation
         return conversation
 
-    async def get(self, conversation_id: uuid.UUID) -> Conversation | None:
-        return self.rows.get(conversation_id)
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        conversation = self.rows.get(conversation_id)
+        return (
+            conversation if conversation and conversation.user_id == user_id else None
+        )
 
     async def list_for_user(
         self,
@@ -225,8 +252,10 @@ class FakeConversationRepository:
             mine = [c for c in mine if (c.updated_at, c.id) < before]
         return mine[:limit]
 
-    async def touch(self, conversation_id: uuid.UUID) -> Conversation | None:
-        if conversation_id not in self.rows:
+    async def touch_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        if await self.get_owned(user_id, conversation_id) is None:
             return None
         self.rows[conversation_id] = replace(
             self.rows[conversation_id], updated_at=self._now()
@@ -238,10 +267,24 @@ class FakeConversationRepository:
 
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
+        self.turns.pop(conversation_id, None)
+
+    async def append_turn(
+        self,
+        conversation_id: uuid.UUID,
+        question: str,
+        answer: list[StreamEvent],
+        memory: AgentMemory | None = None,
+    ) -> None:
+        turn = Turn(question, list(answer), memory)
+        self.turns.setdefault(conversation_id, []).append(turn)
+
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))
 
 
 class StubGeneration:
-    """AgentServicePort without agents: answers every prompt with `reply`, or raises
+    """LLMPort without a model: answers every prompt with `reply`, or raises
     `error`, and records the prompts.
     """
 
@@ -250,84 +293,58 @@ class StubGeneration:
         self.error = error
         self.prompts: list[str] = []
 
-    async def generate(self, prompt: str, *, attempts: int = 1) -> str:
-        self.prompts.append(prompt)
-        if self.error is not None:
-            raise self.error
-        return self.reply
-
     async def generate_structured[T: BaseModel](
         self,
         prompt: str,
         schema: type[T],
         *,
-        attempts: int = 1,
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
+        self.prompts.append(prompt)
+        if self.error is not None:
+            raise self.error
         # The reply, as the one field of the structured answer.
-        return schema.model_validate({"title": await self.generate(prompt)})
-
-    def create_agent(self, spec: ToolAgentSpec) -> ChatAgentPort:
-        raise NotImplementedError("the stub builds no agent")
+        return schema.model_validate({"title": self.reply})
 
 
-class FakePreferenceRepository:
-    """PreferenceRepositoryPort in memory: each user's preferences, oldest first."""
+class StubTurn:
+    """ChatTurnPort for a scripted turn: streams `events`, then remembers `memory`."""
 
-    def __init__(self):
-        self.rows: dict[uuid.UUID, list[Preference]] = {}
+    def __init__(self, events: list[StreamEvent], memory: AgentMemory):
+        self._events = events
+        self._memory = memory
+        self.memory: AgentMemory | None = None
 
-    async def list_for_user(self, user_id: uuid.UUID) -> list[Preference]:
-        return list(self.rows.get(user_id, []))
-
-    async def add(self, user_id: uuid.UUID, preference: Preference) -> Preference:
-        self.rows.setdefault(user_id, []).append(preference)
-        return preference
-
-    async def delete(self, user_id: uuid.UUID, preference_id: str) -> bool:
-        kept = [p for p in self.rows.get(user_id, []) if p.id != preference_id]
-        if len(kept) == len(self.rows.get(user_id, [])):
-            return False
-        self.rows[user_id] = kept
-        return True
+    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
+        for event in self._events:
+            yield event
+        self.memory = self._memory
 
 
-class FakeTranscriptRepository:
-    """TranscriptRepositoryPort in memory: each conversation's turns, in order."""
-
-    def __init__(self):
-        self.turns: dict[uuid.UUID, list[Turn]] = {}
-
-    async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
-    ) -> None:
-        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
-
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
-        return list(self.turns.get(conversation_id, []))
-
-
-class StubChatAgent:
-    """ChatAgentPort without a model: echoes the message, then `extra_events`, then
-    `references` if given; records the conversations it was told to forget.
+class StubAgent:
+    """AgentPort without a model: echoes the message, then `extra_events`, then
+    `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
+    history each turn was given.
     """
 
     def __init__(
         self,
         extra_events: list[StreamEvent] | None = None,
-        references: list[str] | None = None,
+        artifacts: list[Artifact] | None = None,
     ):
         self.extra_events = extra_events or []
-        self.references = references
-        self.forgotten: list[uuid.UUID] = []
+        self.artifacts = artifacts
+        self.histories: list[list[AgentMemory]] = []
 
-    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
-        yield TextDelta(text=f"echo: {message}")
-        for event in self.extra_events:
-            yield event
-        if self.references is not None:
-            yield ReferencesReady(references=self.references)
-
-    async def forget(self, conversation_id: uuid.UUID) -> None:
-        self.forgotten.append(conversation_id)
+    def stream(
+        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+    ) -> StubTurn:
+        self.histories.append(list(history))
+        events: list[StreamEvent] = [
+            TextDelta(text=f"echo: {message}"),
+            *self.extra_events,
+        ]
+        if self.artifacts is not None:
+            events.append(ArtifactsReady(artifacts=self.artifacts))
+        return StubTurn(events, [{"said": message}])

@@ -50,7 +50,7 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * bubble, reasoning deltas a single reasoning bubble (until the model answers or calls a
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
  * in place each time the agent updates it, the answer's check is a bubble filled in with
- * its verdict, and references get their own. A checked answer arrives only after its
+ * its verdict, and the turn's sources get their own. A checked answer arrives only after its
  * verdict, so it follows the verification bubble.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
@@ -112,10 +112,13 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
       }
       break;
     }
-    case 'references':
-      // Sent only when the answer searched; an empty list still gets its bubble.
-      push(t, { type: 'references', content: { references: event.references } });
+    case 'artifacts': {
+      // Sent only when a tool that hands anything over ran; a search that found nothing
+      // still gets its (empty) sources bubble.
+      const sources = event.artifacts.filter((a) => a.kind === 'source').map((a) => a.id);
+      push(t, { type: 'sources', content: { sources } });
       break;
+    }
     case 'error':
       // The turn's last event: it failed, and says so where its answer would have been.
       push(t, { type: 'error', content: { text: event.message } });

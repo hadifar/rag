@@ -36,13 +36,13 @@ async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
 }
 
 describe('ChatPage', () => {
-  it('streams an answer with its references into a new chat', async () => {
+  it('streams an answer with its sources into a new chat', async () => {
     let sent: MessageRequest | undefined;
     server.use(
       http.post('/api/conversations', () =>
         HttpResponse.json(newConversation),
       ),
-      http.post('/api/conversations/:id/messages', async ({ params, request }) => {
+      http.post('/api/chat/:id', async ({ params, request }) => {
         expect(params.id).toBe(newConversation.id);
         sent = (await request.json()) as MessageRequest;
         return sse([
@@ -50,7 +50,7 @@ describe('ChatPage', () => {
           { type: 'tool', name: 'search_kb', status: 'done', output: '2 chunks' },
           { type: 'text', text: 'We offer ' },
           { type: 'text', text: 'three plans.' },
-          { type: 'references', references: ['02-plans-and-pricing.md'] },
+          { type: 'artifacts', artifacts: [{ kind: 'source', id: '02-plans-and-pricing.md' }] },
         ]);
       }),
       http.post('/api/conversations/:id/title', () =>
@@ -77,7 +77,7 @@ describe('ChatPage', () => {
       http.post('/api/conversations', () =>
         HttpResponse.json(newConversation),
       ),
-      http.post('/api/conversations/:id/messages', () => new HttpResponse(null, { status: 500 })),
+      http.post('/api/chat/:id', () => new HttpResponse(null, { status: 500 })),
     );
     const { user } = renderChat('/chat');
 
@@ -99,18 +99,21 @@ describe('ChatPage', () => {
               { type: 'tool', name: 'search_kb', status: 'pending', query: 'retention' },
               { type: 'tool', name: 'search_kb', status: 'done', output: '1 chunk' },
               { type: 'text', text: 'Ninety days.' },
-              { type: 'references', references: ['11-data-retention-policy.md'] },
+              { type: 'artifacts', artifacts: [{ kind: 'source', id: '11-data-retention-policy.md' }] },
             ],
           },
         ]),
       ),
     );
-    renderChat('/chat/c1');
+    const { user } = renderChat('/chat/c1');
 
     expect(await screen.findByText('Ninety days.')).toBeInTheDocument();
     expect(screen.getByText('How long is data kept?')).toBeInTheDocument();
-    // Finished, as it was once the answer began.
-    expect(screen.getByText('Thought process')).toBeInTheDocument();
+    // Finished, as it was once the answer began, and folded until opened.
+    const thoughts = screen.getByRole('button', { name: 'Thought process' });
+    expect(thoughts).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Check the retention policy.')).not.toBeInTheDocument();
+    await user.click(thoughts);
     expect(screen.getByText('Check the retention policy.')).toBeInTheDocument();
     expect(screen.getByText('Find the policy')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '11-data-retention-policy.md' })).toBeInTheDocument();
@@ -127,7 +130,7 @@ describe('ChatPage', () => {
             role: 'assistant',
             events: [
               { type: 'text', text: "I don't know." },
-              { type: 'references', references: [] },
+              { type: 'artifacts', artifacts: [] },
             ],
           },
         ]),
@@ -140,7 +143,6 @@ describe('ChatPage', () => {
   });
 
   it('adds a follow-up to a saved conversation below its history', async () => {
-    let touched = false;
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
@@ -148,11 +150,7 @@ describe('ChatPage', () => {
           { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
         ]),
       ),
-      http.post('/api/conversations/:id/touch', () => {
-        touched = true;
-        return new HttpResponse(null, { status: 204 });
-      }),
-      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Sure.' }])),
+      http.post('/api/chat/:id', () => sse([{ type: 'text', text: 'Sure.' }])),
     );
     const { user } = renderChat('/chat/c1');
     await screen.findByText('Hello!');
@@ -162,13 +160,12 @@ describe('ChatPage', () => {
     expect(await screen.findByText('Sure.')).toBeInTheDocument();
     expect(screen.getByText('Hello!')).toBeInTheDocument();
     expect(screen.getByText('One more thing')).toBeInTheDocument();
-    expect(touched).toBe(true);
   });
 
   it('starts the next new chat empty', async () => {
     server.use(
       http.post('/api/conversations', () => HttpResponse.json(newConversation)),
-      http.post('/api/conversations/:id/messages', () => sse([{ type: 'text', text: 'Hi there.' }])),
+      http.post('/api/chat/:id', () => sse([{ type: 'text', text: 'Hi there.' }])),
       http.post('/api/conversations/:id/title', () => HttpResponse.json(newConversation)),
     );
     const { router, user } = renderChat('/chat');

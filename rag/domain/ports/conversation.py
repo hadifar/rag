@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import Conversation, StreamEvent, Turn
+from rag.domain.models import AgentMemory, Conversation, StreamEvent, Turn
 
 
 class ConversationRepositoryPort(Protocol):
@@ -12,7 +12,14 @@ class ConversationRepositoryPort(Protocol):
         """
         ...
 
-    async def get(self, conversation_id: uuid.UUID) -> Conversation | None: ...
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        """None if it doesn't exist or is another user's: the same for both, so ids
+        can't be probed.
+        """
+        ...
+
     async def list_for_user(
         self,
         user_id: uuid.UUID,
@@ -22,18 +29,25 @@ class ConversationRepositoryPort(Protocol):
         """Newest first by (updated_at, id); `before` is exclusive (keyset pagination)."""
         ...
 
-    async def touch(self, conversation_id: uuid.UUID) -> Conversation | None: ...
+    async def touch_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID
+    ) -> Conversation | None:
+        """Bumps it to most recently used; None, as `get_owned`, if it isn't the user's."""
+        ...
+
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...
-    async def delete(self, conversation_id: uuid.UUID) -> None: ...
+    async def delete(self, conversation_id: uuid.UUID) -> None:
+        """Deletes the conversation and its turns."""
+        ...
 
-
-class TranscriptRepositoryPort(Protocol):
-    """What the user saw of each conversation, turn by turn. Separate from what the
-    chat agent remembers of it (its own messages, kept by the agent).
-    """
-
+    # The transcript: what the user saw of the conversation, turn by turn, each turn
+    # beside what the chat agent remembers of it (its own messages).
     async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+        self,
+        conversation_id: uuid.UUID,
+        question: str,
+        answer: list[StreamEvent],
+        memory: AgentMemory | None = None,
     ) -> None: ...
     async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
         """Oldest first; empty for a conversation without any."""

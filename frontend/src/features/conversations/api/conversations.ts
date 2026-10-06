@@ -12,11 +12,6 @@ export function createConversation(signal?: AbortSignal): Promise<ConversationRe
   return unwrap(api.POST('/api/conversations', { signal }));
 }
 
-/** Marks the conversation as just used, so the server lists it first; sent with each follow-up message. */
-export async function touchConversation(id: string, signal?: AbortSignal): Promise<void> {
-  await unwrap(api.POST('/api/conversations/{conversation_id}/touch', { params: byId(id), signal }));
-}
-
 /** Names the conversation from its first message (LLM-written, or cut from it if that fails); needs no answer. */
 export function generateTitle(id: string, message: string): Promise<ConversationResponse> {
   return unwrap(

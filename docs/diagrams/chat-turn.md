@@ -4,16 +4,17 @@
 sequenceDiagram
     participant UI as Frontend (useSendMessage)
     participant R as conversation router
-    participant CS as ConversationService
+    participant CS as ChatService
     participant A as Chat agent
     participant KB as RetrievalService
     participant DB as Postgres
     participant LLM as LLM provider
 
-    UI->>R: POST /api/conversations/{id}/messages
+    UI->>R: POST /api/chat/{id}
     R->>CS: send_message
-    CS->>A: run turn (thread = conversation id)
-    A->>LLM: TopicalGuard classify
+    CS->>DB: load earlier turns' agent memory
+    CS->>A: run turn (with that memory)
+    A->>LLM: classify (off-topic guard)
     A->>LLM: model call
     A->>KB: search_kb
     KB->>DB: vector search
@@ -22,7 +23,7 @@ sequenceDiagram
     CS-->>R: events
     R-->>UI: SSE data: {type, ...}
     A-->>UI: verification pending
-    A->>LLM: GroundednessGuard check
+    A->>LLM: verify (groundedness check)
     A-->>UI: verification done (grounded or not)
     alt grounded
         A-->>UI: answer
@@ -30,6 +31,6 @@ sequenceDiagram
         A->>LLM: model call (revision)
         A-->>UI: revised answer
     end
-    A-->>UI: references
-    CS->>DB: save turn to conversation_turns
+    A-->>UI: artifacts (sources)
+    CS->>DB: save turn and its agent memory to conversation_turns
 ```

@@ -1,6 +1,6 @@
 import uuid
 
-from rag.adapters.lang_observability import _logging_trace_config
+from rag.adapters.langchain.observability import _logging_trace_config
 from rag.domain.models import RunContext
 
 

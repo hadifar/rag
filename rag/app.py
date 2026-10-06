@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from rag.api.routers.auth import router as auth_router
+from rag.api.routers.chat import router as chat_router
 from rag.api.routers.conversation import router as conversation_router
 from rag.api.routers.health import router as health_router
 from rag.api.routers.ingestion import router as ingestion_router
@@ -62,6 +63,7 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(conversation_router)
+    app.include_router(chat_router)
     app.include_router(retrieval_router)
     app.include_router(ingestion_router)
     app.include_router(setting_router)

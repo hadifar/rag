@@ -18,7 +18,6 @@ dependencies = [
     "typer>=0.27.2",
     "langfuse>=4.15.2",
     "langchain>=1.4.0",
-    "langgraph-checkpoint-postgres>=3.1.2",
     "psycopg[binary,pool]>=3.3.6",
     "pyjwt>=2.10.1",
     "argon2-cffi>=25.1.0",
@@ -139,7 +138,7 @@ source_modules = ["rag.services"]
 forbidden_modules = ["rag.adapters", "rag.repository", "rag.container", "rag.app", "rag.cli", "rag.api"]
 
 [[tool.importlinter.contracts]]
-name = "LangChain is used only by the agent service (and adapters); others call it through AgentServicePort"
+name = "LangChain is used only by the agent service (and adapters); others call it through LLMPort and AgentPort"
 type = "forbidden"
 source_modules = ["rag.services", "rag.api", "rag.app", "rag.cli"]
 forbidden_modules = [

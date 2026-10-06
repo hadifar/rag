@@ -1,27 +1,22 @@
 import {
   ApiError,
   api,
-  apiError,
-  apiUrl,
-  jsonPostInit,
+  publicApi,
   refreshSession,
   setAccessToken,
   unwrap,
 } from '@/shared/api/client';
-import type { LoginRequest, TokenResponse, UserResponse } from '@/shared/types';
+import type { UserResponse } from '@/shared/types';
 
 /**
- * Logs in and stores the access token for every later request. Plain `fetch`, not
- * `authFetch`: a 401 here means wrong credentials, not an expired session to refresh.
+ * Logs in and stores the access token for every later request. Through `publicApi`:
+ * a 401 here means wrong credentials, not an expired session to refresh.
  */
 export async function login(email: string, password: string): Promise<void> {
-  const res = await fetch(apiUrl('auth/login'), {
-    ...jsonPostInit({ email, password } satisfies LoginRequest),
-    credentials: 'include',
-  });
-  if (!res.ok) throw await apiError(res, 'POST /api/auth/login');
-  const body: TokenResponse = await res.json();
-  setAccessToken(body.access_token);
+  const { access_token } = await unwrap(
+    publicApi.POST('/api/auth/login', { body: { email, password } })
+  );
+  setAccessToken(access_token);
 }
 
 /** Restores a session from the refresh cookie, e.g. on page load. */
@@ -39,7 +34,7 @@ export async function restoreSession(): Promise<void> {
 export async function logout(): Promise<void> {
   setAccessToken(null);
   try {
-    await fetch(apiUrl('auth/logout'), { method: 'POST', credentials: 'include' });
+    await publicApi.POST('/api/auth/logout');
   } catch {
     // Best effort — the local session is already cleared regardless.
   }

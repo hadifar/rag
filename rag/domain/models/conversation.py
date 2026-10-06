@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from rag.domain.models.agent.agent import AgentMemory
 from rag.domain.models.agent.stream import StreamEvent
 
 
@@ -26,11 +27,13 @@ class ConversationPage:
 @dataclass(frozen=True)
 class Turn:
     """One exchange of a conversation as the user saw it: their question, and the
-    events its answer streamed.
+    events its answer streamed; and what the agent remembers of it.
     """
 
     question: str
     answer: list[StreamEvent]
+    # None for a turn the agent forgot: blocked, failed or cut short.
+    memory: AgentMemory | None = None
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,7 @@ class UserMessage:
 @dataclass(frozen=True)
 class AssistantMessage:
     """A turn's answer as the events its stream sent, in order: reasoning, searches,
-    the plan, the answer's text, and its references; replayed, it shows as it did live.
+    the plan, the answer's text, and its artifacts; replayed, it shows as it did live.
     """
 
     events: list[StreamEvent]
