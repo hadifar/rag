@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
@@ -64,11 +63,10 @@ def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
 @pytest.fixture(scope="session")
 def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
     """The app's search over `kb`, reranked as `RETRIEVAL__RERANK_CANDIDATES` says, as
-    in the container. The reranker's one-shot LLM call needs no memory and no tracing.
+    in the container. The reranker's one-shot LLM call needs no tracing.
     """
     agent_service = AgentService(
         build_llm(eval_settings),
-        InMemorySaver(),
         _no_tracing,
         retry_attempts=eval_settings.LLM.RETRY_ATTEMPTS,
     )

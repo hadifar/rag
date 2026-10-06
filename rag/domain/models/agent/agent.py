@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from rag.domain.models.agent.artifact import Artifact
 from rag.domain.models.agent.middleware import Middleware
@@ -15,6 +15,11 @@ class RunContext:
 
     user_id: uuid.UUID
     conversation_id: uuid.UUID
+
+
+# What the agent remembers of one turn: its own messages (the question, its tool calls
+# and their results, its answers) as JSON that only the agent service reads.
+AgentMemory = list[dict[str, Any]]
 
 
 @dataclass(frozen=True)

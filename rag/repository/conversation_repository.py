@@ -5,7 +5,13 @@ from typing import Any
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter
 
-from rag.domain.models import Conversation, StreamEvent, TaggedStreamEvent, Turn
+from rag.domain.models import (
+    AgentMemory,
+    Conversation,
+    StreamEvent,
+    TaggedStreamEvent,
+    Turn,
+)
 from rag.repository.base_repository import BaseRepository
 
 _COLUMNS = "id, user_id, title, created_at, updated_at"
@@ -87,15 +93,21 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
 
     async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+        self,
+        conversation_id: uuid.UUID,
+        question: str,
+        answer: list[StreamEvent],
+        memory: AgentMemory | None = None,
     ) -> None:
         await self._execute(
-            "INSERT INTO conversation_turns (conversation_id, question, answer) "
-            "VALUES (%s, %s, %s)",
+            "INSERT INTO conversation_turns "
+            "(conversation_id, question, answer, agent_messages) "
+            "VALUES (%s, %s, %s, %s)",
             (
                 conversation_id,
                 question,
                 Jsonb(_EVENTS.dump_python(answer, mode="json")),
+                Jsonb(memory) if memory is not None else None,
             ),
         )
 
@@ -103,12 +115,16 @@ class ConversationRepository(BaseRepository[Conversation]):
         # Raw rows: the _fetch_* helpers map onto Conversation, not Turn.
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                "SELECT question, answer FROM conversation_turns "
+                "SELECT question, answer, agent_messages FROM conversation_turns "
                 "WHERE conversation_id = %s ORDER BY id",
                 (conversation_id,),
             )
-            rows: list[tuple[str, Any]] = await cur.fetchall()
+            rows: list[tuple[str, Any, AgentMemory | None]] = await cur.fetchall()
         return [
-            Turn(question=question, answer=_EVENTS.validate_python(answer))
-            for question, answer in rows
+            Turn(
+                question=question,
+                answer=_EVENTS.validate_python(answer),
+                memory=memory,
+            )
+            for question, answer, memory in rows
         ]

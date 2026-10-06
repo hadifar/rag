@@ -1,10 +1,11 @@
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 
 import pytest
 
 from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
+    AgentMemory,
     ArtifactsReady,
     RunContext,
     StreamEvent,
@@ -12,7 +13,7 @@ from rag.domain.models import (
     Turn,
 )
 from rag.services.chat_service.service import ChatService
-from tests.unit.fakes import FakeConversationRepository, StubChatAgent
+from tests.unit.fakes import FakeConversationRepository, StubChatAgent, StubTurn
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
@@ -61,17 +62,45 @@ async def test_each_turn_is_saved_as_it_was_streamed() -> None:
         TextDelta(text="!"),
         ArtifactsReady(artifacts=[]),
     ]
-    # Saved as the user saw it, the text's deltas merged.
+    # Saved as the user saw it, the text's deltas merged, beside the agent's memory.
     assert await repository.list_turns(conversation_id) == [
-        Turn("hi", [TextDelta(text="echo: hi!"), ArtifactsReady(artifacts=[])]),
-        Turn("again", [TextDelta(text="echo: again!"), ArtifactsReady(artifacts=[])]),
+        Turn(
+            "hi",
+            [TextDelta(text="echo: hi!"), ArtifactsReady(artifacts=[])],
+            [{"said": "hi"}],
+        ),
+        Turn(
+            "again",
+            [TextDelta(text="echo: again!"), ArtifactsReady(artifacts=[])],
+            [{"said": "again"}],
+        ),
     ]
 
 
-class _FailingChatAgent(StubChatAgent):
-    async def stream(self, message: str, ctx: RunContext) -> AsyncIterator[StreamEvent]:
+async def test_the_agent_is_given_its_memory_of_the_earlier_turns() -> None:
+    chat_agent = StubChatAgent()
+    service, repository = _service(chat_agent)
+    conversation_id = (await repository.get_or_create_empty(ALICE)).id
+    # A turn the agent forgot (blocked, failed) is no part of its memory.
+    await repository.append_turn(conversation_id, "blocked", [], None)
+
+    await _chat(service, conversation_id, "first")
+    await _chat(service, conversation_id, "second")
+
+    assert chat_agent.histories == [[], [[{"said": "first"}]]]
+
+
+class _FailingTurn(StubTurn):
+    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
         yield TextDelta(text="half an ans")
         raise RuntimeError("the model went away")
+
+
+class _FailingChatAgent(StubChatAgent):
+    def stream(
+        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+    ) -> StubTurn:
+        return _FailingTurn([], [{"said": message}])
 
 
 async def test_a_turn_that_fails_midway_is_saved_as_far_as_it_got() -> None:
@@ -81,8 +110,9 @@ async def test_a_turn_that_fails_midway_is_saved_as_far_as_it_got() -> None:
     with pytest.raises(RuntimeError):
         await _chat(service, conversation_id, "hi")
 
+    # Kept as far as the user saw it; the agent forgets it.
     assert await repository.list_turns(conversation_id) == [
-        Turn("hi", [TextDelta(text="half an ans")]),
+        Turn("hi", [TextDelta(text="half an ans")], None),
     ]
 
 

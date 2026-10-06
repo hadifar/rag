@@ -20,7 +20,6 @@ from rag.domain.models import (
 from rag.domain.ports import (
     ConversationRepositoryPort,
     LLMServicePort,
-    RagServicePort,
 )
 from rag.services.conversation_service.title import (
     TitleOutput,
@@ -38,11 +37,9 @@ class ConversationService:
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        rag_service: RagServicePort,
         llm_service: LLMServicePort,
     ):
         self._repository = repository
-        self._rag_service = rag_service
         self._llm_service = llm_service
 
     async def create(self, user_id: uuid.UUID) -> Conversation:
@@ -97,12 +94,8 @@ class ConversationService:
         return history
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
-        """The transcript goes with the row; the agent's memory of it first: if that
-        fails, the row is still there to retry the delete, rather than a row-less
-        thread nobody can reach (or erase) anymore.
-        """
+        """Its turns, and the agent's memory of them, go with the row."""
         await self.get_owned(user_id, conversation_id)
-        await self._rag_service.forget(conversation_id)
         await self._repository.delete(conversation_id)
 
     async def get_owned(

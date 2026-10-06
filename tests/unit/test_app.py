@@ -121,7 +121,6 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            rag_service=chat_agent,
             llm_service=generation,
         ),
         chat_service=ChatService(

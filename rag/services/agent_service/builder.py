@@ -1,7 +1,6 @@
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelRetryMiddleware
 from langchain_core.language_models import BaseChatModel
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
 from rag.domain.models import RunContext, ToolAgentSpec
@@ -14,7 +13,6 @@ def build_tool_agent(
     llm: BaseChatModel,
     spec: ToolAgentSpec,
     judge: Judge,
-    checkpointer: BaseCheckpointSaver,
     retry_attempts: int,
 ) -> CompiledStateGraph:
     all_tools = [
@@ -37,6 +35,5 @@ def build_tool_agent(
         tools,
         system_prompt=spec.system_prompt,
         middleware=middleware,
-        checkpointer=checkpointer,
         context_schema=RunContext,
     )

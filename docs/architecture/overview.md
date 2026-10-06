@@ -15,12 +15,12 @@ Diagram: [System overview](../diagrams/architecture.md#system-overview).
 One Postgres database (`DATABASE_URL`) holds everything.
 
 * The `public` schema belongs to Alembic.
-* The `langgraph` schema belongs to the LangGraph checkpointer.
+* The `langgraph` schema is left over from the LangGraph checkpointer. Nothing uses it.
 
-A conversation is kept twice.
+Each turn (`conversation_turns`) is kept two ways.
 
-* The checkpoint is the agent's memory, rejected drafts included. Its thread id is the conversation id.
-* The transcript (`conversation_turns`) is what the user saw: each question and the streamed events.
+* `answer` is what the user saw: the streamed events.
+* `agent_messages` is the agent's memory of the turn: its question, tool calls, tool results and answers, rejected drafts included. It is NULL for a turn the agent forgot (blocked, failed, or cut short). Each turn, the chat service hands the agent the memory of the earlier turns.
 * A user has at most one untitled conversation.
 
 The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`, default `data/data.zip`).

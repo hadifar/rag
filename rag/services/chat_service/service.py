@@ -10,7 +10,8 @@ from rag.services.chat_service.transcript import TranscriptBuilder
 
 class ChatService:
     """A chat turn: the user's message answered by the chat agent (`rag_service`),
-    streamed back and kept in the conversation's transcript as the user saw it.
+    given its memory of the earlier turns, streamed back, and kept in the
+    conversation's transcript as the user saw it, beside the agent's memory of it.
     """
 
     def __init__(
@@ -34,16 +35,19 @@ class ChatService:
         if conversation is None or conversation.user_id != user_id:
             raise ConversationNotFoundError(conversation_id)
         await self._repository.touch(conversation_id)
+        turns = await self._repository.list_turns(conversation_id)
+        history = [turn.memory for turn in turns if turn.memory is not None]
         ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
+        answer = self._rag_service.stream(message, history, ctx)
         transcript = TranscriptBuilder()
         try:
-            async for event in self._rag_service.stream(message, ctx):
+            async for event in answer:
                 transcript.add(event)
                 yield event
         finally:
             # Shielded: a client hanging up cancels the stream, not the save.
             await asyncio.shield(
                 self._repository.append_turn(
-                    conversation_id, message, transcript.events
+                    conversation_id, message, transcript.events, answer.memory
                 )
             )
