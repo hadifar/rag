@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { ApiError, api, setAccessToken, unwrap } from '@/shared/api/client';
+import { ApiError, api, publicApi, setAccessToken, unwrap } from '@/shared/api/client';
 import { errorDetail, errorMessage, errorStatus, ignoreNotFound } from '@/shared/api/errors';
 import type { MessageRequest } from '@/shared/types';
 import { server } from '../../server';
@@ -50,6 +50,33 @@ describe('the typed api client', () => {
 
     expect(errorStatus(err)).toBe(413);
     expect(errorDetail(err)).toBeNull();
+  });
+});
+
+describe('the public api client', () => {
+  it('sends no bearer token, and a 401 is the answer, not a session to refresh', async () => {
+    let refreshed = false;
+    const seen: (string | null)[] = [];
+    server.use(
+      http.post('/api/auth/login', ({ request }) => {
+        seen.push(request.headers.get('Authorization'));
+        return HttpResponse.json({ detail: 'Invalid email or password' }, { status: 401 });
+      }),
+      http.post('/api/auth/refresh', () => {
+        refreshed = true;
+        return HttpResponse.json({ access_token: 'new', token_type: 'bearer' });
+      }),
+    );
+    setAccessToken('old');
+
+    const err = await unwrap(
+      publicApi.POST('/api/auth/login', { body: { email: 'a@b.c', password: 'wrong' } })
+    ).catch((e: unknown) => e);
+
+    expect(errorStatus(err)).toBe(401);
+    expect(errorDetail(err)).toBe('Invalid email or password');
+    expect(seen).toEqual([null]);
+    expect(refreshed).toBe(false);
   });
 });
 
