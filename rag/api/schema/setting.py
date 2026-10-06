@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
-from rag.api.schema.common import UserText
+from rag.api.schema._types import UserText
 from rag.domain.models import MAX_PREFERENCE_LENGTH
 
 
