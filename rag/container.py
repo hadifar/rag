@@ -15,7 +15,6 @@ from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.preference_repository import PreferenceRepository
-from rag.repository.transcript_repository import TranscriptRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.service import AgentService
 from rag.services.auth_service.service import AuthService
@@ -100,7 +99,6 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         conversation_service = ConversationService(
             repository=ConversationRepository(db_pool),
-            transcript=TranscriptRepository(db_pool),
             chat_agent=rag_service,
             agent_service=agent_service,
         )

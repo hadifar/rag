@@ -24,7 +24,6 @@ from rag.domain.ports import (
     AgentServicePort,
     ChatAgentPort,
     ConversationRepositoryPort,
-    TranscriptRepositoryPort,
 )
 from rag.services.conversation_service.title import (
     TitleOutput,
@@ -37,18 +36,16 @@ from rag.shared.resilience import or_default
 
 class ConversationService:
     """A user's conversations: each one's turns, run by `chat_agent` and kept as the
-    user saw them (`transcript`), and its title, written by `agent_service`'s LLM.
+    user saw them (the transcript), and its title, written by `agent_service`'s LLM.
     """
 
     def __init__(
         self,
         repository: ConversationRepositoryPort,
-        transcript: TranscriptRepositoryPort,
         chat_agent: ChatAgentPort,
         agent_service: AgentServicePort,
     ):
         self._repository = repository
-        self._transcript = transcript
         self._chat_agent = chat_agent
         self._agent_service = agent_service
 
@@ -110,7 +107,7 @@ class ConversationService:
         finally:
             # Shielded: a client hanging up cancels the stream, not the save.
             await asyncio.shield(
-                self._transcript.append_turn(
+                self._repository.append_turn(
                     conversation_id, message, transcript.events
                 )
             )
@@ -121,7 +118,7 @@ class ConversationService:
         """Each question, then its answer's events, if it sent any."""
         await self.get_owned(user_id, conversation_id)
         history: list[HistoryMessage] = []
-        for turn in await self._transcript.list_turns(conversation_id):
+        for turn in await self._repository.list_turns(conversation_id):
             history.append(UserMessage(text=turn.question))
             if turn.answer:
                 history.append(AssistantMessage(events=turn.answer))

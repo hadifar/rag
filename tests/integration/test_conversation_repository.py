@@ -1,5 +1,6 @@
 """Runs the conversation SQL against real Postgres (migrated with `alembic upgrade head`).
-Each test works under its own throwaway user; deleting it cascades to its conversations.
+Each test works under its own throwaway user; deleting it cascades to its conversations,
+and from them to their turns.
 """
 
 import uuid
@@ -10,6 +11,16 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from rag.config import Settings
+from rag.domain.models import (
+    ArtifactsReady,
+    ReasoningDelta,
+    SourceArtifact,
+    TextDelta,
+    Todo,
+    TodosUpdated,
+    ToolCall,
+    Turn,
+)
 from rag.repository.conversation_repository import ConversationRepository
 
 
@@ -99,3 +110,39 @@ async def test_deleting_a_user_deletes_their_conversations(
         await conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
 
     assert await repository.get(conversation.id) is None
+
+
+async def test_turns_read_back_in_order_with_every_kind_of_event(
+    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
+) -> None:
+    repository = ConversationRepository(pool)
+    conversation = await repository.get_or_create_empty(user_id)
+    answer = [
+        ReasoningDelta("Thinking"),
+        TodosUpdated(todos=[Todo(content="Find it", status="completed")]),
+        ToolCall(name="search_kb", status="pending", query="pricing"),
+        ToolCall(name="search_kb", status="done", output="facts"),
+        TextDelta("It costs 10."),
+        ArtifactsReady(artifacts=[SourceArtifact(id="pricing.md")]),
+    ]
+
+    await repository.append_turn(conversation.id, "How much?", answer)
+    await repository.append_turn(conversation.id, "thanks", [])
+
+    assert await repository.list_turns(conversation.id) == [
+        Turn("How much?", answer),
+        Turn("thanks", []),
+    ]
+    assert await repository.list_turns(uuid.uuid4()) == []
+
+
+async def test_turns_go_with_their_conversation(
+    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
+) -> None:
+    repository = ConversationRepository(pool)
+    conversation = await repository.get_or_create_empty(user_id)
+    await repository.append_turn(conversation.id, "hi", [TextDelta("hello")])
+
+    await repository.delete(conversation.id)
+
+    assert await repository.list_turns(conversation.id) == []

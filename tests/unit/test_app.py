@@ -45,7 +45,6 @@ from tests.unit.fakes import (
     FakeIngestionRunRepository,
     FakePasswordHasher,
     FakePreferenceRepository,
-    FakeTranscriptRepository,
     FakeUserRepository,
     StubChatAgent,
     StubGeneration,
@@ -121,7 +120,6 @@ def client() -> Generator[TestClient]:
         auth_service=auth_service,
         conversation_service=ConversationService(
             repository=conversation_repository,
-            transcript=FakeTranscriptRepository(),
             chat_agent=chat_agent,
             agent_service=generation,
         ),

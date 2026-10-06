@@ -16,7 +16,6 @@ from rag.domain.models import (
 from rag.services.conversation_service.service import ConversationService
 from tests.unit.fakes import (
     FakeConversationRepository,
-    FakeTranscriptRepository,
     StubChatAgent,
     StubGeneration,
 )
@@ -33,7 +32,6 @@ def _service(
     generation = generation or StubGeneration()
     service = ConversationService(
         repository=repository,
-        transcript=FakeTranscriptRepository(),
         chat_agent=chat_agent or StubChatAgent(),
         agent_service=generation,
     )

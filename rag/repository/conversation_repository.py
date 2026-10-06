@@ -1,10 +1,16 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
-from rag.domain.models import Conversation
+from psycopg.types.json import Jsonb
+from pydantic import TypeAdapter
+
+from rag.domain.models import Conversation, StreamEvent, TaggedStreamEvent, Turn
 from rag.repository.base_repository import BaseRepository
 
 _COLUMNS = "id, user_id, title, created_at, updated_at"
+# Turn events are stored as the JSON objects their `type` tells apart.
+_EVENTS = TypeAdapter(list[TaggedStreamEvent])
 
 
 class ConversationRepository(BaseRepository[Conversation]):
@@ -79,3 +85,30 @@ class ConversationRepository(BaseRepository[Conversation]):
         await self._execute(
             "DELETE FROM conversations WHERE id = %s", (conversation_id,)
         )
+
+    async def append_turn(
+        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+    ) -> None:
+        await self._execute(
+            "INSERT INTO conversation_turns (conversation_id, question, answer) "
+            "VALUES (%s, %s, %s)",
+            (
+                conversation_id,
+                question,
+                Jsonb(_EVENTS.dump_python(answer, mode="json")),
+            ),
+        )
+
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        # Raw rows: the _fetch_* helpers map onto Conversation, not Turn.
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT question, answer FROM conversation_turns "
+                "WHERE conversation_id = %s ORDER BY id",
+                (conversation_id,),
+            )
+            rows: list[tuple[str, Any]] = await cur.fetchall()
+        return [
+            Turn(question=question, answer=_EVENTS.validate_python(answer))
+            for question, answer in rows
+        ]

@@ -186,6 +186,7 @@ class FakeConversationRepository:
 
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
+        self.turns: dict[uuid.UUID, list[Turn]] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -239,6 +240,15 @@ class FakeConversationRepository:
 
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
+        self.turns.pop(conversation_id, None)
+
+    async def append_turn(
+        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
+    ) -> None:
+        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
+
+    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))
 
 
 class StubGeneration:
@@ -292,21 +302,6 @@ class FakePreferenceRepository:
             return False
         self.rows[user_id] = kept
         return True
-
-
-class FakeTranscriptRepository:
-    """TranscriptRepositoryPort in memory: each conversation's turns, in order."""
-
-    def __init__(self):
-        self.turns: dict[uuid.UUID, list[Turn]] = {}
-
-    async def append_turn(
-        self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
-    ) -> None:
-        self.turns.setdefault(conversation_id, []).append(Turn(question, list(answer)))
-
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
-        return list(self.turns.get(conversation_id, []))
 
 
 class StubChatAgent:

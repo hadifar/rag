@@ -24,14 +24,12 @@ class ConversationRepositoryPort(Protocol):
 
     async def touch(self, conversation_id: uuid.UUID) -> Conversation | None: ...
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...
-    async def delete(self, conversation_id: uuid.UUID) -> None: ...
+    async def delete(self, conversation_id: uuid.UUID) -> None:
+        """Deletes the conversation and its turns."""
+        ...
 
-
-class TranscriptRepositoryPort(Protocol):
-    """What the user saw of each conversation, turn by turn. Separate from what the
-    chat agent remembers of it (its own messages, kept by the agent).
-    """
-
+    # The transcript: what the user saw of the conversation, turn by turn. Separate
+    # from what the chat agent remembers of it (its own messages, kept by the agent).
     async def append_turn(
         self, conversation_id: uuid.UUID, question: str, answer: list[StreamEvent]
     ) -> None: ...
