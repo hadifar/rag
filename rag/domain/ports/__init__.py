@@ -2,6 +2,7 @@
 
 from rag.domain.ports.agent import AgentPort, ChatTurnPort, LLMPort
 from rag.domain.ports.auth import PasswordHasherPort, TokenCodecPort, UserRepositoryPort
+from rag.domain.ports.cache import CachePort
 from rag.domain.ports.conversation import (
     ConversationRepositoryPort,
 )
@@ -21,6 +22,7 @@ from rag.domain.ports.retrieval import (
 __all__ = [
     "AgentPort",
     "ArchiveStorePort",
+    "CachePort",
     "ChatTurnPort",
     "ChunkerPort",
     "ConversationRepositoryPort",

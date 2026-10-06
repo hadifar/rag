@@ -10,6 +10,7 @@ from psycopg_pool import AsyncConnectionPool
 from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.config import Settings
 from rag.domain.models import RunContext
+from rag.repository.cache_repository import NoCache
 from rag.repository.document_repository import DocumentRepository
 from rag.services.agent_service.llm import Llm
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
@@ -73,6 +74,8 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
         reranker,
         candidates=retrieval.RETRIEVAL_CANDIDATES,
         rerank_candidates=retrieval.RERANK_CANDIDATES,
+        # Measured afresh: a cached result would hide a change to retrieval.
+        cache=NoCache(),
     )
 
 

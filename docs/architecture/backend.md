@@ -26,7 +26,17 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 
 `agent_service` is the only LangChain user. `Llm` (`llm.py`, an `LLMPort`) is the one holder of the model, with its tracing and `LLM__RETRY_ATTEMPTS` tries per call: it gives titles, reranking and the agent's guards single-shot structured generation. `RagAgent` (an `AgentPort`) is the agent, built on that `Llm`; `chat_service` runs it for a conversation's turn.
 
-`retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned.
+`retrieval_service` fetches the `RETRIEVAL__RETRIEVAL_CANDIDATES` best passages for the query. The search is hybrid, in one SQL query: a vector ranking of every chunk and a full-text ranking of the chunks matching any of the query's words (`content_tsv`, `ts_rank_cd`), fused by reciprocal rank (`1 / (60 + rank)` summed over both). With `RETRIEVAL__RERANK_CANDIDATES` above 0, it passes them to `LlmReranker`: one structured LLM call scores each passage's summary from 1 to 10, the passages are reordered by that score, with ties keeping the search order, and the first `RETRIEVAL__RERANK_CANDIDATES` are returned. At 0, `NoReranker` keeps the search order and every fetched passage is returned. If the reranker's call fails, the search returns the passages in their search order.
+
+## Caching
+
+Three caches in Postgres (`rag/repository/cache_repository.py`, `CachePort`), under the `CACHE__*` settings: a query's embedding (`CachedEmbeddings` wraps the embeddings, queries only), a search's reranked result (`RetrievalService`, by its normalized query), and the off-topic guard's verdict (`classify_input`, by its whole prompt, history included).
+
+* Each row is keyed by the model that made it and a sha256 of its input, so a new model misses every older row. A search's key also holds the retrieval settings.
+* The tables are `UNLOGGED`. Each entry lives `CACHE__*_TTL_DAYS`; each write deletes a batch of expired rows.
+* A search keeps chunk ids, not text: a hit reads the chunks, leaving out any removed. Ingestion empties `search_cache` in the transaction that replaces the chunks.
+* Nothing is cached from a failure: a fail-open verdict or an unreranked search is computed afresh next time.
+* A cache that fails is a miss; it never fails the request. `CACHE__ENABLED=false` swaps every cache for `NoCache`.
 
 ## Chat agent
 

@@ -2,6 +2,7 @@
 
 from rag.domain.models.agent.agent import AgentMemory, RunContext
 from rag.domain.models.agent.artifact import ARTIFACTS, Artifact, SourceArtifact
+from rag.domain.models.agent.guard import InputDecision, InputVerdict
 from rag.domain.models.agent.stream import (
     AnswerVerified,
     ArtifactsReady,
@@ -47,6 +48,8 @@ __all__ = [
     "IngestionReport",
     "IngestionRun",
     "IngestionRunStatus",
+    "InputDecision",
+    "InputVerdict",
     "RawDocument",
     "ReasoningDelta",
     "RunContext",

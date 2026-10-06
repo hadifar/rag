@@ -5,6 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from rag.adapters.langchain.llm_client import build_llm
 from rag.container import build_container
 from rag.domain.models import RunContext, TextDelta, ToolCall
+from rag.repository.cache_repository import NoCache
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
 
@@ -22,7 +23,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
             _no_tracing,
             attempts=integration_settings.LLM.RETRY_ATTEMPTS,
         )
-        agent = RagAgent(llm, search=container.retrieval_service)
+        agent = RagAgent(llm, search=container.retrieval_service, verdicts=NoCache())
         answer = ""
         tool_calls = []
 

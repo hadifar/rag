@@ -44,6 +44,28 @@ class FakeEmbeddings:
         return [(b / 127.5) - 1 for b in raw]
 
 
+class FakeCache[T]:
+    """In-memory CachePort that never expires; records its puts. With `failing`, every
+    call raises, as a cache whose database is down.
+    """
+
+    def __init__(self, *, failing: bool = False):
+        self.values: dict[str, T] = {}
+        self.puts: list[str] = []
+        self.failing = failing
+
+    async def get(self, key: str) -> T | None:
+        if self.failing:
+            raise RuntimeError("cache down")
+        return self.values.get(key)
+
+    async def put(self, key: str, value: T) -> None:
+        if self.failing:
+            raise RuntimeError("cache down")
+        self.puts.append(key)
+        self.values[key] = value
+
+
 class FakePasswordHasher:
     """PasswordHasherPort without the cost: Argon2 is slow on purpose (~70 ms a hash),
     which every API test would pay in its fixture. The real one is tested in

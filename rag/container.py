@@ -3,6 +3,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
+from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
+
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
@@ -10,6 +13,14 @@ from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
+from rag.domain.models import Chunk, InputVerdict
+from rag.domain.ports import CachePort
+from rag.repository.cache_repository import (
+    EmbeddingCacheRepository,
+    InputVerdictCacheRepository,
+    NoCache,
+    SearchCacheRepository,
+)
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
@@ -21,6 +32,7 @@ from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
+from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -34,6 +46,48 @@ class Container:
     chat_service: ChatService
 
 
+@dataclass
+class _Caches:
+    embeddings: CachePort[list[float]]
+    search: CachePort[list[tuple[Chunk, float]]]
+    verdicts: CachePort[InputVerdict]
+
+
+def _caches(
+    settings: Settings, db_pool: AsyncConnectionPool[AsyncConnection]
+) -> _Caches:
+    """Each cache keyed by the model that fills it; a search's also by the settings
+    that shape its result.
+    """
+    if not settings.CACHE.ENABLED:
+        return _Caches(embeddings=NoCache(), search=NoCache(), verdicts=NoCache())
+
+    cache, llm, retrieval = settings.CACHE, settings.LLM, settings.RETRIEVAL
+    reranker = llm.chat_model_name if retrieval.RERANK_CANDIDATES else "none"
+    return _Caches(
+        embeddings=EmbeddingCacheRepository(
+            db_pool,
+            model=llm.embedding_model_name,
+            ttl=timedelta(days=cache.EMBEDDING_TTL_DAYS),
+        ),
+        search=SearchCacheRepository(
+            db_pool,
+            model=llm.embedding_model_name,
+            ttl=timedelta(days=cache.SEARCH_TTL_DAYS),
+            scope=(
+                f"candidates={retrieval.RETRIEVAL_CANDIDATES};"
+                f"rerank_candidates={retrieval.RERANK_CANDIDATES};"
+                f"summary_weight={retrieval.SUMMARY_WEIGHT};reranker={reranker}"
+            ),
+        ),
+        verdicts=InputVerdictCacheRepository(
+            db_pool,
+            model=llm.chat_model_name,
+            ttl=timedelta(days=cache.VERDICT_TTL_DAYS),
+        ),
+    )
+
+
 @asynccontextmanager
 async def build_container(settings: Settings) -> AsyncGenerator[Container, None]:  # noqa
     """Opens connections and tears it down on exit."""
@@ -43,9 +97,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         open_db_pool(settings) as db_pool,
         open_archive_store(settings) as archive_store,
     ):
+        caches = _caches(settings, db_pool)
         vector_store = DocumentRepository(
             db_pool,
-            build_embeddings(settings),
+            CachedEmbeddings(build_embeddings(settings), caches.embeddings),
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
         llm = Llm(
@@ -63,9 +118,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             ),
             candidates=settings.RETRIEVAL.RETRIEVAL_CANDIDATES,
             rerank_candidates=settings.RETRIEVAL.RERANK_CANDIDATES,
+            cache=caches.search,
         )
 
-        rag_agent = RagAgent(llm=llm, search=retrieval_service)
+        rag_agent = RagAgent(
+            llm=llm, search=retrieval_service, verdicts=caches.verdicts
+        )
 
         ingestion_service = IngestionService(
             index=vector_store,

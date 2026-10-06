@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 from rag.domain.models import Chunk
 from rag.domain.ports import LLMPort
 from rag.services.retrieval_service.prompts import RERANK_PROMPT
-from rag.shared.resilience import or_default
 
 MIN_SCORE, MAX_SCORE = 1, 10
 UNSCORED = 0
@@ -30,8 +29,7 @@ class NoReranker:
 
 class LlmReranker:
     """RerankerPort that has the LLM score every candidate's summary in one call, then
-    orders them by that score; ties keep the search's order. If the call fails, the
-    candidates come back as given.
+    orders them by that score; ties keep the search's order. Raises if the call fails.
     """
 
     def __init__(self, llm: LLMPort):
@@ -48,11 +46,7 @@ class LlmReranker:
             for i, (chunk, _score) in enumerate(candidates)
         )
         prompt = RERANK_PROMPT.format(query=query, passages=passages)
-        reply = await or_default(
-            self._llm.generate_structured(prompt, RerankOutput), None
-        )
-        if reply is None:
-            return candidates
+        reply = await self._llm.generate_structured(prompt, RerankOutput)
 
         scores = {
             s.index: min(max(s.score, MIN_SCORE), MAX_SCORE)

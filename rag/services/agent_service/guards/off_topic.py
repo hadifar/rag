@@ -1,11 +1,9 @@
 import logging
 from collections.abc import Sequence
-from typing import Literal
-
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel, Field
 
-from rag.domain.ports import LLMPort
+from rag.domain.models import InputDecision, InputVerdict
+from rag.domain.ports import CachePort, LLMPort
 from rag.services.agent_service.prompts import GUARDRAIL_PROMPT, OFF_TOPIC_SCOPE
 from rag.services.agent_service.turn import is_final_answer, split_turns
 from rag.shared.resilience import or_default
@@ -14,18 +12,6 @@ logger = logging.getLogger(__name__)
 
 # Earlier turns the classifier sees, to read a follow-up like "and what about pricing?".
 HISTORY_TURNS = 2
-
-# allow: about the product. restrict: harmless but off-topic, so the model declines.
-# block: an injection, jailbreak or harmful request, which never reaches the model.
-Decision = Literal["allow", "restrict", "block"]
-
-
-class InputVerdict(BaseModel):
-    # Before the decision, so the model gives its reason before it decides.
-    reason: str = Field(
-        description="One sentence on why the message gets the decision."
-    )
-    decision: Decision
 
 
 def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
@@ -44,9 +30,12 @@ def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
 async def classify_input(
     llm: LLMPort,
     messages: Sequence[BaseMessage],
-) -> Decision:
+    cache: CachePort[InputVerdict],
+) -> InputDecision:
     """The decision for the latest user message, with the turns before it for context;
-    allow if there's none or the classifier failed (fail open).
+    allow if there's none or the classifier failed (fail open). Verdicts are cached by
+    the whole prompt, so the same message after a different history is classified
+    afresh; a fail-open allow is never cached.
     """
     turns = split_turns(messages)
     if not turns or not (message := turns[-1][0].text):
@@ -55,9 +44,12 @@ async def classify_input(
     prompt = GUARDRAIL_PROMPT.format(
         scope=OFF_TOPIC_SCOPE, history=_history(turns[:-1]), message=message
     )
-    verdict = await or_default(llm.generate_structured(prompt, InputVerdict), None)
+    verdict = await or_default(cache.get(prompt), None)
     if verdict is None:
-        return "allow"
+        verdict = await or_default(llm.generate_structured(prompt, InputVerdict), None)
+        if verdict is None:
+            return "allow"
+        await or_default(cache.put(prompt, verdict), None)
     if verdict.decision == "block":
         logger.info("Blocked a chat message: %s", verdict.reason)
     return verdict.decision

@@ -22,13 +22,20 @@ from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, RetryPolicy
 
-from rag.domain.models import AgentMemory, RunContext, StreamEvent, TurnFailed
-from rag.domain.ports import SearchPort
+from rag.domain.models import (
+    AgentMemory,
+    InputDecision,
+    InputVerdict,
+    RunContext,
+    StreamEvent,
+    TurnFailed,
+)
+from rag.domain.ports import CachePort, SearchPort
 from rag.services.agent_service.guards.groundedness import (
     is_grounded,
     verification_inputs,
 )
-from rag.services.agent_service.guards.off_topic import Decision, classify_input
+from rag.services.agent_service.guards.off_topic import classify_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
@@ -63,7 +70,7 @@ _Next = Literal["model", "__end__"]
 
 class ChatState(MessagesState):
     decision: NotRequired[
-        Decision
+        InputDecision
     ]  # the off-topic guard's verdict on the turn's question
     todos: NotRequired[list[Todo]]  # the plan, which write_todos replaces whole
     revisions: NotRequired[int]  # answers sent back to revise this turn
@@ -82,13 +89,16 @@ class RagAgent:
     `llm.attempts` times; then a model call's error ends the turn (see `AgentTurn`).
     Instructions for one model call (declining an off-topic question, revising an
     answer) are added to that call only, never saved to the thread, so they can't leak
-    into later turns. It keeps nothing between turns.
+    into later turns. It keeps nothing between turns but the off-topic guard's
+    verdicts, in `verdicts`.
     """
 
     def __init__(
         self,
         llm: Llm,
         search: SearchPort,
+        *,
+        verdicts: CachePort[InputVerdict],
     ):
         tools = [search_tool(search), write_todos]
         self._on_topic_model = llm.model.bind_tools(tools)
@@ -98,6 +108,7 @@ class RagAgent:
         # each raises once its retries run out, and each guard fails open.
         self._llm = llm
         self._trace_config = llm.trace_config
+        self._verdicts = verdicts  # the off-topic guard's
 
         graph = StateGraph(ChatState)
         graph.add_node("classify", self._classify)
@@ -137,7 +148,7 @@ class RagAgent:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
-        decision = await classify_input(self._llm, state["messages"])
+        decision = await classify_input(self._llm, state["messages"], self._verdicts)
         if decision != "block":
             return Command(goto="model", update={"decision": decision})
 

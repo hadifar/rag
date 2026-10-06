@@ -21,6 +21,14 @@ class OpenAILLMConfig(_ChatModelConfig):
     MODEL: str
     EMBEDDING_MODEL: str = "text-embedding-3-small"
 
+    @property
+    def chat_model_name(self) -> str:
+        return self.MODEL
+
+    @property
+    def embedding_model_name(self) -> str:
+        return self.EMBEDDING_MODEL
+
 
 class AzureOpenAILLMConfig(_ChatModelConfig):
     BACKEND: Literal["azure_openai"] = "azure_openai"
@@ -29,6 +37,15 @@ class AzureOpenAILLMConfig(_ChatModelConfig):
     DEPLOYMENT: str
     API_VERSION: str
     EMBEDDING_DEPLOYMENT: str
+
+    # A deployment names the model it serves.
+    @property
+    def chat_model_name(self) -> str:
+        return self.DEPLOYMENT
+
+    @property
+    def embedding_model_name(self) -> str:
+        return self.EMBEDDING_DEPLOYMENT
 
 
 LLMConfig = Annotated[

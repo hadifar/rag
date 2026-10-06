@@ -23,7 +23,7 @@ class RerankerPort(Protocol):
         self, query: str, candidates: list[tuple[Chunk, float]]
     ) -> list[tuple[Chunk, float]]:
         """`candidates` reordered by relevance to `query`, the best first, each with
-        its new score; never raises (on failure, the candidates as given).
+        its new score; raises if it can't rank them.
         """
         ...
 

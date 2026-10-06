@@ -1,10 +1,13 @@
 from typing import Any
 
+import pytest
 from pydantic import BaseModel
 
 from rag.domain.models import Chunk, RunContext
+from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
+from tests.unit.fakes import FakeCache, FakeEmbeddings
 
 
 class _ScoringAgent:
@@ -38,14 +41,18 @@ class _ScoringAgent:
 
 
 class _VectorStore:
-    """VectorStorePort whose search returns the first k of `results`."""
+    """VectorStorePort whose search returns the first k of `results`; records the
+    queries.
+    """
 
     def __init__(self, results: list[tuple[Chunk, float]]):
         self.results = results
+        self.queries: list[str] = []
 
     async def asimilarity_search_with_score(
         self, query: str, k: int
     ) -> list[tuple[Chunk, float]]:
+        self.queries.append(query)
         return self.results[:k]
 
     async def aget_document(self, source_id: str) -> Chunk | None:
@@ -115,11 +122,11 @@ async def test_out_of_range_scores_are_clamped() -> None:
     assert [score for _chunk, score in results] == [10.0, 1.0]
 
 
-async def test_llm_failure_keeps_the_candidates_as_given() -> None:
-    candidates = _candidates("a", "b")
+async def test_llm_failure_raises() -> None:
     agent = _ScoringAgent(error=RuntimeError("boom"))
 
-    assert await LlmReranker(agent).rerank("q", candidates) == candidates
+    with pytest.raises(RuntimeError, match="boom"):
+        await LlmReranker(agent).rerank("q", _candidates("a", "b"))
 
 
 async def test_a_single_candidate_needs_no_llm_call() -> None:
@@ -134,7 +141,7 @@ async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
     store = _VectorStore(_candidates("a", "b", "c", "d", "e"))
     agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 3), (3, 9)])
     service = RetrievalService(
-        store, LlmReranker(agent), candidates=4, rerank_candidates=2
+        store, LlmReranker(agent), candidates=4, rerank_candidates=2, cache=FakeCache()
     )
 
     results = await service.search("q")
@@ -145,16 +152,20 @@ async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
 
 async def test_search_fetches_at_least_as_many_candidates_as_it_keeps() -> None:
     store = _VectorStore(_candidates("a", "b", "c"))
-    service = RetrievalService(store, NoReranker(), candidates=1, rerank_candidates=3)
+    service = RetrievalService(
+        store, NoReranker(), candidates=1, rerank_candidates=3, cache=FakeCache()
+    )
 
     assert len(await service.search("q")) == 3
 
 
 def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
     store = _VectorStore([])
-    reranked = RetrievalService(store, NoReranker(), candidates=10, rerank_candidates=5)
+    reranked = RetrievalService(
+        store, NoReranker(), candidates=10, rerank_candidates=5, cache=FakeCache()
+    )
     not_reranked = RetrievalService(
-        store, NoReranker(), candidates=10, rerank_candidates=0
+        store, NoReranker(), candidates=10, rerank_candidates=0, cache=FakeCache()
     )
 
     assert reranked.top_k == 5
@@ -164,7 +175,78 @@ def test_a_search_returns_the_rerankers_pick_or_every_fetched_passage() -> None:
 async def test_search_without_reranking_keeps_the_vector_order() -> None:
     candidates = _candidates("a", "b")
     service = RetrievalService(
-        _VectorStore(candidates), NoReranker(), candidates=3, rerank_candidates=0
+        _VectorStore(candidates),
+        NoReranker(),
+        candidates=3,
+        rerank_candidates=0,
+        cache=FakeCache(),
     )
 
     assert await service.search("q") == candidates
+
+
+async def test_a_repeated_query_is_answered_from_the_cache() -> None:
+    store = _VectorStore(_candidates("a", "b", "c"))
+    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 9)])
+    service = RetrievalService(
+        store, LlmReranker(agent), candidates=3, rerank_candidates=2, cache=FakeCache()
+    )
+
+    first = await service.search("q")
+    # The same once normalized: trailing whitespace is tidied away.
+    second = await service.search("q  ")
+
+    assert second == first
+    assert store.queries == ["q"]
+    assert len(agent.prompts) == 1
+
+
+async def test_a_failed_rerank_keeps_the_search_order_and_is_not_cached() -> None:
+    candidates = _candidates("a", "b", "c")
+    cache: FakeCache[list[tuple[Chunk, float]]] = FakeCache()
+    service = RetrievalService(
+        _VectorStore(candidates),
+        LlmReranker(_ScoringAgent(error=RuntimeError("boom"))),
+        candidates=3,
+        rerank_candidates=2,
+        cache=cache,
+    )
+
+    assert await service.search("q") == candidates[:2]
+    assert cache.puts == []
+
+
+async def test_a_failing_cache_does_not_fail_the_search() -> None:
+    candidates = _candidates("a", "b")
+    service = RetrievalService(
+        _VectorStore(candidates),
+        NoReranker(),
+        candidates=2,
+        rerank_candidates=0,
+        cache=FakeCache(failing=True),
+    )
+
+    assert await service.search("q") == candidates
+
+
+class _CountingEmbeddings(FakeEmbeddings):
+    def __init__(self):
+        self.queries: list[str] = []
+
+    async def aembed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return await super().aembed_query(text)
+
+
+async def test_a_query_is_embedded_once_and_documents_every_time() -> None:
+    inner = _CountingEmbeddings()
+    cache: FakeCache[list[float]] = FakeCache()
+    embeddings = CachedEmbeddings(inner, cache)
+
+    first = await embeddings.aembed_query("pricing")
+    second = await embeddings.aembed_query("pricing")
+    await embeddings.aembed_documents(["pricing"])
+
+    assert second == first
+    assert inner.queries == ["pricing"]
+    assert cache.puts == ["pricing"]
