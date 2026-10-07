@@ -2,13 +2,9 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
-from rag.api.deps import (
-    AdminUserDep,
-    ArchiveUploadDep,
-    IngestionServiceDep,
-    get_current_admin,
-)
+from rag.api.deps import AdminUserDep, IngestionServiceDep, get_current_admin
 from rag.api.schema.ingestion import IngestionRunResponse
+from rag.api.uploads import ArchiveUpload
 
 router = APIRouter(
     prefix="/api/ingestions",
@@ -19,7 +15,7 @@ router = APIRouter(
 
 @router.post("", status_code=202)
 async def upload_knowledge_base(
-    archive: ArchiveUploadDep,
+    archive: ArchiveUpload,
     admin: AdminUserDep,
     ingestion_service: IngestionServiceDep,
     background_tasks: BackgroundTasks,

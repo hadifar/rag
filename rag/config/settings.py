@@ -10,6 +10,7 @@ from rag.config.kb_storage import KbStorageConfig, LocalKbStorageConfig
 from rag.config.llm import LLMConfig
 from rag.config.observability import LoggingObservabilityConfig, ObservabilityConfig
 from rag.config.retrieval import RetrievalConfig
+from rag.config.uploads import UploadsConfig
 
 
 class Settings(BaseSettings):
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     RETRIEVAL: RetrievalConfig = RetrievalConfig()
     CACHE: CacheConfig = CacheConfig()
     OBSERVABILITY: ObservabilityConfig = LoggingObservabilityConfig()
+    UPLOADS: UploadsConfig = UploadsConfig()
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

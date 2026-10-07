@@ -38,6 +38,7 @@ from rag.domain.models import (
     ToolCall,
     TurnFailed,
 )
+from rag.config import UploadsConfig
 from rag.domain.ports import SkillsPort
 from rag.services.agent_service.guards.groundedness import GroundednessVerdict
 from rag.services.agent_service.prompts import (
@@ -770,7 +771,12 @@ def _load_skill(name: str) -> AIMessage:
 
 async def _skills_of_the_user() -> FakeSkillRepository:
     skills = FakeSkillRepository()
-    service = SkillService(skills)
+    uploads = UploadsConfig()
+    service = SkillService(
+        skills,
+        max_skill_bytes=uploads.SKILL_MAX_BYTES,
+        max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+    )
     await service.upload(_USER, _SKILL_FILE)
     await service.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
     return skills

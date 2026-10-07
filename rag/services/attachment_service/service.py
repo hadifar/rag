@@ -8,7 +8,7 @@ from rag.domain.errors import (
     AttachmentTooLargeError,
     UnsupportedAttachmentError,
 )
-from rag.domain.models import Attachment, AttachmentFile
+from rag.domain.models import Attachment, AttachmentFile, Upload
 from rag.domain.ports import AttachmentRepositoryPort, ConversationRepositoryPort
 from rag.services.attachment_service.kinds import KINDS, AttachmentKind
 from rag.shared.text_normalizer import one_line
@@ -27,25 +27,30 @@ class AttachmentService:
         self,
         attachments: AttachmentRepositoryPort,
         conversations: ConversationRepositoryPort,
+        *,
+        max_bytes: int,
         kinds: Sequence[AttachmentKind] = KINDS,
     ):
+        """No file over `max_bytes` is accepted, whatever its kind; each kind may cap
+        it lower.
+        """
         self._attachments = attachments
         self._conversations = conversations
+        self._max_bytes = max_bytes
         self._kinds = kinds
 
-    @property
-    def max_bytes(self) -> int:
-        """No upload larger than this can be accepted, whatever its kind."""
-        return max(kind.max_bytes for kind in self._kinds)
-
     async def upload(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, name: str, data: bytes
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, upload: Upload
     ) -> Attachment:
         """Keeps the file in the conversation, recognized by its content; raises if
-        it's no kind that can be attached, or too large for its kind.
+        it's too large, no kind that can be attached, or too large for its kind.
         """
         await self._conversations.get_owned(user_id, conversation_id)
-        name = _base_name(name)
+        # First: a file read only up to the cap is cut short, and may no longer look
+        # like its kind.
+        if len(upload.data) > self._max_bytes:
+            raise AttachmentTooLargeError(self._max_bytes)
+        name, data = _base_name(upload.name), upload.data
         kind = next((k for k in self._kinds if k.accepts(name, data)), None)
         if kind is None or not data:
             raise UnsupportedAttachmentError(", ".join(k.label for k in self._kinds))

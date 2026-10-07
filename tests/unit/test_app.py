@@ -21,6 +21,7 @@ from rag.config import (
     LoggingObservabilityConfig,
     OpenAILLMConfig,
     Settings,
+    UploadsConfig,
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
@@ -119,6 +120,7 @@ def client() -> Generator[TestClient]:
             WholeDocumentChunker(),
             FakeArchiveStore(),
             FakeIngestionRunRepository(),
+            max_archive_bytes=UploadsConfig().KB_MAX_BYTES,
         ),
         auth_service=auth_service,
         conversation_service=ConversationService(
@@ -137,8 +139,13 @@ def client() -> Generator[TestClient]:
         attachment_service=AttachmentService(
             attachments=attachment_repository,
             conversations=conversation_repository,
+            max_bytes=UploadsConfig().ATTACHMENT_MAX_BYTES,
         ),
-        skill_service=SkillService(skills=FakeSkillRepository()),
+        skill_service=SkillService(
+            skills=FakeSkillRepository(),
+            max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
+            max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        ),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.

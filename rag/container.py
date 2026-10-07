@@ -134,7 +134,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
 
         skill_repo = SkillRepository(db_pool)
-        skill_service = SkillService(skills=skill_repo)
+        uploads = settings.UPLOADS
+        skill_service = SkillService(
+            skills=skill_repo,
+            max_skill_bytes=uploads.SKILL_MAX_BYTES,
+            max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+        )
 
         rag_agent = RagAgent(
             llm=llm,
@@ -152,6 +157,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             chunker=WholeDocumentChunker(),
             archives=archive_store,
             runs=IngestionRunRepository(db_pool),
+            max_archive_bytes=uploads.KB_MAX_BYTES,
         )
 
         auth_service = AuthService(
@@ -191,6 +197,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             attachment_service=AttachmentService(
                 attachments=attachment_repo,
                 conversations=conversation_repo,
+                max_bytes=uploads.ATTACHMENT_MAX_BYTES,
             ),
             skill_service=skill_service,
         )

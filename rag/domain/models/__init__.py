@@ -47,6 +47,7 @@ from rag.domain.models.ingestion import (
 )
 from rag.domain.models.retrieval import Chunk
 from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill, SkillContent
+from rag.domain.models.upload import Upload
 
 __all__ = [
     "DEFAULT_EFFORT",
@@ -91,6 +92,7 @@ __all__ = [
     "ToolCall",
     "Turn",
     "TurnFailed",
+    "Upload",
     "User",
     "UserMessage",
     "history_of",

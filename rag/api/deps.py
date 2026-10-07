@@ -1,9 +1,8 @@
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Annotated, Any
 
-from fastapi import Depends, Request, UploadFile
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.api.schema.conversation import ChatMessageRequest
@@ -99,37 +98,3 @@ async def get_attachments_to_send(
 
 
 AttachmentsToSendDep = Annotated[list[AttachmentFile], Depends(get_attachments_to_send)]
-
-
-@dataclass(frozen=True)
-class Upload:
-    name: str  # as the client sent it, or "" if it sent none
-    data: bytes
-
-
-async def _read_capped(file: UploadFile, max_bytes: int) -> Upload:
-    """The upload, read up to one byte past `max_bytes`: enough for the service to
-    reject it, without ever holding an oversized one in memory.
-    """
-    return Upload(file.filename or "", await file.read(max_bytes + 1))
-
-
-async def get_archive_upload(
-    file: UploadFile, ingestion_service: IngestionServiceDep
-) -> Upload:
-    return await _read_capped(file, ingestion_service.max_archive_bytes)
-
-
-async def get_skill_upload(file: UploadFile, skill_service: SkillServiceDep) -> Upload:
-    return await _read_capped(file, skill_service.max_bytes)
-
-
-async def get_attachment_upload(
-    file: UploadFile, attachment_service: AttachmentServiceDep
-) -> Upload:
-    return await _read_capped(file, attachment_service.max_bytes)
-
-
-ArchiveUploadDep = Annotated[Upload, Depends(get_archive_upload)]
-SkillUploadDep = Annotated[Upload, Depends(get_skill_upload)]
-AttachmentUploadDep = Annotated[Upload, Depends(get_attachment_upload)]

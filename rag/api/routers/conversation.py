@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, Response
 
 from rag.api.deps import (
     AttachmentServiceDep,
-    AttachmentUploadDep,
     AuthenticatedUserDep,
     ConversationServiceDep,
     ShareServiceDep,
@@ -23,6 +22,7 @@ from rag.api.schema.conversation import (
     to_history_message,
 )
 from rag.api.schema.share import ShareResponse
+from rag.api.uploads import AttachmentUpload
 
 router = APIRouter(
     prefix="/api/conversations",
@@ -147,7 +147,7 @@ async def unshare_conversation(
 @router.post("/{conversation_id}/attachments", status_code=201)
 async def upload_attachment(
     conversation_id: uuid.UUID,
-    upload: AttachmentUploadDep,
+    upload: AttachmentUpload,
     current_user: AuthenticatedUserDep,
     attachment_service: AttachmentServiceDep,
 ) -> AttachmentResponse:
@@ -155,7 +155,7 @@ async def upload_attachment(
     its id (`attachment_ids` of `POST /api/chat/{conversation_id}`).
     """
     attachment = await attachment_service.upload(
-        current_user.id, conversation_id, upload.name, upload.data
+        current_user.id, conversation_id, upload
     )
     return AttachmentResponse.model_validate(attachment)
 

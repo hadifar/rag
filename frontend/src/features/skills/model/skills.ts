@@ -3,7 +3,7 @@ import type { SkillResponse } from '@/shared/types';
 /** What the skill picker offers; the backend checks the content (rag/services/skill_service/). */
 export const SKILL_ACCEPT = '.md,.markdown,.zip,.skill';
 
-// Keep in sync with MAX_SKILL_BYTES and MAX_ARCHIVE_BYTES in rag/services/skill_service/service.py.
+// Keep in sync with UPLOADS__SKILL_MAX_BYTES and UPLOADS__SKILL_ARCHIVE_MAX_BYTES (rag/config/uploads.py).
 export const MAX_SKILL_FILE_BYTES = 50 * 1024;
 export const MAX_SKILL_ARCHIVE_BYTES = 512 * 1024;
 

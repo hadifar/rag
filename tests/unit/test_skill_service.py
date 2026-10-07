@@ -10,6 +10,7 @@ from rag.domain.errors import (
     SkillTooLargeError,
     TooManySkillsError,
 )
+from rag.config import UploadsConfig
 from rag.domain.models import SkillContent
 from rag.services.skill_service.service import MAX_SKILLS, SkillService
 from tests.unit.fakes import FakeSkillRepository
@@ -35,14 +36,19 @@ def _archive(files: dict[str, bytes | str]) -> bytes:
     return buffer.getvalue()
 
 
-def _service() -> SkillService:
-    return SkillService(skills=FakeSkillRepository())
+def _service(skills: FakeSkillRepository | None = None) -> SkillService:
+    uploads = UploadsConfig()
+    return SkillService(
+        skills=skills or FakeSkillRepository(),
+        max_skill_bytes=uploads.SKILL_MAX_BYTES,
+        max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+    )
 
 
 def _saved() -> tuple[SkillService, FakeSkillRepository]:
     """The service, and the repository it saves to, to read back what it saved."""
     skills = FakeSkillRepository()
-    return SkillService(skills=skills), skills
+    return _service(skills), skills
 
 
 async def _instructions(skills: FakeSkillRepository, user: uuid.UUID, name: str) -> str:
