@@ -119,7 +119,7 @@ export const ConversationRow = memo(function ConversationRow({
         to={routes.chat(conversation.id)}
         title={title}
         className={({ isActive }) =>
-          `min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
+          `min-w-0 flex-1 truncate rounded-lg py-2.5 pl-3 pr-1 text-left text-[13px] transition-colors ${
             isActive
               ? 'bg-slate-100 font-medium text-slate-900'
               : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
