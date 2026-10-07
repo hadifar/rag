@@ -60,6 +60,18 @@ async def list_pinned_conversations(
     return [ConversationResponse.model_validate(c) for c in conversations]
 
 
+@router.get("/{conversation_id}")
+async def get_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    conversation_service: ConversationServiceDep,
+) -> ConversationResponse:
+    conversation = await conversation_service.get_owned(
+        current_user.id, conversation_id
+    )
+    return ConversationResponse.model_validate(conversation)
+
+
 @router.patch("/{conversation_id}")
 async def update_conversation(
     conversation_id: uuid.UUID,
@@ -67,12 +79,9 @@ async def update_conversation(
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> ConversationResponse:
-    """Renames, pins or unpins it."""
+    """Renames, pins or unpins it, or sets the model and effort its turns run on."""
     conversation = await conversation_service.update(
-        current_user.id,
-        conversation_id,
-        title=update_request.title,
-        pinned=update_request.pinned,
+        current_user.id, conversation_id, update_request.to_update()
     )
     return ConversationResponse.model_validate(conversation)
 

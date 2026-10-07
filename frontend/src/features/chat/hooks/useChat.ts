@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 
 import { isWaiting, retryable } from '../model/transcript';
 import { useAttachmentDrafts } from './useAttachmentDrafts';
+import { useRunSettings } from './useRunSettings';
 import { useSendMessage } from './useSendMessage';
 import { useTranscript } from './useTranscript';
 
@@ -10,6 +11,8 @@ export function useChat(conversationId: string | undefined) {
   const transcript = useTranscript(conversationId);
   const sendMessage = useSendMessage(conversationId);
   const attachments = useAttachmentDrafts(conversationId);
+  const run = useRunSettings(conversationId);
+  const { settings } = run;
   const { take } = attachments;
   const failed = retryable(transcript);
   const question = failed?.question;
@@ -20,9 +23,9 @@ export function useChat(conversationId: string | undefined) {
   const send = useCallback(
     (text: string) => {
       const { attachments: files, conversation } = take();
-      void sendMessage(text, files, conversation);
+      void sendMessage(text, files, conversation, settings);
     },
-    [sendMessage, take]
+    [sendMessage, take, settings]
   );
 
   // Sends the failed question again as a new turn, as the saved history will show it,
@@ -45,6 +48,12 @@ export function useChat(conversationId: string | undefined) {
       hasReady: attachments.hasReady,
       onAttach: attachments.attach,
       onRemove: attachments.remove,
+    },
+    run: {
+      model: settings.model,
+      effort: settings.effort,
+      onModel: run.setModel,
+      onEffort: run.setEffort,
     },
     retryBubbleId: failed?.bubbleId ?? null,
     retry,

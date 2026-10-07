@@ -326,8 +326,11 @@ def test_create_conversation_starts_it_untitled_and_empty(
         "created_at",
         "updated_at",
         "pinned_at",
+        "model",
+        "effort",
     }
     assert conversation["title"] is None
+    assert (conversation["model"], conversation["effort"]) == ("gpt-6-luna", "low")
     assert conversation["pinned_at"] is None
     messages_url = f"/api/conversations/{conversation['id']}/messages"
     assert client.get(messages_url, headers=auth_headers).json() == []
@@ -487,6 +490,47 @@ def test_rename_stores_the_title_on_one_line(
     assert response.json()["title"] == "Billing questions"
     listed = client.get("/api/conversations", headers=auth_headers).json()
     assert listed["items"][0]["title"] == "Billing questions"
+
+
+def test_the_model_and_effort_are_set_per_conversation(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+    other_id = _create_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"model": "gpt-6-sol", "effort": "max"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert (response.json()["model"], response.json()["effort"]) == ("gpt-6-sol", "max")
+    # Setting one leaves the other as it was.
+    effort_only = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"effort": "low"},
+        headers=auth_headers,
+    ).json()
+    assert (effort_only["model"], effort_only["effort"]) == ("gpt-6-sol", "low")
+    fetched = client.get(f"/api/conversations/{conversation_id}", headers=auth_headers)
+    assert (fetched.json()["model"], fetched.json()["effort"]) == ("gpt-6-sol", "low")
+    other = client.post("/api/conversations", headers=auth_headers).json()
+    assert other["id"] == other_id
+    assert (other["model"], other["effort"]) == ("gpt-6-luna", "low")
+
+
+@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "high"}])
+def test_an_unknown_model_or_effort_is_rejected(
+    client: TestClient, auth_headers: dict[str, str], body: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}", json=body, headers=auth_headers
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize("title", ["", "   ", "x" * 201])
@@ -684,6 +728,10 @@ def test_conversations_of_another_user_are_invisible(
     others = _start_conversation(client, _login(client, _OTHER_EMAIL))
 
     assert (
+        client.get(f"/api/conversations/{others}", headers=auth_headers).status_code
+        == 404
+    )
+    assert (
         client.get(
             f"/api/conversations/{others}/messages", headers=auth_headers
         ).status_code
@@ -700,6 +748,7 @@ def test_conversations_of_another_user_are_invisible(
     [
         ("GET", "/api/conversations"),
         ("POST", "/api/conversations"),
+        ("GET", f"/api/conversations/{uuid.uuid4()}"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/chat/{uuid.uuid4()}"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),

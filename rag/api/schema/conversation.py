@@ -15,7 +15,7 @@ from pydantic import (
 
 from rag.api.schema.chat import StreamEventResponse
 from rag.api.schema.common import UserText
-from rag.domain.models import HistoryMessage
+from rag.domain.models import ConversationUpdate, Effort, HistoryMessage, ModelName
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 MAX_ATTACHMENTS = 3  # files sent with one message
@@ -35,6 +35,8 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     pinned_at: datetime | None  # Null while it isn't pinned
+    model: ModelName  # what its turns run on
+    effort: Effort
 
 
 class ConversationPageResponse(BaseModel):
@@ -124,3 +126,8 @@ class ConversationUpdateRequest(BaseModel):
 
     title: UserTitle | None = None
     pinned: bool | None = None
+    model: ModelName | None = None
+    effort: Effort | None = None
+
+    def to_update(self) -> ConversationUpdate:
+        return ConversationUpdate(**self.model_dump())

@@ -70,6 +70,8 @@ class _ScriptedChatModel(BaseChatModel):
     classifier_attachments: list[list[Any]] = Field(default_factory=list)
     verifier_calls: list[str] = Field(default_factory=list)
     bound_tools: list[str] = Field(default_factory=list)
+    # The reasoning each agent call asked for (None: none).
+    reasoning: list[Any] = Field(default_factory=list)
 
     @property
     def _llm_type(self) -> str:
@@ -115,6 +117,9 @@ class _ScriptedChatModel(BaseChatModel):
         self.agent_calls.append({"messages": messages, "tools": self.bound_tools})
         return self.answers.pop(0)
 
+    def _record(self, kwargs: dict[str, Any]) -> None:
+        self.reasoning.append(kwargs.get("reasoning"))
+
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -122,6 +127,7 @@ class _ScriptedChatModel(BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self._record(kwargs)
         return ChatResult(generations=[ChatGeneration(message=self._reply(messages))])
 
     def _stream(
@@ -131,6 +137,7 @@ class _ScriptedChatModel(BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        self._record(kwargs)
         reply = self._reply(messages)
         yield ChatGenerationChunk(
             message=AIMessageChunk(
@@ -866,3 +873,39 @@ async def test_an_off_topic_message_does_not_load_the_skill_it_invokes() -> None
     )
 
     assert _loaded_skills(model.agent_calls[0]["messages"]) == []
+
+
+async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
+    main = _ScriptedChatModel(answers=[])
+    sol = _ScriptedChatModel(answers=[_answer("From sol.")])
+    llm = Llm(
+        main,
+        _no_tracing,
+        attempts=1,
+        models={"gpt-6-luna": main, "gpt-6-astra": main, "gpt-6-sol": sol},
+        reasoning=True,
+    )
+    agent = RagAgent(
+        llm,
+        _StubRetrievalService(),
+        SkillService(FakeSkillRepository()),
+        verdicts=FakeCache(),
+    )
+    ctx = RunContext(
+        user_id=_USER, conversation_id=_CONVERSATION, model="gpt-6-sol", effort="max"
+    )
+
+    events = [e async for e in agent.stream("hello", [], ctx)]
+
+    assert _text(events) == "From sol."
+    assert main.agent_calls == []  # the guards still run on the main model
+    assert len(main.classifier_calls) == 1
+    assert sol.reasoning == [{"effort": "high", "summary": "auto"}]
+
+
+async def test_a_model_that_does_not_reason_is_not_asked_to() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    await _Chat(model).send("hello")
+
+    assert model.reasoning == [None]

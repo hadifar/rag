@@ -5,7 +5,7 @@ import { SKILL_ACCEPT, useSkillList, useSkillUpload } from '@/features/skills';
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { bubbles, isWaiting, showWelcome, sendMessage, attachments, retryBubbleId, retry } =
+  const { bubbles, isWaiting, showWelcome, sendMessage, attachments, run, retryBubbleId, retry } =
     useChat(conversationId);
   const openSource = useOpenKbSource();
   const skillUpload = useSkillUpload();
@@ -28,6 +28,7 @@ export function ChatPage() {
       <Composer
         onSend={sendMessage}
         attachments={attachments}
+        run={run}
         skills={{
           available: skills,
           accept: SKILL_ACCEPT,

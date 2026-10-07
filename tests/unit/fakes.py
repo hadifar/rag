@@ -14,6 +14,7 @@ from rag.domain.models import (
     Attachment,
     AttachmentFile,
     Conversation,
+    ConversationUpdate,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
@@ -274,16 +275,19 @@ class FakeConversationRepository:
         self,
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
-        title: str | None,
-        pinned: bool | None,
+        change: ConversationUpdate,
     ) -> Conversation | None:
         conversation = await self.get_owned(user_id, conversation_id)
         if conversation is None:
             return None
-        if title is not None:
-            conversation = replace(conversation, title=title)
-        if pinned is not None:
-            pinned_at = (conversation.pinned_at or self._now()) if pinned else None
+        fields = {
+            k: v for k, v in asdict(change).items() if v is not None and k != "pinned"
+        }
+        conversation = replace(conversation, **fields)
+        if change.pinned is not None:
+            pinned_at = (
+                (conversation.pinned_at or self._now()) if change.pinned else None
+            )
             conversation = replace(conversation, pinned_at=pinned_at)
         self.rows[conversation_id] = conversation
         return conversation
@@ -544,7 +548,7 @@ class StubTurn:
 class StubAgent:
     """AgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
-    history and the attachments each turn was given.
+    history, the context and the attachments each turn was given.
     """
 
     def __init__(
@@ -555,6 +559,7 @@ class StubAgent:
         self.extra_events = extra_events or []
         self.artifacts = artifacts
         self.histories: list[list[AgentMemory]] = []
+        self.contexts: list[RunContext] = []
         self.attachments: list[list[AttachmentFile]] = []
         self.earlier_attachments: list[list[AttachmentFile]] = []
 
@@ -568,6 +573,7 @@ class StubAgent:
         earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> StubTurn:
         self.histories.append(list(history))
+        self.contexts.append(ctx)
         self.attachments.append(list(attachments))
         self.earlier_attachments.append(list(earlier_attachments))
         events: list[StreamEvent] = [

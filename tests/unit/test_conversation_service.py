@@ -3,6 +3,7 @@ import pytest
 
 from rag.domain.errors import ConversationNotFoundError, InvalidCursorError
 from rag.domain.models import (
+    ConversationUpdate,
     ArtifactsReady,
     AssistantMessage,
     Conversation,
@@ -152,8 +153,8 @@ async def test_pinned_conversations_leave_the_recent_list_last_pinned_first() ->
         await _titled(repository, ALICE, f"chat {i}") for i in range(3)
     ]
 
-    await service.update(ALICE, first.id, pinned=True)
-    await service.update(ALICE, second.id, pinned=True)
+    await service.update(ALICE, first.id, ConversationUpdate(pinned=True))
+    await service.update(ALICE, second.id, ConversationUpdate(pinned=True))
 
     pinned = await service.list_pinned(ALICE)
     recent = await service.list_for_user(ALICE, limit=10, cursor=None)
@@ -165,9 +166,15 @@ async def test_pinning_again_keeps_when_it_was_pinned_and_unpinning_clears_it() 
     service, repository, _ = _service()
     conversation = await _titled(repository, ALICE, "chat")
 
-    pinned = await service.update(ALICE, conversation.id, pinned=True)
-    again = await service.update(ALICE, conversation.id, pinned=True)
-    unpinned = await service.update(ALICE, conversation.id, pinned=False)
+    pinned = await service.update(
+        ALICE, conversation.id, ConversationUpdate(pinned=True)
+    )
+    again = await service.update(
+        ALICE, conversation.id, ConversationUpdate(pinned=True)
+    )
+    unpinned = await service.update(
+        ALICE, conversation.id, ConversationUpdate(pinned=False)
+    )
 
     assert pinned.pinned_at is not None
     assert again.pinned_at == pinned.pinned_at
@@ -177,10 +184,12 @@ async def test_pinning_again_keeps_when_it_was_pinned_and_unpinning_clears_it() 
 async def test_rename_sets_the_title_and_keeps_its_place_and_pin() -> None:
     service, repository, _ = _service()
     conversation = await _titled(repository, ALICE, "chat")
-    await service.update(ALICE, conversation.id, pinned=True)
+    await service.update(ALICE, conversation.id, ConversationUpdate(pinned=True))
     before = repository.rows[conversation.id]
 
-    renamed = await service.update(ALICE, conversation.id, title="Billing")
+    renamed = await service.update(
+        ALICE, conversation.id, ConversationUpdate(title="Billing")
+    )
 
     assert renamed.title == "Billing"
     assert renamed.updated_at == before.updated_at
@@ -192,7 +201,9 @@ async def test_cannot_update_a_conversation_someone_else_owns() -> None:
     conversation = await _titled(repository, BOB, "bob's")
 
     with pytest.raises(ConversationNotFoundError):
-        await service.update(ALICE, conversation.id, title="mine now", pinned=True)
+        await service.update(
+            ALICE, conversation.id, ConversationUpdate(title="mine now", pinned=True)
+        )
     assert repository.rows[conversation.id].title == "bob's"
     assert repository.rows[conversation.id].pinned_at is None
 

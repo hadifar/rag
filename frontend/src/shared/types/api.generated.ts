@@ -154,7 +154,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Conversation */
+        get: operations["get_conversation_api_conversations__conversation_id__get"];
         put?: never;
         post?: never;
         /** Delete Conversation */
@@ -163,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Update Conversation
-         * @description Renames, pins or unpins it.
+         * @description Renames, pins or unpins it, or sets the model and effort its turns run on.
          */
         patch: operations["update_conversation_api_conversations__conversation_id__patch"];
         trace?: never;
@@ -559,6 +560,16 @@ export interface components {
             updated_at: string;
             /** Pinned At */
             pinned_at: string | null;
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
+            /**
+             * Effort
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "max";
         };
         /**
          * ConversationUpdateRequest
@@ -569,6 +580,10 @@ export interface components {
             title?: string | null;
             /** Pinned */
             pinned?: boolean | null;
+            /** Model */
+            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "max") | null;
         };
         /**
          * ErrorEvent
@@ -1086,6 +1101,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResponse"][];
+                };
+            };
+        };
+    };
+    get_conversation_api_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

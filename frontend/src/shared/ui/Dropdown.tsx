@@ -12,8 +12,10 @@ import {
   type SVGProps,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { CheckIcon } from '@heroicons/react/24/outline';
 
 const GAP = 4; // px between the anchor and the menu
+const ITEMS = '[role="menuitem"], [role="menuitemradio"]';
 const MARGIN = 8; // px the menu keeps from the window's edges
 
 type Align = 'start' | 'end';
@@ -43,7 +45,7 @@ type DropdownProps = {
   label: string;
   /** Which edge it lines up with the anchor's: `end` (right, the default) or `start` (left). */
   align?: Align;
-  /** `DropdownItem`s. */
+  /** `DropdownItem`s, or `DropdownOption`s to pick one of. */
   children: ReactNode;
 };
 
@@ -71,7 +73,11 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, align = 'end', chi
     );
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
-    menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    // The current choice of a menu of options, else its first item.
+    (
+      menu.querySelector<HTMLElement>('[aria-checked="true"]') ??
+      menu.querySelector<HTMLElement>(ITEMS)
+    )?.focus();
   }, [isOpen, anchorRef, align]);
 
   // Its position is fixed to where the anchor was, so anything that moves the anchor closes it.
@@ -101,7 +107,7 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, align = 'end', chi
       onClose();
       return;
     }
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
     const at = items.indexOf(document.activeElement as HTMLElement);
     const next = {
       ArrowDown: (at + 1) % items.length,
@@ -137,6 +143,9 @@ const tones = {
   danger: 'text-danger-600 hover:bg-danger-50 focus-visible:bg-danger-50',
 };
 
+const itemClass =
+  'flex box-border w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors focus:outline-none';
+
 type DropdownItemProps = {
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
   /** `danger` for a destructive action. */
@@ -158,9 +167,38 @@ export function DropdownItem({ Icon, tone = 'neutral', onSelect, children }: Dro
         close();
         onSelect();
       }}
-      className={`flex box-border w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors focus:outline-none ${tones[tone]}`}
+      className={`${itemClass} ${tones[tone]}`}
     >
       <Icon className="size-4 shrink-0" />
+      {children}
+    </button>
+  );
+}
+
+type DropdownOptionProps = {
+  /** Whether it's the current choice: it shows a check. */
+  checked: boolean;
+  /** Runs after the menu has closed. */
+  onSelect: () => void;
+  children: ReactNode;
+};
+
+/** One choice among a `Dropdown`'s options; the current one is checked. */
+export function DropdownOption({ checked, onSelect, children }: DropdownOptionProps) {
+  const close = useContext(CloseContext);
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      tabIndex={-1}
+      onClick={() => {
+        close();
+        onSelect();
+      }}
+      className={`${itemClass} ${tones.neutral}`}
+    >
+      <CheckIcon className={`size-4 shrink-0 ${checked ? '' : 'invisible'}`} />
       {children}
     </button>
   );

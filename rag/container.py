@@ -13,7 +13,7 @@ from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
-from rag.domain.models import Chunk, InputVerdict
+from rag.domain.models import MODEL_NAMES, Chunk, InputVerdict
 from rag.domain.ports import CachePort
 from rag.repository.cache_repository import (
     EmbeddingCacheRepository,
@@ -116,6 +116,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             model=build_llm(settings),
             trace_config=trace_config,
             attempts=settings.LLM.RETRY_ATTEMPTS,
+            models={model: build_llm(settings, model) for model in MODEL_NAMES},
+            reasoning=settings.LLM.REASONING_EFFORT is not None,
         )
 
         retrieval_service = RetrievalService(

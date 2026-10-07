@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Sequence
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
@@ -10,13 +11,14 @@ from rag.domain.models import (
     AgentMemory,
     Attachment,
     Conversation,
+    ConversationUpdate,
     StreamEvent,
     TaggedStreamEvent,
     Turn,
 )
 from rag.repository.base_repository import BaseRepository
 
-_COLUMNS = "id, user_id, title, created_at, updated_at, pinned_at"
+_COLUMNS = "id, user_id, title, created_at, updated_at, pinned_at, model, effort"
 # Turn events are stored as the JSON objects their `type` tells apart.
 _EVENTS = TypeAdapter(list[TaggedStreamEvent])
 
@@ -89,13 +91,14 @@ class ConversationRepository(BaseRepository[Conversation]):
         self,
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
-        title: str | None,
-        pinned: bool | None,
+        change: ConversationUpdate,
     ) -> Conversation | None:
         return await self._fetch_one(
             f"""
             UPDATE conversations SET
                 title = COALESCE(%(title)s::text, title),
+                model = COALESCE(%(model)s::text, model),
+                effort = COALESCE(%(effort)s::text, effort),
                 pinned_at = CASE
                     WHEN %(pinned)s::boolean IS NULL THEN pinned_at
                     WHEN %(pinned)s::boolean THEN COALESCE(pinned_at, now())
@@ -105,8 +108,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             RETURNING {_COLUMNS}
             """,
             {
-                "title": title,
-                "pinned": pinned,
+                **asdict(change),
                 "id": conversation_id,
                 "user_id": user_id,
             },

@@ -41,6 +41,13 @@ Known gaps. None of these is addressed yet.
 * Nothing checks what a skill asks for. The prompt only tells the model that its own rules come first. A skill is the user's own text, so it can do no more than a message could.
 * The chat shows a `load_skill` call as a generic tool bubble.
 
+## Models
+
+* The three models are fixed in code (`ModelName` in `rag/domain/models/agent/agent.py`) and in a check constraint (migration `0022`). Adding one takes a migration.
+* The provider must serve all three. For Azure, deployments must be named `gpt-6-luna`, `gpt-6-astra` and `gpt-6-sol`; `infra/azure/main.bicep` doesn't provision them.
+* All three are treated alike: either they all reason (`LLM__REASONING_EFFORT` set) or the effort is ignored for all.
+* A new chat's picks live in the browser until its first message; leaving the page before that drops them.
+
 ## Guardrails
 
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.

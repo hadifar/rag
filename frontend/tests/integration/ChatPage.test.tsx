@@ -10,6 +10,7 @@ import type {
   AttachmentResponse,
   ChatMessageRequest,
   ConversationResponse,
+  ConversationUpdateRequest,
   HistoryMessageResponse,
   MessageRequest,
 } from '@/shared/types';
@@ -44,6 +45,8 @@ const newConversation: ConversationResponse = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   pinned_at: null,
+  model: 'gpt-6-luna',
+  effort: 'low',
 };
 
 async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
@@ -286,5 +289,56 @@ describe('ChatPage', () => {
 
     await vi.waitFor(() => expect(discarded).toBe('a1'));
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it("shows the conversation's model and effort, and saves a new pick", async () => {
+    let saved: ConversationUpdateRequest | undefined;
+    server.use(
+      http.get('/api/conversations/:id/messages', () => HttpResponse.json([])),
+      http.get('/api/conversations/:id', () =>
+        HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'medium' }),
+      ),
+      http.patch('/api/conversations/:id', async ({ request }) => {
+        saved = (await request.json()) as ConversationUpdateRequest;
+        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'max' });
+      }),
+    );
+    const { user } = renderChat(`/chat/${newConversation.id}`);
+
+    expect(await screen.findByRole('button', { name: 'Model: gpt-6-astra' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Effort: Medium' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Max' }));
+
+    expect(await screen.findByRole('button', { name: 'Effort: Max' })).toBeInTheDocument();
+    expect(saved).toEqual({ effort: 'max' });
+  });
+
+  it("sets a new chat to the model picked before its first message goes", async () => {
+    const calls: string[] = [];
+    server.use(
+      http.post('/api/conversations', () => HttpResponse.json(newConversation)),
+      http.patch('/api/conversations/:id', async ({ request }) => {
+        calls.push(`patch ${JSON.stringify(await request.json())}`);
+        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-sol' });
+      }),
+      http.post('/api/chat/:id', () => {
+        calls.push('chat');
+        return sse([{ type: 'text', text: 'Hi.' }]);
+      }),
+      http.post('/api/conversations/:id/title', () => HttpResponse.json(newConversation)),
+      // Once the URL has its id, the page reads the conversation as the server keeps it.
+      http.get('/api/conversations/:id', () =>
+        HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-sol' }),
+      ),
+    );
+    const { user } = renderChat('/chat');
+
+    await user.click(screen.getByRole('button', { name: 'Model: gpt-6-luna' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'gpt-6-sol' }));
+    await ask(user, 'hello');
+
+    expect(await screen.findByText('Hi.')).toBeInTheDocument();
+    expect(calls).toEqual(['patch {"model":"gpt-6-sol"}', 'chat']);
+    expect(screen.getByRole('button', { name: 'Model: gpt-6-sol' })).toBeInTheDocument();
   });
 });

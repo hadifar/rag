@@ -17,11 +17,13 @@ import {
 } from '@heroicons/react/24/outline';
 
 import { Button } from '@/shared/ui/Button';
-import { Dropdown, DropdownItem } from '@/shared/ui/Dropdown';
+import { Dropdown, DropdownItem, DropdownOption } from '@/shared/ui/Dropdown';
 import { ATTACHMENT_ACCEPT } from '../model/attachments';
+import { EFFORTS, MODELS, effortLabel } from '../model/runSettings';
 import { useSkillCommand } from '../hooks/useSkillCommand';
-import type { AttachmentDraft, SkillOption } from '../types';
+import type { AttachmentDraft, Effort, ModelName, SkillOption } from '../types';
 import { DraftAttachments } from './AttachmentChips';
+import { RunPicker } from './RunPicker';
 import { SkillSuggestions } from './SkillSuggestions';
 
 /** The files picked for the next message, from `useChat`. */
@@ -46,12 +48,22 @@ export type ComposerSkills = {
   notice: { text: string; tone: 'success' | 'warning' } | null;
 };
 
+/** The model and effort the conversation's answers run on, from `useChat`. */
+export type ComposerRun = {
+  model: ModelName;
+  effort: Effort;
+  onModel: (model: ModelName) => void;
+  onEffort: (effort: Effort) => void;
+};
+
 type ComposerProps = {
   onSend: (text: string) => void;
   /** Left out, the composer takes text only. */
   attachments?: ComposerAttachments;
   /** Left out, the + menu offers no skills. */
   skills?: ComposerSkills;
+  /** Left out, no model or effort is shown. */
+  run?: ComposerRun;
 };
 
 const NO_SKILLS: SkillOption[] = [];
@@ -61,7 +73,7 @@ const noticeTones = {
   warning: 'text-warning-700',
 };
 
-export function Composer({ onSend, attachments, skills }: ComposerProps) {
+export function Composer({ onSend, attachments, skills, run }: ComposerProps) {
   const [value, setValue] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setIsMenuOpen(false), []);
@@ -238,6 +250,24 @@ export function Composer({ onSend, attachments, skills }: ComposerProps) {
             placeholder="Type a message..."
             className="h-11 max-h-40 flex-1 resize-none border-none bg-transparent p-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
           />
+          {run && (
+            <>
+              <RunPicker label={`Model: ${run.model}`} value={run.model}>
+                {MODELS.map((model) => (
+                  <DropdownOption key={model} checked={model === run.model} onSelect={() => run.onModel(model)}>
+                    {model}
+                  </DropdownOption>
+                ))}
+              </RunPicker>
+              <RunPicker label={`Effort: ${effortLabel(run.effort)}`} value={effortLabel(run.effort)}>
+                {EFFORTS.map(({ value, label }) => (
+                  <DropdownOption key={value} checked={value === run.effort} onSelect={() => run.onEffort(value)}>
+                    {label}
+                  </DropdownOption>
+                ))}
+              </RunPicker>
+            </>
+          )}
           <Button type="submit" size="icon" aria-label="Send" disabled={!canSend}>
             <PaperAirplaneIcon className="size-4" />
           </Button>

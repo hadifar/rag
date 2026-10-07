@@ -121,9 +121,12 @@ class RagAgent:
         verdicts: CachePort[InputVerdict],
     ):
         tools = [search_tool(search), skill_tool(skills), write_todos]
-        self._on_topic_model = llm.model.bind_tools(tools)
+        # One of each per model a conversation can be set to.
+        self._on_topic_models = {
+            name: model.bind_tools(tools) for name, model in llm.models.items()
+        }
         # Off-topic, the model gets no tools: it is only to decline.
-        self._off_topic_model = llm.model
+        self._off_topic_models = llm.models
         # For the guards' LLM calls. Untraced of their own, they join the turn's trace;
         # each raises once its retries run out, and each guard fails open.
         self._llm = llm
@@ -229,7 +232,9 @@ class RagAgent:
         if is_final_answer(state["messages"][-1]):
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
-        model = self._off_topic_model if off_topic else self._on_topic_model
+        ctx = runtime.context
+        models = self._off_topic_models if off_topic else self._on_topic_models
+        model = self._llm.with_effort(models[ctx.model], ctx.effort)
         return {"messages": [await model.ainvoke(messages)], "skills": skills}
 
     async def _verify(self, state: ChatState) -> Command[_Next]:

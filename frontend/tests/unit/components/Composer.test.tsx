@@ -218,3 +218,20 @@ describe('Composer skills', () => {
     expect(box).toHaveValue('/release-notes ');
   });
 });
+
+describe('Composer model and effort', () => {
+  it('shows them, and picks another from their menus', async () => {
+    const run = { model: 'gpt-6-luna', effort: 'low', onModel: vi.fn(), onEffort: vi.fn() } as const;
+    render(<Composer onSend={vi.fn()} run={run} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Model: gpt-6-luna' }));
+    expect(screen.getByRole('menuitemradio', { name: 'gpt-6-luna' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('menuitemradio', { name: 'gpt-6-astra' }));
+    await user.click(screen.getByRole('button', { name: 'Effort: Low' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Max' }));
+
+    expect(run.onModel).toHaveBeenCalledExactlyOnceWith('gpt-6-astra');
+    expect(run.onEffort).toHaveBeenCalledExactlyOnceWith('max');
+  });
+});
