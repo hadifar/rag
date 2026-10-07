@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   BookmarkIcon,
   BookmarkSlashIcon,
-  EllipsisHorizontalIcon,
+  EllipsisVerticalIcon,
   PencilIcon,
   ShareIcon,
   TrashIcon,
@@ -137,7 +137,7 @@ export const ConversationRow = memo(function ConversationRow({
         // Shown on hovering its row, on reaching it by keyboard, or while its menu is open.
         className={isMenuOpen ? '' : 'opacity-0 focus:opacity-100 group-hover:opacity-100'}
       >
-        <EllipsisHorizontalIcon className="size-4" />
+        <EllipsisVerticalIcon className="size-4" />
       </IconButton>
       <Dropdown
         isOpen={isMenuOpen}
