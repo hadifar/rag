@@ -141,13 +141,13 @@ def test_summary_is_title_description_and_other_headings_as_keywords() -> None:
     assert markdown_summary(text) == (
         "Plans and Pricing\n"
         "This document summarizes the plan structure.\n"
-        "Keywords: Plan overview, Starter"
+        "Sections: Plan overview, Starter"
     )
 
 
 def test_summary_has_no_description_when_a_heading_follows_the_title() -> None:
     assert markdown_summary("# Title\n## Section\n\nBody.") == (
-        "Title\nKeywords: Section"
+        "Title\nSections: Section"
     )
 
 

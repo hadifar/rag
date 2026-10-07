@@ -50,7 +50,7 @@ def markdown_summary(text: str) -> str:
     parts = [
         title.group(1) if title else "",
         _first_paragraph(text[title.end() :]) if title else "",
-        f"Keywords: {', '.join(keywords)}" if keywords else "",
+        f"Sections: {', '.join(keywords)}" if keywords else "",
     ]
     return "\n".join(part for part in parts if part)
 

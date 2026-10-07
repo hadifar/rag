@@ -22,8 +22,8 @@ class RerankerPort(Protocol):
     async def rerank(
         self, query: str, candidates: list[tuple[Chunk, float]]
     ) -> list[tuple[Chunk, float]]:
-        """`candidates` reordered by relevance to `query`, the best first, each with
-        its new score; raises if it can't rank them.
+        """The `candidates` relevant to `query`, the best first, each with its score;
+        possibly none. Raises if it can't judge them.
         """
         ...
 

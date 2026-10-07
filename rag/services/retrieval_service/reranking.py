@@ -4,18 +4,14 @@ from rag.domain.models import Chunk
 from rag.domain.ports import LLMPort
 from rag.services.retrieval_service.prompts import RERANK_PROMPT
 
-MIN_SCORE, MAX_SCORE = 1, 10
-UNSCORED = 0
-MIN_CANDIDATES = 2
 
-
-class PassageScore(BaseModel):
+class PassageVerdict(BaseModel):
     index: int = Field(description="The passage's index, as shown in brackets.")
-    score: int = Field(description=f"From {MIN_SCORE} to {MAX_SCORE}.")
+    relevant: bool = Field(description="Whether it could help answer the question.")
 
 
 class RerankOutput(BaseModel):
-    scores: list[PassageScore]
+    verdicts: list[PassageVerdict]
 
 
 class NoReranker:
@@ -28,8 +24,9 @@ class NoReranker:
 
 
 class LlmReranker:
-    """RerankerPort that has the LLM score every candidate's summary in one call, then
-    orders them by that score; ties keep the search's order. Raises if the call fails.
+    """RerankerPort that has the LLM judge every candidate's summary relevant or not in
+    one call, then keeps the relevant ones in the search's order, with their search
+    scores; a candidate it gives no verdict on is dropped. Raises if the call fails.
     """
 
     def __init__(self, llm: LLMPort):
@@ -38,7 +35,7 @@ class LlmReranker:
     async def rerank(
         self, query: str, candidates: list[tuple[Chunk, float]]
     ) -> list[tuple[Chunk, float]]:
-        if len(candidates) < MIN_CANDIDATES:
+        if not candidates:
             return candidates
 
         passages = "\n".join(
@@ -46,12 +43,7 @@ class LlmReranker:
             for i, (chunk, _score) in enumerate(candidates)
         )
         prompt = RERANK_PROMPT.format(query=query, passages=passages)
-        reply = await self._llm.generate_structured(prompt, RerankOutput)
+        rerank_output = await self._llm.generate_structured(prompt, RerankOutput)
 
-        scores = {
-            s.index: min(max(s.score, MIN_SCORE), MAX_SCORE)
-            for s in reply.scores
-            if 0 <= s.index < len(candidates)
-        }
-        order = sorted(range(len(candidates)), key=lambda i: -scores.get(i, UNSCORED))
-        return [(candidates[i][0], float(scores.get(i, UNSCORED))) for i in order]
+        relevant = {v.index for v in rerank_output.verdicts if v.relevant}
+        return [c for i, c in enumerate(candidates) if i in relevant]

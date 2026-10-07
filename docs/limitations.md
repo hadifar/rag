@@ -19,7 +19,7 @@ Known gaps. None of these is addressed yet.
 * Keyword ranking is `ts_rank_cd`, which doesn't weigh a word by how rare it is (no BM25): a match on a word in every document counts as much as one on a word in one document. Words go through the `english` text-search config, so they're stemmed and stopwords are dropped, and a code like `QX-7731` is split into `qx` and `-7731`.
 * Keyword search can't answer "latest" or "newest": no chunk stores a date to sort by.
 * A document's summary is parsed from its own markdown: the `# title`, the paragraph under it, and the other headings. A file without a `# title` gets no summary and is scored on its text alone.
-* The LLM reranker (`RETRIEVAL__RERANK_CANDIDATES`) only sees the `RETRIEVAL__RETRIEVAL_CANDIDATES` passages the search found, so it can't recover a passage ranked below them. It scores each passage by its summary alone, and a passage with no summary is shown to it blank. If its call fails, the search order is kept.
+* The LLM reranker (`RETRIEVAL__RERANK_CANDIDATES`) only sees the `RETRIEVAL__RETRIEVAL_CANDIDATES` passages the search found, so it can't recover a passage ranked below them. It judges each passage by its summary alone, and a passage with no summary is shown to it blank; a relevant passage it judges irrelevant is dropped, and if it drops them all the agent answers that it doesn't know. It only filters: the passages it keeps stay in the search order. If its call fails, the search order is kept.
 * No retrieval evaluation set.
 
 ## Attachments

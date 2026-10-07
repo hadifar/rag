@@ -15,9 +15,6 @@ class GroundednessVerdict(BaseModel):
 
 
 def _collect_context(messages: Sequence[BaseMessage]) -> str:
-    """This turn's tool results, but the skills it loaded: those say how to answer,
-    not what is true.
-    """
     return "\n\n".join(
         str(m.content)
         for m in turn_tool_messages(messages)
