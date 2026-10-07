@@ -34,7 +34,8 @@ async def upload_skill(
     skill_service: SkillServiceDep,
 ) -> SkillResponse:
     """Saves a SKILL.md file (frontmatter with `name` and `description`, then the
-    instructions), replacing the caller's skill of that name if they have one.
+    instructions), or a .zip or .skill archive of one with its reference files,
+    replacing the caller's skill of that name if they have one.
     """
     skill = await skill_service.upload(current_user.id, data)
     return SkillResponse.model_validate(skill)

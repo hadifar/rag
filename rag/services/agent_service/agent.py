@@ -61,7 +61,12 @@ from rag.services.agent_service.streaming import (
     parse_event,
 )
 from rag.services.agent_service.skills import invoked_skill, skill_loaded
-from rag.services.agent_service.tools import search_tool, skill_tool
+from rag.services.agent_service.tools import (
+    loaded_skill,
+    search_tool,
+    skill_file_tool,
+    skill_tool,
+)
 from rag.services.agent_service.turn import current_turn, is_final_answer, remember
 
 logger = logging.getLogger(__name__)
@@ -120,7 +125,12 @@ class RagAgent:
         verdicts: CachePort[InputVerdict],
         history_limits: HistoryLimits | None = None,
     ):
-        tools = [search_tool(search), skill_tool(skills), write_todos]
+        tools = [
+            search_tool(search),
+            skill_tool(skills),
+            skill_file_tool(skills),
+            write_todos,
+        ]
         # One of each per model a conversation can be set to.
         self._on_topic_models = {
             name: model.bind_tools(tools) for name, model in llm.models.items()
@@ -211,10 +221,10 @@ class RagAgent:
         name = invoked_skill(state["messages"][-1].text)
         if name is None or state.get("decision") == "restrict":
             return {}
-        instructions = await self._skills.instructions(runtime.context.user_id, name)
-        if instructions is None:
+        content = await self._skills.content(runtime.context.user_id, name)
+        if content is None:
             return {}
-        return {"messages": skill_loaded(name, instructions)}
+        return {"messages": skill_loaded(name, loaded_skill(content))}
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]

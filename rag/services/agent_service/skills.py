@@ -19,7 +19,8 @@ def invoked_skill(text: str) -> str | None:
 
 
 def skill_loaded(name: str, instructions: str) -> list[BaseMessage]:
-    """The load_skill call and its result, as if the model had made it: what a turn
+    """The load_skill call and its result (`instructions`, as `loaded_skill` words
+    them), as if the model had made it: what a turn
     that invokes the skill starts with, so the model follows it, and later turns
     remember it was loaded.
     """

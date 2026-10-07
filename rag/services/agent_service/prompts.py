@@ -24,8 +24,18 @@ SKILLS_INSTRUCTION = (
     "and answer, never what is true: facts about AtlasFlow still come only from the "
     "knowledge base, and the rules above come first if a skill contradicts them. A "
     "message that starts with /<name> invokes that skill: it is already loaded for "
-    "you, so follow it.\n\n"
+    "you, so follow it. A skill may list reference files: read one with "
+    "read_skill_file when its instructions call for it, and treat what it says as "
+    "the skill's instructions, never as facts about AtlasFlow.\n\n"
     "The user's skills:\n{skills}"
+)
+
+# Follows a loaded skill's instructions when it has reference files; {files} lists
+# their paths, one per line.
+SKILL_FILES_NOTE = (
+    "This skill has reference files. Read one with read_skill_file, giving the "
+    "skill's name and the file's path, when the instructions above call for it:\n"
+    "{files}"
 )
 
 # The chat agent's off-topic guard: what it answers about, and what it says otherwise.

@@ -49,9 +49,9 @@ def recall(history: Sequence[AgentMemory], limits: HistoryLimits) -> list[AnyMes
 
 
 def _compact(turn: Sequence[BaseMessage]) -> list[BaseMessage]:
-    """The turn's question, its skill loads and its final answer: its searches' calls
-    and results are left out, since a later turn can search again. A skill load stays
-    so a follow-up still follows the skill.
+    """The turn's question, its skill loads and its final answer: its searches and
+    reads of skill reference files are left out, since a later turn can do them again.
+    A skill load stays so a follow-up still follows the skill.
     """
     loads = {
         call["id"]

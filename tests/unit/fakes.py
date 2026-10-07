@@ -1,6 +1,6 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
@@ -21,6 +21,7 @@ from rag.domain.models import (
     RunContext,
     Share,
     Skill,
+    SkillContent,
     StreamEvent,
     TextDelta,
     Turn,
@@ -421,11 +422,17 @@ class FakeSkillRepository:
     """In-memory SkillRepositoryPort."""
 
     def __init__(self):
-        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str]] = {}  # by owner, name
+        # By owner and name: the skill, its instructions and its files by path.
+        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str, dict[str, str]]] = {}
         self._clock = datetime(2026, 3, 1, tzinfo=UTC)
 
     async def save(
-        self, user_id: uuid.UUID, name: str, description: str, instructions: str
+        self,
+        user_id: uuid.UUID,
+        name: str,
+        description: str,
+        instructions: str,
+        files: Mapping[str, str],
     ) -> Skill:
         self._clock += timedelta(seconds=1)
         existing = self.rows.get((user_id, name))
@@ -433,27 +440,36 @@ class FakeSkillRepository:
             id=existing[0].id if existing else uuid.uuid4(),
             name=name,
             description=description,
+            file_count=len(files),
             created_at=existing[0].created_at if existing else self._clock,
             updated_at=self._clock,
         )
-        self.rows[user_id, name] = (skill, instructions)
+        self.rows[user_id, name] = (skill, instructions, dict(files))
         return skill
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
         return sorted(
-            (skill for (owner, _), (skill, _) in self.rows.items() if owner == user_id),
+            (
+                skill
+                for (owner, _), (skill, *_) in self.rows.items()
+                if owner == user_id
+            ),
             key=lambda s: s.name,
         )
 
-    async def get_instructions(self, user_id: uuid.UUID, name: str) -> str | None:
+    async def get_content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         row = self.rows.get((user_id, name))
-        return row[1] if row else None
+        return SkillContent(row[1], tuple(sorted(row[2]))) if row else None
+
+    async def get_file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+        row = self.rows.get((user_id, name))
+        return row[2].get(path) if row else None
 
     async def delete_owned(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> bool:
         key = next(
             (
                 k
-                for k, (skill, _) in self.rows.items()
+                for k, (skill, *_) in self.rows.items()
                 if k[0] == user_id and skill.id == skill_id
             ),
             None,

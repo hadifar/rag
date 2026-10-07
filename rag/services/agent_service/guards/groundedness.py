@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from rag.domain.ports import LLMPort
 from rag.services.agent_service.prompts import VERIFIER_PROMPT
-from rag.services.agent_service.tools import SKILL_TOOL
+from rag.services.agent_service.tools import SKILL_TOOLS
 from rag.services.agent_service.turn import turn_tool_messages
 from rag.shared.resilience import or_default
 
@@ -18,7 +18,7 @@ def _collect_context(messages: Sequence[BaseMessage]) -> str:
     return "\n\n".join(
         str(m.content)
         for m in turn_tool_messages(messages)
-        if m.content and m.name != SKILL_TOOL
+        if m.content and m.name not in SKILL_TOOLS
     )
 
 

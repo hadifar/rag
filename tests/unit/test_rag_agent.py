@@ -45,6 +45,7 @@ from rag.services.agent_service.prompts import (
     OFF_TOPIC_SCOPE,
     PLANNING_INSTRUCTIONS,
     REVISION_INSTRUCTION,
+    SKILL_FILES_NOTE,
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.agent import RagAgent
@@ -439,6 +440,7 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == [
         "load_skill",
+        "read_skill_file",
         "search_kb",
         "write_todos",
     ]
@@ -808,6 +810,101 @@ async def test_load_skill_hands_the_model_the_users_instructions() -> None:
     assert first.content == "Group the changes by area."
     # Another user's skill isn't found by its name.
     assert second.content == "The user has no skill named 'other-notes'."
+
+
+def _read_skill_file(skill: str, path: str) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_skill_file",
+                "args": {"skill": skill, "path": path},
+                "id": "file-1",
+            }
+        ],
+    )
+
+
+async def _skills_with_files() -> SkillService:
+    """The user's release-notes skill, with two reference files."""
+    repository = FakeSkillRepository()
+    await repository.save(
+        _USER,
+        "release-notes",
+        "Write release notes.",
+        "Group the changes by area.",
+        {"templates/notes.md": "## Fixed", "references/style.md": "Be brief."},
+    )
+    await repository.save(
+        uuid.uuid4(), "other-notes", "Other.", "Other.", {"secret.md": "Theirs."}
+    )
+    return SkillService(repository)
+
+
+_LOADED_WITH_FILES = "Group the changes by area.\n\n" + SKILL_FILES_NOTE.format(
+    files="- references/style.md\n- templates/notes.md"
+)
+
+
+async def test_a_loaded_skill_lists_its_reference_files() -> None:
+    model = _ScriptedChatModel(answers=[_load_skill("release-notes"), _answer("A")])
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    assert model.agent_calls[1]["messages"][-1].content == _LOADED_WITH_FILES
+
+
+async def test_read_skill_file_hands_the_model_one_of_the_users_files() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _read_skill_file("release-notes", "nope.md"),
+            _read_skill_file("other-notes", "secret.md"),  # another user's
+            _answer("A"),
+        ]
+    )
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    read, missing, theirs = (call["messages"][-1] for call in model.agent_calls[1:])
+    assert read.content == "Be brief."
+    assert missing.content == "The user's skill 'release-notes' has no file 'nope.md'."
+    assert theirs.content == ("The user's skill 'other-notes' has no file 'secret.md'.")
+
+
+async def test_a_skill_file_is_not_what_the_answer_is_checked_against() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _search("pricing"),
+            _answer("A"),
+        ]
+    )
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    assert "facts about pricing" in model.verifier_calls[0]
+    assert "Be brief." not in model.verifier_calls[0]
+
+
+async def test_a_later_turn_rereads_a_skill_load_but_not_its_file_reads() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _answer("Notes."),
+            _answer("More."),
+        ]
+    )
+    chat = _Chat(model, skills=await _skills_with_files())
+    await chat.send("/release-notes for v2.3")
+
+    await chat.send("and v2.4?")
+
+    later = model.agent_calls[2]["messages"]
+    assert _loaded_skills(later) == [_LOADED_WITH_FILES]
+    assert not any(
+        isinstance(m, ToolMessage) and m.name == "read_skill_file" for m in later
+    )
 
 
 async def test_later_turns_reread_earlier_answers_but_not_their_searches() -> None:

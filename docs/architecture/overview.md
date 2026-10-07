@@ -34,12 +34,12 @@ Each conversation has a model (`gpt-6-luna`, `gpt-6-astra` or `gpt-6-sol`) and a
 * The model is the one the provider is called with (for Azure, the deployment name). Only the agent's answers use it; titles and the guards run on `LLM__MODEL`.
 * The effort is sent as the model's reasoning effort (`max` is `high`), only when `LLM__REASONING_EFFORT` is set (reasoning models).
 
-A user can save skills: SKILL.md files with YAML frontmatter (`name`, `description`) and markdown instructions.
+A user can save skills: SKILL.md files with YAML frontmatter (`name`, `description`) and markdown instructions, uploaded alone or in a `.zip`/`.skill` archive with reference files (text only).
 
-* `POST /api/skills` parses the file and stores it in `user_skills`. A skill with the same name as an existing one replaces it. `GET /api/skills` lists them, and `DELETE /api/skills/{id}` deletes one.
-* A user's skills apply to all of their conversations. The agent sees each skill's name and description on every turn, and loads a skill's instructions (`load_skill`) when a question fits its description.
+* `POST /api/skills` parses the file and stores it in `user_skills`, and an archive's reference files in `user_skill_files`. A skill with the same name as an existing one replaces it. `GET /api/skills` lists them, and `DELETE /api/skills/{id}` deletes one.
+* A user's skills apply to all of their conversations. The agent sees each skill's name and description on every turn, and loads a skill's instructions (`load_skill`) when a question fits its description. It reads a reference file (`read_skill_file`) when the instructions call for it.
 * A message that starts with `/<name>` invokes that skill: the turn starts with it loaded. The composer suggests the user's skills while a `/` command is typed.
-* Skills change how the agent answers, not where facts come from. The groundedness guard ignores `load_skill` results.
+* Skills change how the agent answers, not where facts come from. The groundedness guard ignores `load_skill` and `read_skill_file` results. Skills are untrusted input: see [Limitations](../limitations.md#security).
 
 The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`, default `data/data.zip`).
 

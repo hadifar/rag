@@ -907,6 +907,25 @@ def test_a_skill_is_uploaded_listed_and_deleted(
     assert client.get("/api/skills", headers=auth_headers).json() == []
 
 
+def test_a_skill_archive_is_uploaded_with_its_reference_files(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("release-notes/SKILL.md", _SKILL)
+        # Past the 50 KB a SKILL.md may be: the whole archive is read.
+        archive.writestr("release-notes/references/big.md", "x" * 90_000)
+
+    response = client.post(
+        "/api/skills",
+        files={"file": ("release-notes.skill", buffer.getvalue(), "application/zip")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["file_count"] == 1
+
+
 def test_an_invalid_skill_file_is_rejected_saying_why(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:

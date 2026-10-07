@@ -46,7 +46,7 @@ from rag.domain.models.ingestion import (
     RawDocument,
 )
 from rag.domain.models.retrieval import Chunk
-from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill
+from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill, SkillContent
 
 __all__ = [
     "DEFAULT_EFFORT",
@@ -81,6 +81,7 @@ __all__ = [
     "Share",
     "SharedConversation",
     "Skill",
+    "SkillContent",
     "SourceArtifact",
     "StreamEvent",
     "TaggedStreamEvent",

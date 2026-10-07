@@ -171,6 +171,7 @@ const notes: SkillResponse = {
   id: 's1',
   name: 'release-notes',
   description: 'Write release notes.',
+  file_count: 0,
   created_at: '2026-10-07T10:00:00Z',
   updated_at: '2026-10-07T10:00:00Z',
 };
@@ -192,6 +193,25 @@ describe('SettingsPage skills', () => {
     expect(await screen.findByText('release-notes')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Saved skill “release-notes”.');
     expect(uploadSkill).toHaveBeenCalledWith(file);
+  });
+
+  it('shows how many reference files a skill has', async () => {
+    server.use(http.get('/api/skills', () => HttpResponse.json([{ ...notes, file_count: 2 }])));
+    renderSettings({ isAdmin: false });
+
+    expect(await screen.findByText('2 reference files')).toBeInTheDocument();
+  });
+
+  it('turns down a file over the size limit without uploading it', async () => {
+    vi.mocked(uploadSkill).mockClear();
+    const user = renderSettings({ isAdmin: false });
+    await screen.findByText('No skills yet.');
+
+    const big = new File(['x'.repeat(50 * 1024 + 1)], 'SKILL.md', { type: 'text/markdown' });
+    await user.upload(screen.getByLabelText('Skill file'), big);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('larger than 50 KB');
+    expect(uploadSkill).not.toHaveBeenCalled();
   });
 
   it("shows the backend's reason when a skill is rejected", async () => {

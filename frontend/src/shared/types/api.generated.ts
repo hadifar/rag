@@ -425,7 +425,8 @@ export interface paths {
         /**
          * Upload Skill
          * @description Saves a SKILL.md file (frontmatter with `name` and `description`, then the
-         *     instructions), replacing the caller's skill of that name if they have one.
+         *     instructions), or a .zip or .skill archive of one with its reference files,
+         *     replacing the caller's skill of that name if they have one.
          */
         post: operations["upload_skill_api_skills_post"];
         delete?: never;
@@ -725,6 +726,8 @@ export interface components {
             name: string;
             /** Description */
             description: string;
+            /** File Count */
+            file_count: number;
             /**
              * Created At
              * Format: date-time
