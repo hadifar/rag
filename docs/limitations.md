@@ -63,10 +63,6 @@ Known gaps. None of these is addressed yet.
 * The agent's whole memory of the conversation goes to the LLM every turn. Long conversations can exceed the context window.
 * Turns from before migration `0014` have no agent memory: the agent starts those conversations afresh.
 
-## Frontend
-
-* The Settings page Save button persists nothing.
-
 ## Security
 
 * No password reset and no email verification.
