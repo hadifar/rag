@@ -32,6 +32,13 @@ def normalize_text(text: str) -> str:
     return _BLANK_LINE_RUN.sub("\n\n", text).strip()
 
 
+def one_line(text: str) -> str:
+    """`text` normalized (`normalize_text`) onto one line: every run of whitespace, line
+    breaks included, becomes one space.
+    """
+    return " ".join(normalize_text(text).split())
+
+
 def _is_visible(char: str) -> bool:
     """False for control characters but newline and tab, and for format characters
     but the ones in `_KEPT_FORMAT`.

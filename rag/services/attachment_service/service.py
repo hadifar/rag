@@ -11,7 +11,7 @@ from rag.domain.errors import (
 from rag.domain.models import Attachment, AttachmentFile
 from rag.domain.ports import AttachmentRepositoryPort, ConversationRepositoryPort
 from rag.services.attachment_service.kinds import KINDS, AttachmentKind
-from rag.shared.text_normalizer import normalize_text
+from rag.shared.text_normalizer import one_line
 
 MAX_NAME_LENGTH = 255  # characters kept of an uploaded file's name
 FALLBACK_NAME = "attachment"
@@ -105,6 +105,6 @@ def _base_name(name: str) -> str:
     """The file's own name, without the directories a client may send (with either
     slash), normalized as typed text, on one line, and capped in length.
     """
-    base = " ".join(normalize_text(PureWindowsPath(name).name).split())
+    base = one_line(PureWindowsPath(name).name)
     base = base[:MAX_NAME_LENGTH]
     return base or FALLBACK_NAME

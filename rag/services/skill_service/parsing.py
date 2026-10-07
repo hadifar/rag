@@ -5,7 +5,7 @@ import yaml
 
 from rag.domain.errors import InvalidSkillError
 from rag.domain.models import SKILL_NAME_PATTERN
-from rag.shared.text_normalizer import normalize_text
+from rag.shared.text_normalizer import normalize_text, one_line
 
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
@@ -74,7 +74,7 @@ def _name(value: object) -> str:
 def _description(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise InvalidSkillError("its frontmatter has no `description`")
-    description = " ".join(normalize_text(value).split())
+    description = one_line(value)
     if len(description) > MAX_DESCRIPTION_LENGTH:
         raise InvalidSkillError(
             f"its description is longer than {MAX_DESCRIPTION_LENGTH} characters"
