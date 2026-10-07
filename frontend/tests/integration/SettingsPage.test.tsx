@@ -161,6 +161,12 @@ describe('SettingsPage skills', () => {
     expect(await screen.findByText('No skills yet.')).toBeInTheDocument();
   });
 
+  it('says how large each kind of skill upload may be, as the backend is set', async () => {
+    renderSettings({ isAdmin: false });
+
+    expect(await screen.findByText(/\(up to 50 KB\).*\(up to 512 KB\)/s)).toBeInTheDocument();
+  });
+
   it('uploads a skill and adds it to the list', async () => {
     vi.mocked(uploadSkill).mockResolvedValue(notes);
     const user = renderSettings({ isAdmin: false });

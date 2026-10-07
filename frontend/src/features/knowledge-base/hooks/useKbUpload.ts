@@ -1,7 +1,9 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useUploadLimits } from '@/features/settings';
 import { errorDetail, errorMessage, errorStatus } from '@/shared/api/errors';
+import { sizeLabel } from '@/shared/sizes';
 import type { IngestionRunResponse } from '@/shared/types';
 import {
   fetchIngestionRun,
@@ -16,17 +18,21 @@ const POLL_INTERVAL_MS = 2000;
 // Consecutive failed status checks (network blips) tolerated before giving up.
 const MAX_POLL_FAILURES = 5;
 const LOST_CONTACT = 'Lost contact with the server; check back here in a while.';
-// nginx answers these itself (as HTML), before the backend's JSON `detail` exists.
-const PROXY_ERRORS = {
-  413: 'The file is larger than 20 MB.',
-  429: 'Too many requests; wait a moment and try again.',
-};
+const TOO_MANY_REQUESTS = 'Too many requests; wait a moment and try again.';
 
-/** Why an upload was rejected: the backend's reason (e.g. not a zip), else the proxy's. */
-function uploadErrorText(err: unknown): string {
+/**
+ * Why an upload was rejected: the backend's reason (e.g. not a zip), else the proxy's,
+ * which nginx answers itself (as HTML), with no JSON `detail`. `maxBytes` is the largest
+ * zip the backend takes; null if it isn't known.
+ */
+function uploadErrorText(err: unknown, maxBytes: number | null): string {
   const status = errorStatus(err);
   const fallback = status === null ? "Couldn't reach the server." : `Upload failed (${status}).`;
-  return errorDetail(err) ?? errorMessage(err, PROXY_ERRORS, fallback);
+  const proxyErrors = {
+    413: maxBytes === null ? 'The file is too large.' : `The file is larger than ${sizeLabel(maxBytes)}.`,
+    429: TOO_MANY_REQUESTS,
+  };
+  return errorDetail(err) ?? errorMessage(err, proxyErrors, fallback);
 }
 
 /**
@@ -36,6 +42,7 @@ function uploadErrorText(err: unknown): string {
  */
 export function useKbUpload() {
   const queryClient = useQueryClient();
+  const maxBytes = useUploadLimits()?.kb_max_bytes ?? null;
 
   // The most recent run: what the page shows, and the run it follows while it's running.
   // On failure only the "last updated" line is missing; uploading still works.
@@ -75,7 +82,7 @@ export function useKbUpload() {
     phase = 'uploading';
   } else if (uploading.isError) {
     phase = 'failed';
-    error = uploadErrorText(uploading.error);
+    error = uploadErrorText(uploading.error, maxBytes);
   } else if (isRunning) {
     phase = poll.isError ? 'failed' : 'running';
     error = poll.isError ? LOST_CONTACT : null;
