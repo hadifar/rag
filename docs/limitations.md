@@ -60,7 +60,7 @@ Known gaps. None of these is addressed yet.
 
 * A failed title request leaves the conversation untitled. The next new chat reopens it.
 * Paging by `(updated_at, id)` can repeat a conversation across pages.
-* The agent's whole memory of the conversation goes to the LLM every turn. Long conversations can exceed the context window.
+* Past `LLM__HISTORY_MAX_TURNS` or `LLM__HISTORY_MAX_TOKENS`, the agent forgets the oldest turns outright: nothing summarizes them. The budget is an approximate count and leaves out attachments, so a chat heavy with attachments can still exceed the context window.
 * Turns from before migration `0014` have no agent memory: the agent starts those conversations afresh.
 
 ## Security

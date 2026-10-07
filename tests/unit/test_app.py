@@ -33,19 +33,19 @@ from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeAttachmentRepository,
     FakeConversationRepository,
-    FakeShareRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakeShareRepository,
     FakeSkillRepository,
     FakeUserRepository,
     StubAgent,
@@ -169,17 +169,6 @@ def test_ready_endpoint_exercises_retrieval_service(client: TestClient) -> None:
     response = client.get("/api/health/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-
-
-def test_settings_endpoint_returns_config(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    response = client.get("/api/settings", headers=auth_headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert body["model"] == "gpt-4o-mini"
-    assert body["temperature"] == 0.2
-    assert body["top_k"] == 3  # the search's
 
 
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:

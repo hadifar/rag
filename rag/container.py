@@ -29,6 +29,7 @@ from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.history import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
@@ -139,6 +140,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             search=retrieval_service,
             skills=skill_service,
             verdicts=caches.verdicts,
+            history_limits=HistoryLimits(
+                max_tokens=settings.LLM.HISTORY_MAX_TOKENS,
+                max_turns=settings.LLM.HISTORY_MAX_TURNS,
+            ),
         )
 
         ingestion_service = IngestionService(

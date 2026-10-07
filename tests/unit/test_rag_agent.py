@@ -48,6 +48,7 @@ from rag.services.agent_service.prompts import (
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.history import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import FakeCache, FakeSkillRepository
@@ -205,12 +206,14 @@ class _Chat:
         retry_attempts: int = 3,
         verdicts: FakeCache[InputVerdict] | None = None,
         skills: SkillService | None = None,
+        history_limits: HistoryLimits | None = None,
     ):
         self.agent = RagAgent(
             Llm(model, _no_tracing, attempts=retry_attempts),
             _StubRetrievalService(),
             skills if skills is not None else SkillService(FakeSkillRepository()),
             verdicts=verdicts if verdicts is not None else FakeCache(),
+            history_limits=history_limits,
         )
         self.history: list[AgentMemory] = []
 
@@ -707,6 +710,16 @@ async def test_later_turns_read_the_earlier_attachments_again() -> None:
     assert second.content == "What colour is it?"
 
 
+async def test_a_turn_left_out_of_the_history_takes_its_attachments_with_it() -> None:
+    model = _ScriptedChatModel(answers=[_answer("An error."), _answer("Hi.")])
+    chat = _Chat(model, history_limits=HistoryLimits(max_tokens=0))
+    await chat.send("What is this?", [_SCREENSHOT])
+
+    await chat.send("hello")
+
+    assert [m.content for m in _user_messages(model.agent_calls[1])] == ["hello"]
+
+
 async def test_the_off_topic_guard_classifies_the_attachments_with_the_message() -> (
     None
 ):
@@ -795,6 +808,47 @@ async def test_load_skill_hands_the_model_the_users_instructions() -> None:
     assert first.content == "Group the changes by area."
     # Another user's skill isn't found by its name.
     assert second.content == "The user has no skill named 'other-notes'."
+
+
+async def test_later_turns_reread_earlier_answers_but_not_their_searches() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("It costs 10."), _answer("Yes.")]
+    )
+    chat = _Chat(model)
+    await chat.send("How much?")
+
+    await chat.send("Really?")
+
+    seen = model.agent_calls[2]["messages"][1:]  # after the system prompt
+    assert [type(m) for m in seen] == [HumanMessage, AIMessage, HumanMessage]
+    assert [m.text for m in seen] == ["How much?", "It costs 10.", "Really?"]
+    # The memory itself stays whole.
+    assert any(isinstance(m, ToolMessage) for m in chat.saved_messages())
+
+
+@pytest.mark.parametrize(
+    ("limits", "seen"),
+    [
+        # Within both limits: every turn.
+        (HistoryLimits(max_tokens=1_000, max_turns=3), ["a", "b", "c", "d"]),
+        # The turn limit is reached first.
+        (HistoryLimits(max_tokens=1_000, max_turns=1), ["c", "d"]),
+        # The token limit is reached first (~110 tokens a turn).
+        (HistoryLimits(max_tokens=250, max_turns=3), ["b", "c", "d"]),
+        (HistoryLimits(max_tokens=1_000, max_turns=0), ["d"]),
+    ],
+)
+async def test_the_history_is_cut_at_whichever_limit_is_reached_first(
+    limits: HistoryLimits, seen: list[str]
+) -> None:
+    model = _ScriptedChatModel(answers=[_answer("x" * 400) for _ in range(4)])
+    chat = _Chat(model, history_limits=limits)
+    for text in ["a", "b", "c"]:
+        await chat.send(text)
+
+    await chat.send("d")
+
+    assert [m.text for m in _user_messages(model.agent_calls[3])] == seen
 
 
 async def test_a_loaded_skill_is_not_what_the_answer_is_checked_against() -> None:
