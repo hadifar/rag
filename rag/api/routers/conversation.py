@@ -1,11 +1,11 @@
 import uuid
-from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Response, UploadFile
+from fastapi import APIRouter, Depends, Response
 
 from rag.api.deps import (
     AttachmentServiceDep,
+    AttachmentUploadDep,
     AuthenticatedUserDep,
     ConversationServiceDep,
     ShareServiceDep,
@@ -144,28 +144,18 @@ async def unshare_conversation(
     await share_service.unshare(current_user.id, conversation_id)
 
 
-async def _read_attachment(
-    file: UploadFile, attachment_service: AttachmentServiceDep
-) -> tuple[str, bytes]:
-    """The upload's name and content. One byte over the limit is enough for the
-    service to reject it, without ever holding an oversized one in memory.
-    """
-    return file.filename or "", await file.read(attachment_service.max_bytes + 1)
-
-
 @router.post("/{conversation_id}/attachments", status_code=201)
 async def upload_attachment(
     conversation_id: uuid.UUID,
-    upload: Annotated[tuple[str, bytes], Depends(_read_attachment)],
+    upload: AttachmentUploadDep,
     current_user: AuthenticatedUserDep,
     attachment_service: AttachmentServiceDep,
 ) -> AttachmentResponse:
     """Keeps a file (.md, .png or .jpg) in the conversation, to send with a message by
     its id (`attachment_ids` of `POST /api/chat/{conversation_id}`).
     """
-    name, data = upload
     attachment = await attachment_service.upload(
-        current_user.id, conversation_id, name, data
+        current_user.id, conversation_id, upload.name, upload.data
     )
     return AttachmentResponse.model_validate(attachment)
 
