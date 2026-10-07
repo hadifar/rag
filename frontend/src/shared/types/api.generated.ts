@@ -673,8 +673,6 @@ export interface components {
         SettingsResponse: {
             /** Model */
             model: string;
-            /** Temperature */
-            temperature: number;
             /** Top K */
             top_k: number;
         };

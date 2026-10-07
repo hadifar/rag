@@ -38,11 +38,11 @@ def build_llm(settings: Settings, model: str | None = None) -> BaseChatModel:
 
 
 def _sampling(config: OpenAILLMConfig | AzureOpenAILLMConfig) -> dict[str, Any]:
-    """Temperature for a plain chat model; for a reasoning model, the Responses API
-    with a reasoning summary, which is the only way OpenAI returns any reasoning text.
+    """Nothing for a plain chat model; for a reasoning model, the Responses API with a
+    reasoning summary, which is the only way OpenAI returns any reasoning text.
     """
     if config.REASONING_EFFORT is None:
-        return {"temperature": config.TEMPERATURE}
+        return {}
     return {
         "use_responses_api": True,
         "reasoning": {"effort": config.REASONING_EFFORT, "summary": "auto"},

@@ -5,7 +5,6 @@ from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
 
 class SettingsResponse(BaseModel):
     model: str
-    temperature: float
     top_k: int
 
     @classmethod
@@ -15,4 +14,4 @@ class SettingsResponse(BaseModel):
                 model = llm.MODEL
             case AzureOpenAILLMConfig() as llm:
                 model = llm.DEPLOYMENT
-        return cls(model=model, temperature=llm.TEMPERATURE, top_k=top_k)
+        return cls(model=model, top_k=top_k)

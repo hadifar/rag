@@ -65,7 +65,7 @@ function answerUploads(respond: () => Response): FormData[] {
 function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse | null } = {}) {
   server.use(
     http.get('/api/settings', () =>
-      HttpResponse.json<SettingsResponse>({ model: 'm', temperature: 0.2, top_k: 4 }),
+      HttpResponse.json<SettingsResponse>({ model: 'm', top_k: 4 }),
     ),
     http.get('/api/ingestions/latest', () => HttpResponse.json(latest)),
   );

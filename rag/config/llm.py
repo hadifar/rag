@@ -14,8 +14,7 @@ class _ChatModelConfig(BaseModel):
     HISTORY_MAX_TOKENS: int = Field(default=16_000, ge=0)
     HISTORY_MAX_TURNS: int = Field(default=20, ge=0)
     # Set only for a reasoning model (e.g. gpt-5-mini, o4-mini): switches to the
-    # Responses API so its reasoning summary streams to the user. TEMPERATURE is then
-    # ignored, since reasoning models reject it.
+    # Responses API so its reasoning summary streams to the user.
     REASONING_EFFORT: Literal["minimal", "low", "medium", "high"] | None = None
 
 
