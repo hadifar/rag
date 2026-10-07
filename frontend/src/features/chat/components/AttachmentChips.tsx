@@ -28,12 +28,12 @@ export function DraftAttachments({
       {drafts.map((draft) => (
         <li
           key={draft.key}
-          className={`flex max-w-[220px] items-center gap-2 rounded-lg border px-2 py-1 ${
+          className={`flex max-w-[180px] items-center gap-1.5 rounded-md border py-0.5 pr-0.5 pl-1.5 ${
             draft.status === 'failed' ? 'border-danger-200 bg-danger-50' : 'border-slate-200 bg-slate-50'
           }`}
         >
           {draft.previewUrl ? (
-            <img src={draft.previewUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
+            <img src={draft.previewUrl} alt="" className="size-6 shrink-0 rounded object-cover" />
           ) : null}
           <div className="min-w-0 flex-1">
             <FileName name={draft.name} isImage={draft.previewUrl !== null} />
@@ -46,7 +46,7 @@ export function DraftAttachments({
             )}
           </div>
           <IconButton label={`Remove ${draft.name}`} onClick={() => onRemove(draft.key)}>
-            <XMarkIcon className="size-4" />
+            <XMarkIcon className="size-3.5" />
           </IconButton>
         </li>
       ))}

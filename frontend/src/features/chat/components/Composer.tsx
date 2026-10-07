@@ -155,7 +155,7 @@ export function Composer({ onSend, attachments, skills, run }: ComposerProps) {
       onSubmit={handleSubmit}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="shrink-0 border-t border-slate-200 p-4"
+      className="shrink-0 border-slate-200 p-4"
     >
       <div className="relative mx-auto max-w-[720px] rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         {suggesting && (
