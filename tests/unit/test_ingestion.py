@@ -14,8 +14,9 @@ from rag.domain.errors import (
     InvalidArchiveError,
     NoArchiveError,
 )
+from rag.config import UploadsConfig
 from rag.domain.models import IngestionReport, RawDocument
-from rag.services.ingestion_service import loaders, service
+from rag.services.ingestion_service import loaders
 from rag.services.ingestion_service.chunking import (
     WholeDocumentChunker,
     markdown_summary,
@@ -45,12 +46,14 @@ def _service(
     index: FakeDocumentIndex,
     archives: FakeArchiveStore | None = None,
     runs: FakeIngestionRunRepository | None = None,
+    max_archive_bytes: int = UploadsConfig().KB_MAX_BYTES,
 ) -> IngestionService:
     return IngestionService(
         index,
         WholeDocumentChunker(),
         archives or FakeArchiveStore(),
         runs or FakeIngestionRunRepository(),
+        max_archive_bytes=max_archive_bytes,
     )
 
 
@@ -141,13 +144,13 @@ def test_summary_is_title_description_and_other_headings_as_keywords() -> None:
     assert markdown_summary(text) == (
         "Plans and Pricing\n"
         "This document summarizes the plan structure.\n"
-        "Keywords: Plan overview, Starter"
+        "Sections: Plan overview, Starter"
     )
 
 
 def test_summary_has_no_description_when_a_heading_follows_the_title() -> None:
     assert markdown_summary("# Title\n## Section\n\nBody.") == (
-        "Title\nKeywords: Section"
+        "Title\nSections: Section"
     )
 
 
@@ -311,13 +314,11 @@ async def test_upload_while_a_run_is_going_is_refused_and_not_stored() -> None:
     assert len(archives.archives) == 1
 
 
-async def test_upload_over_the_size_limit_is_refused(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(service, "MAX_ARCHIVE_BYTES", 10)
+async def test_upload_over_the_size_limit_is_refused() -> None:
+    ingestion = _service(FakeDocumentIndex(), max_archive_bytes=10)
 
     with pytest.raises(ArchiveTooLargeError):
-        await _service(FakeDocumentIndex()).start_upload(b"x" * 11, user_id=None)
+        await ingestion.start_upload(b"x" * 11, user_id=None)
 
 
 async def test_invalid_upload_starts_no_run() -> None:

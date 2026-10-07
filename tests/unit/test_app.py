@@ -21,10 +21,13 @@ from rag.config import (
     LoggingObservabilityConfig,
     OpenAILLMConfig,
     Settings,
+    UploadsConfig,
 )
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.models import (
+    AppSettings,
+    UploadLimits,
     Chunk,
     SourceArtifact,
     ToolCall,
@@ -33,19 +36,19 @@ from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeAttachmentRepository,
     FakeConversationRepository,
-    FakeShareRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakeShareRepository,
     FakeSkillRepository,
     FakeUserRepository,
     StubAgent,
@@ -119,6 +122,7 @@ def client() -> Generator[TestClient]:
             WholeDocumentChunker(),
             FakeArchiveStore(),
             FakeIngestionRunRepository(),
+            max_archive_bytes=UploadsConfig().KB_MAX_BYTES,
         ),
         auth_service=auth_service,
         conversation_service=ConversationService(
@@ -137,8 +141,20 @@ def client() -> Generator[TestClient]:
         attachment_service=AttachmentService(
             attachments=attachment_repository,
             conversations=conversation_repository,
+            max_bytes=UploadsConfig().ATTACHMENT_MAX_BYTES,
         ),
-        skill_service=SkillService(skills=FakeSkillRepository()),
+        skill_service=SkillService(
+            skills=FakeSkillRepository(),
+            max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
+            max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        ),
+        app_settings=AppSettings(
+            model="gpt-4o-mini",
+            top_k=4,
+            uploads=UploadLimits(
+                **{k.lower(): v for k, v in UploadsConfig().model_dump().items()}
+            ),
+        ),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -171,20 +187,24 @@ def test_ready_endpoint_exercises_retrieval_service(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_settings_endpoint_returns_config(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    response = client.get("/api/settings", headers=auth_headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert body["model"] == "gpt-4o-mini"
-    assert body["temperature"] == 0.2
-    assert body["top_k"] == 3  # the search's
-
-
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:
     response = client.get("/api/settings")
     assert response.status_code == 401
+
+
+def test_settings_endpoint_returns_the_upload_limits(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/settings", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4o-mini"
+    assert response.json()["uploads"] == {
+        "kb_max_bytes": UploadsConfig().KB_MAX_BYTES,
+        "skill_max_bytes": UploadsConfig().SKILL_MAX_BYTES,
+        "skill_archive_max_bytes": UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        "attachment_max_bytes": UploadsConfig().ATTACHMENT_MAX_BYTES,
+    }
 
 
 def test_retrieval_endpoint_returns_document(
@@ -916,6 +936,25 @@ def test_a_skill_is_uploaded_listed_and_deleted(
     deleted = client.delete(f"/api/skills/{skill['id']}", headers=auth_headers)
     assert deleted.status_code == 204
     assert client.get("/api/skills", headers=auth_headers).json() == []
+
+
+def test_a_skill_archive_is_uploaded_with_its_reference_files(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("release-notes/SKILL.md", _SKILL)
+        # Past the 50 KB a SKILL.md may be: the whole archive is read.
+        archive.writestr("release-notes/references/big.md", "x" * 90_000)
+
+    response = client.post(
+        "/api/skills",
+        files={"file": ("release-notes.skill", buffer.getvalue(), "application/zip")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["file_count"] == 1
 
 
 def test_an_invalid_skill_file_is_rejected_saying_why(

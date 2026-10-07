@@ -425,7 +425,8 @@ export interface paths {
         /**
          * Upload Skill
          * @description Saves a SKILL.md file (frontmatter with `name` and `description`, then the
-         *     instructions), replacing the caller's skill of that name if they have one.
+         *     instructions), or a .zip or .skill archive of one with its reference files,
+         *     replacing the caller's skill of that name if they have one.
          */
         post: operations["upload_skill_api_skills_post"];
         delete?: never;
@@ -668,14 +669,16 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** SettingsResponse */
+        /**
+         * SettingsResponse
+         * @description How the app is configured, as far as its users need to know.
+         */
         SettingsResponse: {
             /** Model */
             model: string;
-            /** Temperature */
-            temperature: number;
             /** Top K */
             top_k: number;
+            uploads: components["schemas"]["UploadLimitsResponse"];
         };
         /**
          * ShareResponse
@@ -725,6 +728,8 @@ export interface components {
             name: string;
             /** Description */
             description: string;
+            /** File Count */
+            file_count: number;
             /**
              * Created At
              * Format: date-time
@@ -822,6 +827,20 @@ export interface components {
             query?: string | null;
             /** Output */
             output?: string | null;
+        };
+        /**
+         * UploadLimitsResponse
+         * @description The largest file each upload takes, in bytes.
+         */
+        UploadLimitsResponse: {
+            /** Kb Max Bytes */
+            kb_max_bytes: number;
+            /** Skill Max Bytes */
+            skill_max_bytes: number;
+            /** Skill Archive Max Bytes */
+            skill_archive_max_bytes: number;
+            /** Attachment Max Bytes */
+            attachment_max_bytes: number;
         };
         /** UserMessageResponse */
         UserMessageResponse: {

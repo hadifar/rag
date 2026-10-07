@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ignoreNotFound } from '@/shared/api/errors';
 import type { SkillResponse } from '@/shared/types';
 import { skillKeys } from '../api/queryKeys';
 import { deleteSkill } from '../api/skills';
+import { fileCountLabel } from '../model/skills';
+import type { SkillRow } from '../types';
 import { useSkillList } from './useSkillList';
 
 const DELETE_FAILED = "Couldn't delete the skill. Please try again.";
@@ -12,7 +14,11 @@ const DELETE_FAILED = "Couldn't delete the skill. Please try again.";
 /** The user's skills, and a delete that waits for the user to confirm it. */
 export function useSkills() {
   const queryClient = useQueryClient();
-  const { skills, status } = useSkillList();
+  const { skills: list, status } = useSkillList();
+  const skills: SkillRow[] = useMemo(
+    () => list.map((skill) => ({ ...skill, filesLabel: fileCountLabel(skill) })),
+    [list]
+  );
   const [pending, setPending] = useState<SkillResponse | null>(null);
 
   const { mutate, reset, isPending, isError } = useMutation({

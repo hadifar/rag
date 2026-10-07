@@ -1,11 +1,11 @@
 import io
 import zipfile
-import zlib
 from collections import Counter
 from pathlib import Path, PurePath, PurePosixPath
 
 from rag.domain.errors import InvalidArchiveError
 from rag.domain.models import RawDocument
+from rag.shared import zip_reader
 
 # Zip-bomb guards: a small upload can declare, or inflate to, far more than it looks.
 MAX_ARCHIVE_MEMBERS = 1000  # markdown files in one archive
@@ -27,9 +27,9 @@ def load_directory(directory: Path) -> list[RawDocument]:
 def load_archive(archive: bytes) -> list[RawDocument]:
     """Every .md file in a zip, at any depth. Raises InvalidArchiveError for a bad one.
 
-    Read in memory, never extracted, so member paths like `../../x` can't write
-    anywhere. The basename is the source_id, as for a directory, so folders inside
-    the zip don't change ids, and two files with the same basename are rejected.
+    Read in memory, never extracted (see `zip_reader`). The basename is the source_id,
+    as for a directory, so folders inside the zip don't change ids, and two files with
+    the same basename are rejected.
     """
     try:
         zip_file = zipfile.ZipFile(io.BytesIO(archive))
@@ -37,15 +37,10 @@ def load_archive(archive: bytes) -> list[RawDocument]:
         raise InvalidArchiveError("not a zip file") from exc
 
     with zip_file:
-        members = [info for info in zip_file.infolist() if _is_markdown(info)]
-        if len(members) > MAX_ARCHIVE_MEMBERS:
-            raise InvalidArchiveError(f"more than {MAX_ARCHIVE_MEMBERS} markdown files")
-        documents = []
-        budget = MAX_UNCOMPRESSED_BYTES
-        for info in members:
-            data = _read_member(zip_file, info, budget)
-            budget -= len(data)
-            documents.append(_to_document(info, data))
+        try:
+            documents = _read_documents(zip_file, _markdown_members(zip_file))
+        except zip_reader.ZipReadError as exc:
+            raise InvalidArchiveError(str(exc)) from exc
 
     if not documents:
         raise InvalidArchiveError("no .md files found")
@@ -53,40 +48,41 @@ def load_archive(archive: bytes) -> list[RawDocument]:
     return documents
 
 
-def _is_markdown(info: zipfile.ZipInfo) -> bool:
-    """Skips folders, and hidden/OS-metadata entries (.DS_Store, __MACOSX/)."""
-    path = PurePosixPath(info.filename)
-    return (
-        not info.is_dir()
-        and path.suffix.lower() == ".md"
-        and not any(part.startswith(".") or part == "__MACOSX" for part in path.parts)
-    )
-
-
-def _read_member(
-    zip_file: zipfile.ZipFile, info: zipfile.ZipInfo, budget: int
-) -> bytes:
-    """Reads at most budget + 1 bytes, so a member lying about its size in the zip
-    header still can't inflate past the budget.
-    """
-    try:
-        with zip_file.open(info) as member:
-            data = member.read(budget + 1)
-    except (zipfile.BadZipFile, zlib.error, NotImplementedError, RuntimeError) as exc:
-        # NotImplementedError: unsupported compression; RuntimeError: encrypted.
-        raise InvalidArchiveError(f"can't read {info.filename}") from exc
-    if len(data) > budget:
+def _markdown_members(zip_file: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    """The .md files, checked against the caps as the archive declares them."""
+    members = [
+        info
+        for info in zip_reader.files(zip_file)
+        if PurePosixPath(info.filename).suffix.lower() == ".md"
+    ]
+    if len(members) > MAX_ARCHIVE_MEMBERS:
+        raise InvalidArchiveError(f"more than {MAX_ARCHIVE_MEMBERS} markdown files")
+    if sum(info.file_size for info in members) > MAX_UNCOMPRESSED_BYTES:
         raise InvalidArchiveError(
             f"contents exceed {MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed"
         )
-    return data
+    return members
+
+
+def _read_documents(
+    zip_file: zipfile.ZipFile, members: list[zipfile.ZipInfo]
+) -> list[RawDocument]:
+    """Read within what is left of the cap, so a member that lies about its size still
+    can't inflate past it.
+    """
+    documents: list[RawDocument] = []
+    budget = MAX_UNCOMPRESSED_BYTES
+    for info in members:
+        data = zip_reader.read_capped(zip_file, info, budget)
+        budget -= len(data)
+        documents.append(_to_document(info, data))
+    return documents
 
 
 def _to_document(info: zipfile.ZipInfo, data: bytes) -> RawDocument:
-    try:
-        text = data.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise InvalidArchiveError(f"{info.filename} isn't UTF-8 text") from exc
+    text = zip_reader.decode_text(data)
+    if text is None:
+        raise InvalidArchiveError(f"{info.filename} isn't UTF-8 text")
     return _raw_document(PurePosixPath(info.filename), text)
 
 

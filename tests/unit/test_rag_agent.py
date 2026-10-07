@@ -38,6 +38,8 @@ from rag.domain.models import (
     ToolCall,
     TurnFailed,
 )
+from rag.config import UploadsConfig
+from rag.domain.ports import SkillsPort
 from rag.services.agent_service.guards.groundedness import GroundednessVerdict
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
@@ -45,9 +47,11 @@ from rag.services.agent_service.prompts import (
     OFF_TOPIC_SCOPE,
     PLANNING_INSTRUCTIONS,
     REVISION_INSTRUCTION,
+    SKILL_FILES_NOTE,
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.history import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import FakeCache, FakeSkillRepository
@@ -204,13 +208,15 @@ class _Chat:
         model: _ScriptedChatModel,
         retry_attempts: int = 3,
         verdicts: FakeCache[InputVerdict] | None = None,
-        skills: SkillService | None = None,
+        skills: SkillsPort | None = None,
+        history_limits: HistoryLimits | None = None,
     ):
         self.agent = RagAgent(
             Llm(model, _no_tracing, attempts=retry_attempts),
             _StubRetrievalService(),
-            skills if skills is not None else SkillService(FakeSkillRepository()),
+            skills if skills is not None else FakeSkillRepository(),
             verdicts=verdicts if verdicts is not None else FakeCache(),
+            history_limits=history_limits,
         )
         self.history: list[AgentMemory] = []
 
@@ -436,6 +442,7 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
     assert sorted(on_topic_call["tools"]) == [
         "load_skill",
+        "read_skill_file",
         "search_kb",
         "write_todos",
     ]
@@ -707,6 +714,16 @@ async def test_later_turns_read_the_earlier_attachments_again() -> None:
     assert second.content == "What colour is it?"
 
 
+async def test_a_turn_left_out_of_the_history_takes_its_attachments_with_it() -> None:
+    model = _ScriptedChatModel(answers=[_answer("An error."), _answer("Hi.")])
+    chat = _Chat(model, history_limits=HistoryLimits(max_tokens=0))
+    await chat.send("What is this?", [_SCREENSHOT])
+
+    await chat.send("hello")
+
+    assert [m.content for m in _user_messages(model.agent_calls[1])] == ["hello"]
+
+
 async def test_the_off_topic_guard_classifies_the_attachments_with_the_message() -> (
     None
 ):
@@ -752,10 +769,16 @@ def _load_skill(name: str) -> AIMessage:
     )
 
 
-async def _skills_of_the_user() -> SkillService:
-    skills = SkillService(FakeSkillRepository())
-    await skills.upload(_USER, _SKILL_FILE)
-    await skills.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
+async def _skills_of_the_user() -> FakeSkillRepository:
+    skills = FakeSkillRepository()
+    uploads = UploadsConfig()
+    service = SkillService(
+        skills,
+        max_skill_bytes=uploads.SKILL_MAX_BYTES,
+        max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+    )
+    await service.upload(_USER, _SKILL_FILE)
+    await service.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
     return skills
 
 
@@ -795,6 +818,142 @@ async def test_load_skill_hands_the_model_the_users_instructions() -> None:
     assert first.content == "Group the changes by area."
     # Another user's skill isn't found by its name.
     assert second.content == "The user has no skill named 'other-notes'."
+
+
+def _read_skill_file(skill: str, path: str) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "read_skill_file",
+                "args": {"skill": skill, "path": path},
+                "id": "file-1",
+            }
+        ],
+    )
+
+
+async def _skills_with_files() -> FakeSkillRepository:
+    """The user's release-notes skill, with two reference files."""
+    repository = FakeSkillRepository()
+    await repository.save(
+        _USER,
+        "release-notes",
+        "Write release notes.",
+        "Group the changes by area.",
+        {"templates/notes.md": "## Fixed", "references/style.md": "Be brief."},
+    )
+    await repository.save(
+        uuid.uuid4(), "other-notes", "Other.", "Other.", {"secret.md": "Theirs."}
+    )
+    return repository
+
+
+_LOADED_WITH_FILES = "Group the changes by area.\n\n" + SKILL_FILES_NOTE.format(
+    files="- references/style.md\n- templates/notes.md"
+)
+
+
+async def test_a_loaded_skill_lists_its_reference_files() -> None:
+    model = _ScriptedChatModel(answers=[_load_skill("release-notes"), _answer("A")])
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    assert model.agent_calls[1]["messages"][-1].content == _LOADED_WITH_FILES
+
+
+async def test_read_skill_file_hands_the_model_one_of_the_users_files() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _read_skill_file("release-notes", "nope.md"),
+            _read_skill_file("other-notes", "secret.md"),  # another user's
+            _answer("A"),
+        ]
+    )
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    read, missing, theirs = (call["messages"][-1] for call in model.agent_calls[1:])
+    assert read.content == "Be brief."
+    assert missing.content == "The user's skill 'release-notes' has no file 'nope.md'."
+    assert theirs.content == ("The user's skill 'other-notes' has no file 'secret.md'.")
+
+
+async def test_a_skill_file_is_not_what_the_answer_is_checked_against() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _search("pricing"),
+            _answer("A"),
+        ]
+    )
+
+    await _Chat(model, skills=await _skills_with_files()).send("notes please")
+
+    assert "facts about pricing" in model.verifier_calls[0]
+    assert "Be brief." not in model.verifier_calls[0]
+
+
+async def test_a_later_turn_rereads_a_skill_load_but_not_its_file_reads() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _read_skill_file("release-notes", "references/style.md"),
+            _answer("Notes."),
+            _answer("More."),
+        ]
+    )
+    chat = _Chat(model, skills=await _skills_with_files())
+    await chat.send("/release-notes for v2.3")
+
+    await chat.send("and v2.4?")
+
+    later = model.agent_calls[2]["messages"]
+    assert _loaded_skills(later) == [_LOADED_WITH_FILES]
+    assert not any(
+        isinstance(m, ToolMessage) and m.name == "read_skill_file" for m in later
+    )
+
+
+async def test_later_turns_reread_earlier_answers_but_not_their_searches() -> None:
+    model = _ScriptedChatModel(
+        answers=[_search("pricing"), _answer("It costs 10."), _answer("Yes.")]
+    )
+    chat = _Chat(model)
+    await chat.send("How much?")
+
+    await chat.send("Really?")
+
+    seen = model.agent_calls[2]["messages"][1:]  # after the system prompt
+    assert [type(m) for m in seen] == [HumanMessage, AIMessage, HumanMessage]
+    assert [m.text for m in seen] == ["How much?", "It costs 10.", "Really?"]
+    # The memory itself stays whole.
+    assert any(isinstance(m, ToolMessage) for m in chat.saved_messages())
+
+
+@pytest.mark.parametrize(
+    ("limits", "seen"),
+    [
+        # Within both limits: every turn.
+        (HistoryLimits(max_tokens=1_000, max_turns=3), ["a", "b", "c", "d"]),
+        # The turn limit is reached first.
+        (HistoryLimits(max_tokens=1_000, max_turns=1), ["c", "d"]),
+        # The token limit is reached first (~110 tokens a turn).
+        (HistoryLimits(max_tokens=250, max_turns=3), ["b", "c", "d"]),
+        (HistoryLimits(max_tokens=1_000, max_turns=0), ["d"]),
+    ],
+)
+async def test_the_history_is_cut_at_whichever_limit_is_reached_first(
+    limits: HistoryLimits, seen: list[str]
+) -> None:
+    model = _ScriptedChatModel(answers=[_answer("x" * 400) for _ in range(4)])
+    chat = _Chat(model, history_limits=limits)
+    for text in ["a", "b", "c"]:
+        await chat.send(text)
+
+    await chat.send("d")
+
+    assert [m.text for m in _user_messages(model.agent_calls[3])] == seen
 
 
 async def test_a_loaded_skill_is_not_what_the_answer_is_checked_against() -> None:
@@ -888,7 +1047,7 @@ async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
     agent = RagAgent(
         llm,
         _StubRetrievalService(),
-        SkillService(FakeSkillRepository()),
+        FakeSkillRepository(),
         verdicts=FakeCache(),
     )
     ctx = RunContext(

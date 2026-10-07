@@ -19,6 +19,7 @@ oxlint (`frontend/.oxlintrc.json`) enforces every rule above. The JSON is genera
 * Server data lives in the TanStack Query cache.
 * `AuthProvider` is the only app-wide context. It holds the session.
 * Logout clears the cache.
+* Backend configuration the UI needs, such as the upload limits, comes from `GET /api/settings` through `features/settings` (`useUploadLimits`). Never copy a backend value into the frontend.
 
 ## Backend types
 

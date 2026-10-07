@@ -11,6 +11,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from rag.config import Settings
+from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
     ConversationUpdate,
     ArtifactsReady,
@@ -63,17 +64,17 @@ async def test_create_get_touch_title_delete(
     assert (await repository.get_or_create_empty(user_id)).id == created.id
 
     touched = await repository.touch_owned(user_id, created.id)
-    assert touched is not None
     assert touched.updated_at > created.updated_at
 
     await repository.set_title(created.id, "renamed")
     fetched = await repository.get_owned(user_id, created.id)
-    assert fetched is not None
     assert fetched.title == "renamed"
 
     await repository.delete(created.id)
-    assert await repository.get_owned(user_id, created.id) is None
-    assert await repository.touch_owned(user_id, created.id) is None
+    with pytest.raises(ConversationNotFoundError):
+        await repository.get_owned(user_id, created.id)
+    with pytest.raises(ConversationNotFoundError):
+        await repository.touch_owned(user_id, created.id)
 
 
 async def test_another_users_conversation_is_not_found(
@@ -83,8 +84,10 @@ async def test_another_users_conversation_is_not_found(
     conversation = await repository.get_or_create_empty(user_id)
     stranger = uuid.uuid4()
 
-    assert await repository.get_owned(stranger, conversation.id) is None
-    assert await repository.touch_owned(stranger, conversation.id) is None
+    with pytest.raises(ConversationNotFoundError):
+        await repository.get_owned(stranger, conversation.id)
+    with pytest.raises(ConversationNotFoundError):
+        await repository.touch_owned(stranger, conversation.id)
     assert await repository.get_owned(user_id, conversation.id) == conversation
 
 
@@ -122,7 +125,6 @@ async def test_update_renames_and_pins_without_bumping_and_moves_it_between_list
     pinned = await repository.update_owned(
         user_id, conversation.id, ConversationUpdate(title="renamed", pinned=True)
     )
-    assert pinned is not None
     assert pinned.title == "renamed"
     assert pinned.pinned_at is not None
     assert pinned.updated_at == conversation.updated_at
@@ -136,18 +138,15 @@ async def test_update_renames_and_pins_without_bumping_and_moves_it_between_list
     unpinned = await repository.update_owned(
         user_id, conversation.id, ConversationUpdate(pinned=False)
     )
-    assert unpinned is not None
     assert unpinned.title == "renamed"
     assert unpinned.pinned_at is None
     assert await repository.list_pinned(user_id) == []
     assert await repository.list_for_user(user_id, limit=10, before=None) == [unpinned]
 
-    assert (
+    with pytest.raises(ConversationNotFoundError):
         await repository.update_owned(
             uuid.uuid4(), conversation.id, ConversationUpdate(title="x", pinned=True)
         )
-        is None
-    )
 
 
 async def test_update_sets_the_model_and_effort_and_keeps_them_otherwise(
@@ -160,12 +159,10 @@ async def test_update_sets_the_model_and_effort_and_keeps_them_otherwise(
     updated = await repository.update_owned(
         user_id, conversation.id, ConversationUpdate(model="gpt-6-sol", effort="max")
     )
-    assert updated is not None
     assert (updated.model, updated.effort) == ("gpt-6-sol", "max")
     renamed = await repository.update_owned(
         user_id, conversation.id, ConversationUpdate(title="t")
     )
-    assert renamed is not None
     assert (renamed.model, renamed.effort) == ("gpt-6-sol", "max")
 
 
@@ -178,7 +175,8 @@ async def test_deleting_a_user_deletes_their_conversations(
     async with pool.connection() as conn:
         await conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
 
-    assert await repository.get_owned(user_id, conversation.id) is None
+    with pytest.raises(ConversationNotFoundError):
+        await repository.get_owned(user_id, conversation.id)
 
 
 async def test_turns_read_back_in_order_with_every_kind_of_event(

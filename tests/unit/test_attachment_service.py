@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,7 +9,10 @@ from rag.domain.errors import (
     ConversationNotFoundError,
     UnsupportedAttachmentError,
 )
-from rag.domain.models import TextDelta
+from rag.config import UploadsConfig
+from rag.domain.models import Attachment, AttachmentFile, TextDelta, Upload
+from rag.services.agent_service.attachments import render
+from rag.services.attachment_service.kinds import KINDS, AttachmentKind
 from rag.services.attachment_service.service import AttachmentService
 from tests.unit.fakes import FakeAttachmentRepository, FakeConversationRepository
 
@@ -26,6 +29,7 @@ async def _setup() -> tuple[AttachmentService, FakeConversationRepository, uuid.
     service = AttachmentService(
         attachments=FakeAttachmentRepository(conversations),
         conversations=conversations,
+        max_bytes=UploadsConfig().ATTACHMENT_MAX_BYTES,
     )
     conversation = await conversations.get_or_create_empty(ALICE)
     return service, conversations, conversation.id
@@ -47,7 +51,7 @@ async def test_an_upload_is_recognized_by_its_content(
 ) -> None:
     service, _, conversation_id = await _setup()
 
-    attachment = await service.upload(ALICE, conversation_id, name, data)
+    attachment = await service.upload(ALICE, conversation_id, Upload(name, data))
 
     assert attachment.media_type == media_type
     assert attachment.size == len(data)
@@ -69,7 +73,7 @@ async def test_other_files_are_rejected(name: str, data: bytes) -> None:
     service, _, conversation_id = await _setup()
 
     with pytest.raises(UnsupportedAttachmentError, match=r"\.md, \.png, \.jpg"):
-        await service.upload(ALICE, conversation_id, name, data)
+        await service.upload(ALICE, conversation_id, Upload(name, data))
 
 
 async def test_a_file_over_its_kinds_limit_is_rejected() -> None:
@@ -78,15 +82,30 @@ async def test_a_file_over_its_kinds_limit_is_rejected() -> None:
     big_markdown = b"#" * (200 * 1024 + 1)
 
     with pytest.raises(AttachmentTooLargeError, match="200 KB"):
-        await service.upload(ALICE, conversation_id, "big.md", big_markdown)
-    assert service.max_bytes == 5 * 1024 * 1024
+        await service.upload(ALICE, conversation_id, Upload("big.md", big_markdown))
+
+
+async def test_a_file_over_the_cap_is_rejected_whatever_its_kind() -> None:
+    conversations = FakeConversationRepository()
+    service = AttachmentService(
+        attachments=FakeAttachmentRepository(conversations),
+        conversations=conversations,
+        max_bytes=10,
+    )
+    conversation = await conversations.get_or_create_empty(ALICE)
+    # Cut short where the API stopped reading, it may no longer be valid UTF-8: still
+    # "too large", not "unsupported".
+    cut = "é".encode() * 5 + b"\xc3"
+
+    with pytest.raises(AttachmentTooLargeError):
+        await service.upload(ALICE, conversation.id, Upload("notes.md", cut))
 
 
 async def test_the_name_is_kept_without_its_directories() -> None:
     service, _, conversation_id = await _setup()
 
     attachment = await service.upload(
-        ALICE, conversation_id, "C:\\Users\\me\\..\\notes\n.md", MARKDOWN
+        ALICE, conversation_id, Upload("C:\\Users\\me\\..\\notes\n.md", MARKDOWN)
     )
 
     assert attachment.name == "notes .md"
@@ -94,18 +113,18 @@ async def test_the_name_is_kept_without_its_directories() -> None:
 
 async def test_only_the_owner_can_upload_or_read_attachments() -> None:
     service, _, conversation_id = await _setup()
-    attachment = await service.upload(ALICE, conversation_id, "a.png", PNG)
+    attachment = await service.upload(ALICE, conversation_id, Upload("a.png", PNG))
 
     with pytest.raises(ConversationNotFoundError):
-        await service.upload(BOB, conversation_id, "b.png", PNG)
+        await service.upload(BOB, conversation_id, Upload("b.png", PNG))
     with pytest.raises(AttachmentNotFoundError):
         await service.get(BOB, conversation_id, attachment.id)
 
 
 async def test_attachments_to_send_come_in_the_order_given() -> None:
     service, _, conversation_id = await _setup()
-    first = await service.upload(ALICE, conversation_id, "a.png", PNG)
-    second = await service.upload(ALICE, conversation_id, "b.md", MARKDOWN)
+    first = await service.upload(ALICE, conversation_id, Upload("a.png", PNG))
+    second = await service.upload(ALICE, conversation_id, Upload("b.md", MARKDOWN))
 
     files = await service.to_send(ALICE, conversation_id, [second.id, first.id])
 
@@ -114,7 +133,7 @@ async def test_attachments_to_send_come_in_the_order_given() -> None:
 
 async def test_an_attachment_of_another_conversation_cannot_be_sent() -> None:
     service, conversations, conversation_id = await _setup()
-    attachment = await service.upload(ALICE, conversation_id, "a.png", PNG)
+    attachment = await service.upload(ALICE, conversation_id, Upload("a.png", PNG))
     await conversations.set_title(conversation_id, "first")
     other = await conversations.get_or_create_empty(ALICE)
 
@@ -124,8 +143,8 @@ async def test_an_attachment_of_another_conversation_cannot_be_sent() -> None:
 
 async def test_only_an_unsent_attachment_can_be_discarded() -> None:
     service, conversations, conversation_id = await _setup()
-    sent = await service.upload(ALICE, conversation_id, "a.png", PNG)
-    unsent = await service.upload(ALICE, conversation_id, "b.png", PNG)
+    sent = await service.upload(ALICE, conversation_id, Upload("a.png", PNG))
+    unsent = await service.upload(ALICE, conversation_id, Upload("b.png", PNG))
     await conversations.append_turn(
         conversation_id, "", [TextDelta(text="ok")], attachment_ids=[sent.id]
     )
@@ -141,8 +160,8 @@ async def test_only_an_unsent_attachment_can_be_discarded() -> None:
 
 async def test_prune_deletes_only_old_unsent_attachments() -> None:
     service, conversations, conversation_id = await _setup()
-    sent = await service.upload(ALICE, conversation_id, "a.png", PNG)
-    await service.upload(ALICE, conversation_id, "b.png", PNG)
+    sent = await service.upload(ALICE, conversation_id, Upload("a.png", PNG))
+    await service.upload(ALICE, conversation_id, Upload("b.png", PNG))
     await conversations.append_turn(
         conversation_id, "", [TextDelta(text="ok")], attachment_ids=[sent.id]
     )
@@ -150,3 +169,23 @@ async def test_prune_deletes_only_old_unsent_attachments() -> None:
     # The fake's clock is in the past, so every upload is older than an hour.
     assert await service.prune(timedelta(hours=1)) == 1
     assert list(conversations.attachments) == [sent.id]
+
+
+@pytest.mark.parametrize("kind", KINDS, ids=lambda kind: kind.media_type)
+def test_the_model_can_read_every_kind_that_can_be_attached(
+    kind: AttachmentKind,
+) -> None:
+    """A kind without a renderer in agent_service/attachments.py would be accepted, then
+    reach the model as "(unreadable)".
+    """
+    attachment = Attachment(
+        id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        name="file",
+        media_type=kind.media_type,
+        size=len(MARKDOWN),
+        sha256="",
+        created_at=datetime.now(UTC),
+    )
+    block = render(AttachmentFile(attachment, MARKDOWN))
+    assert "(unreadable)" not in block.get("text", "")

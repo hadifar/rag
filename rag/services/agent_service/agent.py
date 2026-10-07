@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncIterator, Sequence
-from typing import Any, Literal, NotRequired, cast
+from typing import Any, Literal, NotRequired
 
 from langchain.agents.middleware.todo import (
     WRITE_TODOS_SYSTEM_PROMPT,
@@ -10,12 +10,10 @@ from langchain.agents.middleware.todo import (
 from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import (
     AIMessage,
-    AnyMessage,
     BaseMessage,
     HumanMessage,
     RemoveMessage,
     SystemMessage,
-    messages_from_dict,
 )
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -44,6 +42,7 @@ from rag.services.agent_service.guards.groundedness import (
     verification_inputs,
 )
 from rag.services.agent_service.guards.off_topic import classify_input
+from rag.services.agent_service.history import HistoryLimits, recall
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.prompts import (
     ATTACHMENTS_INSTRUCTION,
@@ -62,7 +61,12 @@ from rag.services.agent_service.streaming import (
     parse_event,
 )
 from rag.services.agent_service.skills import invoked_skill, skill_loaded
-from rag.services.agent_service.tools import search_tool, skill_tool
+from rag.services.agent_service.tools import (
+    loaded_skill,
+    search_tool,
+    skill_file_tool,
+    skill_tool,
+)
 from rag.services.agent_service.turn import current_turn, is_final_answer, remember
 
 logger = logging.getLogger(__name__)
@@ -119,8 +123,14 @@ class RagAgent:
         skills: SkillsPort,
         *,
         verdicts: CachePort[InputVerdict],
+        history_limits: HistoryLimits | None = None,
     ):
-        tools = [search_tool(search), skill_tool(skills), write_todos]
+        tools = [
+            search_tool(search),
+            skill_tool(skills),
+            skill_file_tool(skills),
+            write_todos,
+        ]
         # One of each per model a conversation can be set to.
         self._on_topic_models = {
             name: model.bind_tools(tools) for name, model in llm.models.items()
@@ -133,6 +143,7 @@ class RagAgent:
         self._trace_config = llm.trace_config
         self._verdicts = verdicts  # the off-topic guard's
         self._skills = skills
+        self._history_limits = history_limits or HistoryLimits()  # see `recall`
 
         # The turn's RunContext: whose skills the model sees and load_skill reads.
         graph = StateGraph(ChatState, context_schema=RunContext)
@@ -162,13 +173,11 @@ class RagAgent:
         earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> "AgentTurn":
         """Answers `message` and its `attachments`, given the agent's memory of each
-        earlier turn and the attachments those were sent with.
+        earlier turn (compacted and cut to fit, see `recall`) and the attachments those
+        were sent with.
         """
         question = question_message(message, attachments)
-        # The earlier turns' messages, as the state types them.
-        earlier = cast(
-            list[AnyMessage], [m for turn in history for m in messages_from_dict(turn)]
-        )
+        earlier = recall(history, self._history_limits)
         files = {str(f.attachment.id): f for f in [*earlier_attachments, *attachments]}
         run = self.graph.astream_events(
             ChatState(messages=[*earlier, question], attachments=files),
@@ -212,10 +221,10 @@ class RagAgent:
         name = invoked_skill(state["messages"][-1].text)
         if name is None or state.get("decision") == "restrict":
             return {}
-        instructions = await self._skills.instructions(runtime.context.user_id, name)
-        if instructions is None:
+        content = await self._skills.content(runtime.context.user_id, name)
+        if content is None:
             return {}
-        return {"messages": skill_loaded(name, instructions)}
+        return {"messages": skill_loaded(name, loaded_skill(content))}
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]

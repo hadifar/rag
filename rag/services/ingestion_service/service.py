@@ -27,9 +27,6 @@ from rag.services.ingestion_service.loaders import load_archive
 
 logger = logging.getLogger(__name__)
 
-# Keep in sync with client_max_body_size for /api/ingestions in nginx.conf.template.
-MAX_ARCHIVE_BYTES = 20 * 1024 * 1024  # size of an uploaded zip
-
 
 class IngestionService:
     """Makes the index match a source.
@@ -49,22 +46,21 @@ class IngestionService:
         chunker: ChunkerPort,
         archives: ArchiveStorePort,
         runs: IngestionRunRepositoryPort,
+        *,
+        max_archive_bytes: int,
     ):
+        """An uploaded zip larger than `max_archive_bytes` is rejected (413)."""
         self._index = index
         self._chunker = chunker
         self._archives = archives
         self._runs = runs
-
-    @property
-    def max_archive_bytes(self) -> int:
-        """Uploads larger than this are rejected (413)."""
-        return MAX_ARCHIVE_BYTES
+        self._max_archive_bytes = max_archive_bytes
 
     async def start_upload(
         self, archive: bytes, user_id: uuid.UUID | None
     ) -> IngestionRun:
-        if len(archive) > MAX_ARCHIVE_BYTES:
-            raise ArchiveTooLargeError(MAX_ARCHIVE_BYTES)
+        if len(archive) > self._max_archive_bytes:
+            raise ArchiveTooLargeError(self._max_archive_bytes)
         # Checked before storing, so a rejected upload isn't kept. The unique index
         # behind `create` still catches two uploads racing past this check.
         if await self._runs.running() is not None:

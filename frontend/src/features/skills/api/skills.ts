@@ -1,4 +1,4 @@
-import { api, unwrap } from '@/shared/api/client';
+import { api, fileBody, unwrap } from '@/shared/api/client';
 import type { SkillResponse } from '@/shared/types';
 
 /** The user's skills, by name. */
@@ -12,18 +12,7 @@ export function fetchSkills(signal?: AbortSignal): Promise<SkillResponse[]> {
  * fit to show as is.
  */
 export function uploadSkill(file: File): Promise<SkillResponse> {
-  return unwrap(
-    api.POST('/api/skills', {
-      // The schema types the file as a string; it goes as form data, which the
-      // serializer builds from the File itself.
-      body: { file: file.name },
-      bodySerializer: () => {
-        const form = new FormData();
-        form.append('file', file);
-        return form;
-      },
-    })
-  );
+  return unwrap(api.POST('/api/skills', fileBody(file)));
 }
 
 export async function deleteSkill(skillId: string): Promise<void> {

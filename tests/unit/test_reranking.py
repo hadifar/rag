@@ -11,17 +11,17 @@ from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import FakeCache, FakeEmbeddings
 
 
-class _ScoringAgent:
-    """LLMPort whose structured reply is `scores` as (index, score) pairs, or
+class _JudgingAgent:
+    """LLMPort whose structured reply is `verdicts` as (index, relevant) pairs, or
     which raises `error`; records the prompts.
     """
 
     def __init__(
         self,
-        scores: list[tuple[int, int]] | None = None,
+        verdicts: list[tuple[int, bool]] | None = None,
         error: Exception | None = None,
     ):
-        self.scores = scores or []
+        self.verdicts = verdicts or []
         self.error = error
         self.prompts: list[str] = []
 
@@ -38,7 +38,7 @@ class _ScoringAgent:
         if self.error is not None:
             raise self.error
         return schema.model_validate(
-            {"scores": [{"index": i, "score": s} for i, s in self.scores]}
+            {"verdicts": [{"index": i, "relevant": r} for i, r in self.verdicts]}
         )
 
 
@@ -78,18 +78,17 @@ def _sources(results: list[tuple[Chunk, float]]) -> list[str]:
     return [str(chunk.metadata["source_id"]) for chunk, _score in results]
 
 
-async def test_orders_candidates_by_the_llms_score() -> None:
-    agent = _ScoringAgent(scores=[(0, 2), (1, 9), (2, 5)])
-    reranker = LlmReranker(agent)
+async def test_keeps_the_relevant_candidates_in_search_order() -> None:
+    candidates = _candidates("a", "b", "c", "d")
+    agent = _JudgingAgent(verdicts=[(3, True), (0, False), (1, True), (2, False)])
 
-    results = await reranker.rerank("q", _candidates("a", "b", "c"))
+    results = await LlmReranker(agent).rerank("q", candidates)
 
-    assert _sources(results) == ["doc-1", "doc-2", "doc-0"]
-    assert [score for _chunk, score in results] == [9.0, 5.0, 2.0]
+    assert results == [candidates[1], candidates[3]]  # search scores kept
 
 
 async def test_prompt_shows_the_query_and_each_summary_by_index() -> None:
-    agent = _ScoringAgent(scores=[(0, 1), (1, 1)])
+    agent = _JudgingAgent(verdicts=[(0, True), (1, True)])
 
     await LlmReranker(agent).rerank("price?", _candidates("Plans", "Setup"))
 
@@ -99,56 +98,51 @@ async def test_prompt_shows_the_query_and_each_summary_by_index() -> None:
     assert "text 0" not in agent.prompts[0]  # summary only, never the text
 
 
-async def test_ties_keep_the_search_order() -> None:
-    agent = _ScoringAgent(scores=[(0, 7), (1, 7), (2, 7)])
+async def test_unjudged_and_unknown_indices_are_dropped() -> None:
+    agent = _JudgingAgent(verdicts=[(1, True), (7, True)])  # 0, 2 unjudged; 7 unknown
 
     results = await LlmReranker(agent).rerank("q", _candidates("a", "b", "c"))
 
-    assert _sources(results) == ["doc-0", "doc-1", "doc-2"]
+    assert _sources(results) == ["doc-1"]
 
 
-async def test_unscored_and_unknown_indices_sink_below_scored_ones() -> None:
-    agent = _ScoringAgent(scores=[(1, 3), (7, 10)])  # 0 and 2 unscored, 7 unknown
+async def test_no_relevant_candidate_leaves_nothing() -> None:
+    agent = _JudgingAgent(verdicts=[(0, False), (1, False)])
 
-    results = await LlmReranker(agent).rerank("q", _candidates("a", "b", "c"))
-
-    assert _sources(results) == ["doc-1", "doc-0", "doc-2"]
-    assert [score for _chunk, score in results] == [3.0, 0.0, 0.0]
+    assert await LlmReranker(agent).rerank("q", _candidates("a", "b")) == []
 
 
-async def test_out_of_range_scores_are_clamped() -> None:
-    agent = _ScoringAgent(scores=[(0, -4), (1, 42)])
+async def test_a_single_candidate_is_judged_too() -> None:
+    agent = _JudgingAgent(verdicts=[(0, False)])
 
-    results = await LlmReranker(agent).rerank("q", _candidates("a", "b"))
-
-    assert [score for _chunk, score in results] == [10.0, 1.0]
+    assert await LlmReranker(agent).rerank("q", _candidates("a")) == []
+    assert len(agent.prompts) == 1
 
 
 async def test_llm_failure_raises() -> None:
-    agent = _ScoringAgent(error=RuntimeError("boom"))
+    agent = _JudgingAgent(error=RuntimeError("boom"))
 
     with pytest.raises(RuntimeError, match="boom"):
         await LlmReranker(agent).rerank("q", _candidates("a", "b"))
 
 
-async def test_a_single_candidate_needs_no_llm_call() -> None:
-    candidates = _candidates("a")
-    agent = _ScoringAgent()
+async def test_no_candidates_need_no_llm_call() -> None:
+    agent = _JudgingAgent()
 
-    assert await LlmReranker(agent).rerank("q", candidates) == candidates
+    assert await LlmReranker(agent).rerank("q", []) == []
     assert agent.prompts == []
 
 
 async def test_search_reranks_the_candidates_and_keeps_the_top_k() -> None:
     store = _VectorStore(_candidates("a", "b", "c", "d", "e"))
-    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 3), (3, 9)])
+    agent = _JudgingAgent(verdicts=[(0, False), (1, True), (2, True), (3, True)])
     service = RetrievalService(
         store, LlmReranker(agent), candidates=4, rerank_candidates=2, cache=FakeCache()
     )
 
     results = await service.search("q")
 
-    assert _sources(results) == ["doc-3", "doc-2"]  # doc-4 never reached the reranker
+    assert _sources(results) == ["doc-1", "doc-2"]  # doc-4 never reached the reranker
     assert "[4]" not in agent.prompts[0]
 
 
@@ -189,7 +183,7 @@ async def test_search_without_reranking_keeps_the_vector_order() -> None:
 
 async def test_a_repeated_query_is_answered_from_the_cache() -> None:
     store = _VectorStore(_candidates("a", "b", "c"))
-    agent = _ScoringAgent(scores=[(0, 1), (1, 2), (2, 9)])
+    agent = _JudgingAgent(verdicts=[(0, True), (1, True), (2, True)])
     service = RetrievalService(
         store, LlmReranker(agent), candidates=3, rerank_candidates=2, cache=FakeCache()
     )
@@ -208,7 +202,7 @@ async def test_a_failed_rerank_keeps_the_search_order_and_is_not_cached() -> Non
     cache: FakeCache[list[tuple[Chunk, float]]] = FakeCache()
     service = RetrievalService(
         _VectorStore(candidates),
-        LlmReranker(_ScoringAgent(error=RuntimeError("boom"))),
+        LlmReranker(_JudgingAgent(error=RuntimeError("boom"))),
         candidates=3,
         rerank_candidates=2,
         cache=cache,

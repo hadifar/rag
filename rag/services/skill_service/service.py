@@ -7,50 +7,60 @@ from rag.domain.errors import (
 )
 from rag.domain.models import Skill
 from rag.domain.ports import SkillRepositoryPort
+from rag.services.skill_service.archive import is_archive, read_archive
 from rag.services.skill_service.parsing import parse_skill
 
-MAX_SKILL_BYTES = 50 * 1024  # one SKILL.md file
 # Every skill's name and description goes into each of the agent's model calls.
 MAX_SKILLS = 20
 
 
 class SkillService:
     """The skills a user saves: instructions the agent loads, by name, when a request
-    fits a skill's description. A user's skills are theirs alone, and apply to every
-    conversation of theirs.
+    fits a skill's description, and reference files it reads when they call for one. A
+    user's skills are theirs alone, and apply to every conversation of theirs.
     """
 
-    def __init__(self, skills: SkillRepositoryPort):
+    def __init__(
+        self,
+        skills: SkillRepositoryPort,
+        *,
+        max_skill_bytes: int,
+        max_archive_bytes: int,
+    ):
+        """A SKILL.md file, alone or in an archive, may be up to `max_skill_bytes`; a
+        .zip or .skill archive, as uploaded, up to `max_archive_bytes`.
+        """
         self._skills = skills
-
-    @property
-    def max_bytes(self) -> int:
-        """No upload larger than this can be accepted."""
-        return MAX_SKILL_BYTES
+        self._max_skill_bytes = max_skill_bytes
+        self._max_archive_bytes = max_archive_bytes
 
     async def upload(self, user_id: uuid.UUID, data: bytes) -> Skill:
-        """Saves the SKILL.md file as a skill, replacing the user's skill of the same
-        name if they have one; raises if it isn't a valid skill file, is too large, or
-        would take them over `MAX_SKILLS`.
+        """Saves a SKILL.md file, or a .zip or .skill archive of one with its reference
+        files (see `read_archive`), as a skill, replacing the user's skill of the same
+        name if they have one; raises if it isn't a valid skill, is too large, or would
+        take them over `MAX_SKILLS`.
         """
-        if len(data) > MAX_SKILL_BYTES:
-            raise SkillTooLargeError(MAX_SKILL_BYTES)
-        parsed = parse_skill(data)
+        if is_archive(data):
+            if len(data) > self._max_archive_bytes:
+                raise SkillTooLargeError(self._max_archive_bytes)
+            skill_file, files = read_archive(data, self._max_skill_bytes)
+        else:
+            if len(data) > self._max_skill_bytes:
+                raise SkillTooLargeError(self._max_skill_bytes)
+            skill_file, files = data, {}
+        parsed = parse_skill(skill_file)
         existing = await self._skills.list_for_user(user_id)
         if len(existing) >= MAX_SKILLS and parsed.name not in {
             s.name for s in existing
         }:
             raise TooManySkillsError(MAX_SKILLS)
         return await self._skills.save(
-            user_id, parsed.name, parsed.description, parsed.instructions
+            user_id, parsed.name, parsed.description, parsed.instructions, files
         )
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
         """The user's skills, by name."""
         return await self._skills.list_for_user(user_id)
-
-    async def instructions(self, user_id: uuid.UUID, name: str) -> str | None:
-        return await self._skills.get_instructions(user_id, name)
 
     async def delete(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> None:
         if not await self._skills.delete_owned(user_id, skill_id):

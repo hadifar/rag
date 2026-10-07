@@ -7,6 +7,7 @@ from typing import Any
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter
 
+from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
     AgentMemory,
     Attachment,
@@ -43,11 +44,12 @@ class ConversationRepository(BaseRepository[Conversation]):
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        return await self._fetch_one(
+    ) -> Conversation:
+        conversation = await self._fetch_one(
             f"SELECT {_COLUMNS} FROM conversations WHERE id = %s AND user_id = %s",
             (conversation_id, user_id),
         )
+        return _owned(conversation, conversation_id)
 
     async def list_for_user(
         self,
@@ -92,8 +94,8 @@ class ConversationRepository(BaseRepository[Conversation]):
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
         change: ConversationUpdate,
-    ) -> Conversation | None:
-        return await self._fetch_one(
+    ) -> Conversation:
+        conversation = await self._fetch_one(
             f"""
             UPDATE conversations SET
                 title = COALESCE(%(title)s::text, title),
@@ -113,11 +115,12 @@ class ConversationRepository(BaseRepository[Conversation]):
                 "user_id": user_id,
             },
         )
+        return _owned(conversation, conversation_id)
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        return await self._fetch_one(
+    ) -> Conversation:
+        conversation = await self._fetch_one(
             f"""
             UPDATE conversations SET updated_at = now()
             WHERE id = %s AND user_id = %s
@@ -125,6 +128,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             """,
             (conversation_id, user_id),
         )
+        return _owned(conversation, conversation_id)
 
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None:
         await self._execute(
@@ -208,3 +212,12 @@ class ConversationRepository(BaseRepository[Conversation]):
             )
             for turn_id, question, answer, memory in rows
         ]
+
+
+def _owned(
+    conversation: Conversation | None, conversation_id: uuid.UUID
+) -> Conversation:
+    """The row a `*_owned` query found; missing and another user's raise the same."""
+    if conversation is None:
+        raise ConversationNotFoundError(conversation_id)
+    return conversation

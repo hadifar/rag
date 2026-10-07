@@ -8,6 +8,7 @@ from rag.domain.models import RunContext, TextDelta, ToolCall
 from rag.repository.cache_repository import NoCache
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
+from tests.unit.fakes import FakeSkillRepository
 
 
 def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
@@ -26,7 +27,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         agent = RagAgent(
             llm,
             search=container.retrieval_service,
-            skills=container.skill_service,
+            skills=FakeSkillRepository(),  # a throwaway user has none
             verdicts=NoCache(),
         )
         answer = ""

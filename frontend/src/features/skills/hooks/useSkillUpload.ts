@@ -1,11 +1,18 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useUploadLimits } from '@/features/settings';
 import { errorDetail } from '@/shared/api/errors';
 import type { SkillResponse } from '@/shared/types';
 import { skillKeys } from '../api/queryKeys';
 import { uploadSkill } from '../api/skills';
-import { UPLOAD_FAILED, savedNotice, withSkill } from '../model/skills';
+import {
+  UPLOAD_FAILED,
+  savedNotice,
+  skillSizes,
+  skillUploadProblem,
+  withSkill,
+} from '../model/skills';
 import type { SkillNotice } from '../types';
 
 const NOTICE_MS = 5000;
@@ -15,11 +22,18 @@ export type SkillUpload = {
   uploading: boolean;
   /** How the last upload went, for a few seconds; null otherwise. */
   notice: SkillNotice | null;
+  /** How large a SKILL.md file and an archive may be, e.g. "50 KB"; null until known. */
+  sizes: { file: string; archive: string } | null;
 };
 
-/** Uploads a SKILL.md file to the user's skills, and says how it went. */
+/**
+ * Uploads a SKILL.md file, or a .zip or .skill archive of one, to the user's skills, and says
+ * how it went. A file of the wrong type or over the size limit is turned down without sending it.
+ */
 export function useSkillUpload(): SkillUpload {
   const queryClient = useQueryClient();
+  const limits = useUploadLimits();
+  const [refused, setRefused] = useState<string | null>(null);
   const { mutate, reset, isPending, data, error } = useMutation({
     mutationFn: (file: File) => uploadSkill(file),
     onSuccess: (skill) => {
@@ -29,20 +43,33 @@ export function useSkillUpload(): SkillUpload {
     },
   });
 
-  const notice: SkillNotice | null = data
-    ? { text: savedNotice(data), tone: 'success' }
-    : error
-      ? { text: errorDetail(error) ?? UPLOAD_FAILED, tone: 'warning' }
-      : null;
+  const notice: SkillNotice | null = refused
+    ? { text: refused, tone: 'warning' }
+    : data
+      ? { text: savedNotice(data), tone: 'success' }
+      : error
+        ? { text: errorDetail(error) ?? UPLOAD_FAILED, tone: 'warning' }
+        : null;
 
   // Hide the notice again after a moment.
   useEffect(() => {
-    if (!data && !error) return;
-    const timer = setTimeout(reset, NOTICE_MS);
+    if (!refused && !data && !error) return;
+    const timer = setTimeout(() => {
+      setRefused(null);
+      reset();
+    }, NOTICE_MS);
     return () => clearTimeout(timer);
-  }, [data, error, reset]);
+  }, [refused, data, error, reset]);
 
-  const upload = useCallback((file: File) => mutate(file), [mutate]);
+  const upload = useCallback(
+    (file: File) => {
+      const problem = skillUploadProblem(file, limits);
+      reset();
+      setRefused(problem);
+      if (!problem) mutate(file);
+    },
+    [limits, mutate, reset]
+  );
 
-  return { upload, uploading: isPending, notice };
+  return { upload, uploading: isPending, notice, sizes: skillSizes(limits) };
 }

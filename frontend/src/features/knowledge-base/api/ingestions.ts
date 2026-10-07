@@ -1,18 +1,13 @@
-import { api, apiError, apiUrl, authFetch, unwrap } from '@/shared/api/client';
+import { api, fileBody, unwrap } from '@/shared/api/client';
 import type { IngestionRunResponse } from '@/shared/types';
 
 /**
  * Uploads a knowledge-base .zip; resolves with the new `running` run. A rejected upload
  * throws an `ApiError` whose `detail` is the backend's reason (e.g. not a zip, another
- * upload still running), fit to show as is. Sent as form data, so through `authFetch`:
- * the schema describes the file as a string, which the typed client would send as JSON.
+ * upload still running), fit to show as is.
  */
-export async function uploadKnowledgeBase(file: File): Promise<IngestionRunResponse> {
-  const body = new FormData();
-  body.append('file', file);
-  const res = await authFetch(apiUrl('ingestions'), { method: 'POST', body });
-  if (!res.ok) throw await apiError(res, 'POST /api/ingestions');
-  return res.json();
+export function uploadKnowledgeBase(file: File): Promise<IngestionRunResponse> {
+  return unwrap(api.POST('/api/ingestions', fileBody(file)));
 }
 
 export function fetchIngestionRun(id: string): Promise<IngestionRunResponse> {

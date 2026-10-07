@@ -14,5 +14,6 @@ class SkillResponse(BaseModel):
     id: uuid.UUID
     name: str
     description: str
+    file_count: int  # reference files it was uploaded with
     created_at: datetime
     updated_at: datetime
