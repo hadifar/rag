@@ -5,10 +5,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime
 
-from rag.domain.errors import (
-    ConversationNotFoundError,
-    InvalidCursorError,
-)
+from rag.domain.errors import InvalidCursorError
 from rag.domain.models import (
     Conversation,
     ConversationPage,
@@ -56,7 +53,7 @@ class ConversationService:
         as it sends the message, not after the reply. Titling it also ends its life as
         the user's empty draft (see `create`).
         """
-        conversation = await self.get_owned(user_id, conversation_id)
+        conversation = await self._repository.get_owned(user_id, conversation_id)
         prompt = title_prompt(message)
         reply = await or_default(
             self._llm.generate_structured(
@@ -97,32 +94,24 @@ class ConversationService:
         on; a field `change` leaves None stays as is. No change counts as using it,
         so it keeps its place among the recent ones.
         """
-        conversation = await self._repository.update_owned(
-            user_id, conversation_id, change
-        )
-        if conversation is None:
-            raise ConversationNotFoundError(conversation_id)
-        return conversation
+        return await self._repository.update_owned(user_id, conversation_id, change)
 
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         """Each question, then its answer's events, if it sent any."""
-        await self.get_owned(user_id, conversation_id)
+        await self._repository.get_owned(user_id, conversation_id)
         return history_of(await self._repository.list_turns(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         """Its turns, and the agent's memory of them, go with the row."""
-        await self.get_owned(user_id, conversation_id)
+        await self._repository.get_owned(user_id, conversation_id)
         await self._repository.delete(conversation_id)
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> Conversation:
-        conversation = await self._repository.get_owned(user_id, conversation_id)
-        if conversation is None:
-            raise ConversationNotFoundError(conversation_id)
-        return conversation
+        return await self._repository.get_owned(user_id, conversation_id)
 
 
 def _encode_cursor(conversation: Conversation) -> str:

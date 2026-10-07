@@ -6,7 +6,6 @@ from pathlib import PureWindowsPath
 from rag.domain.errors import (
     AttachmentNotFoundError,
     AttachmentTooLargeError,
-    ConversationNotFoundError,
     UnsupportedAttachmentError,
 )
 from rag.domain.models import Attachment, AttachmentFile
@@ -45,7 +44,7 @@ class AttachmentService:
         """Keeps the file in the conversation, recognized by its content; raises if
         it's no kind that can be attached, or too large for its kind.
         """
-        await self._require_owned(user_id, conversation_id)
+        await self._conversations.get_owned(user_id, conversation_id)
         name = _base_name(name)
         kind = next((k for k in self._kinds if k.accepts(name, data)), None)
         if kind is None or not data:
@@ -77,7 +76,7 @@ class AttachmentService:
         """
         if not attachment_ids:
             return []
-        await self._require_owned(user_id, conversation_id)
+        await self._conversations.get_owned(user_id, conversation_id)
         files = await self._attachments.list_in(conversation_id, attachment_ids)
         found = {f.attachment.id for f in files}
         if missing := next((i for i in attachment_ids if i not in found), None):
@@ -90,7 +89,7 @@ class AttachmentService:
         """Deletes an attachment the user removed before sending it. One already sent
         stays with its turn.
         """
-        await self._require_owned(user_id, conversation_id)
+        await self._conversations.get_owned(user_id, conversation_id)
         if not await self._attachments.delete_unsent(conversation_id, attachment_id):
             raise AttachmentNotFoundError(attachment_id)
 
@@ -100,12 +99,6 @@ class AttachmentService:
         """
         cutoff = datetime.now(UTC) - older_than
         return await self._attachments.delete_unsent_before(cutoff)
-
-    async def _require_owned(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> None:
-        if await self._conversations.get_owned(user_id, conversation_id) is None:
-            raise ConversationNotFoundError(conversation_id)
 
 
 def _base_name(name: str) -> str:

@@ -2,7 +2,6 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator, Sequence
 
-from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import AttachmentFile, RunContext, StreamEvent
 from rag.domain.ports import (
     AgentPort,
@@ -43,8 +42,6 @@ class ChatService:
         still shows what the user saw of it.
         """
         conversation = await self._repository.touch_owned(user_id, conversation_id)
-        if conversation is None:
-            raise ConversationNotFoundError(conversation_id)
         turns = await self._repository.list_turns(conversation_id)
         history = [turn.memory for turn in turns if turn.memory is not None]
         earlier_attachments = await self._attachments.list_sent(conversation_id)
