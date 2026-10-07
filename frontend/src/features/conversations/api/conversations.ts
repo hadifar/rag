@@ -33,7 +33,11 @@ export function listPinnedConversations(signal?: AbortSignal): Promise<Conversat
   return unwrap(api.GET('/api/conversations/pinned', { signal }));
 }
 
-/** Renames, pins or unpins it; a field left out stays as is. */
+export function fetchConversation(id: string, signal?: AbortSignal): Promise<ConversationResponse> {
+  return unwrap(api.GET('/api/conversations/{conversation_id}', { params: byId(id), signal }));
+}
+
+/** Renames, pins or unpins it, or sets its model and effort; a field left out stays as is. */
 export function updateConversation(
   id: string,
   body: ConversationUpdateRequest

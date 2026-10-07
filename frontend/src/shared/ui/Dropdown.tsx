@@ -12,19 +12,24 @@ import {
   type SVGProps,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { CheckIcon } from '@heroicons/react/24/outline';
 
 const GAP = 4; // px between the anchor and the menu
+const ITEMS = '[role="menuitem"], [role="menuitemradio"]';
 const MARGIN = 8; // px the menu keeps from the window's edges
 
+type Align = 'start' | 'end';
+
 /**
- * Where the menu goes: under the anchor with their right edges lined up, or above it
+ * Where the menu goes: under the anchor with their `align` edges lined up, or above it
  * when there's no room below, and kept inside the window.
  */
-function menuPosition(anchor: DOMRect, menu: DOMRect): { top: number; left: number } {
+function menuPosition(anchor: DOMRect, menu: DOMRect, align: Align): { top: number; left: number } {
   const below = anchor.bottom + GAP;
   const top =
     below + menu.height <= window.innerHeight - MARGIN ? below : anchor.top - GAP - menu.height;
-  const left = Math.min(anchor.right - menu.width, window.innerWidth - MARGIN - menu.width);
+  const lined = align === 'start' ? anchor.left : anchor.right - menu.width;
+  const left = Math.min(lined, window.innerWidth - MARGIN - menu.width);
   return { top: Math.max(MARGIN, top), left: Math.max(MARGIN, left) };
 }
 
@@ -38,7 +43,9 @@ type DropdownProps = {
   anchorRef: RefObject<HTMLElement | null>;
   /** The menu's accessible name, e.g. "Chat options". */
   label: string;
-  /** `DropdownItem`s. */
+  /** Which edge it lines up with the anchor's: `end` (right, the default) or `start` (left). */
+  align?: Align;
+  /** `DropdownItem`s, or `DropdownOption`s to pick one of. */
   children: ReactNode;
 };
 
@@ -46,7 +53,7 @@ type DropdownProps = {
  * A menu of actions that opens next to its anchor. Arrow keys, Home and End move between
  * the items; Escape, Tab, a click outside, scrolling or resizing close it.
  */
-export function Dropdown({ isOpen, onClose, anchorRef, label, children }: DropdownProps) {
+export function Dropdown({ isOpen, onClose, anchorRef, label, align = 'end', children }: DropdownProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => {
@@ -59,11 +66,19 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
     const menu = menuRef.current;
     const anchor = anchorRef.current;
     if (!isOpen || !menu || !anchor) return;
-    const { top, left } = menuPosition(anchor.getBoundingClientRect(), menu.getBoundingClientRect());
+    const { top, left } = menuPosition(
+      anchor.getBoundingClientRect(),
+      menu.getBoundingClientRect(),
+      align
+    );
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
-    menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-  }, [isOpen, anchorRef]);
+    // The current choice of a menu of options, else its first item.
+    (
+      menu.querySelector<HTMLElement>('[aria-checked="true"]') ??
+      menu.querySelector<HTMLElement>(ITEMS)
+    )?.focus();
+  }, [isOpen, anchorRef, align]);
 
   // Its position is fixed to where the anchor was, so anything that moves the anchor closes it.
   useEffect(() => {
@@ -92,7 +107,7 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
       onClose();
       return;
     }
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
     const at = items.indexOf(document.activeElement as HTMLElement);
     const next = {
       ArrowDown: (at + 1) % items.length,
@@ -114,7 +129,7 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
       role="menu"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="fixed z-40 box-border w-44 rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-slate-900/10"
+      className="fixed z-40 box-border w-max min-w-44 rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-slate-900/10"
     >
       <CloseContext value={close}>{children}</CloseContext>
     </div>,
@@ -127,6 +142,9 @@ const tones = {
     'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:bg-slate-100 focus-visible:text-slate-900',
   danger: 'text-danger-600 hover:bg-danger-50 focus-visible:bg-danger-50',
 };
+
+const itemClass =
+  'flex box-border w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors focus:outline-none';
 
 type DropdownItemProps = {
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -149,9 +167,38 @@ export function DropdownItem({ Icon, tone = 'neutral', onSelect, children }: Dro
         close();
         onSelect();
       }}
-      className={`flex box-border w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors focus:outline-none ${tones[tone]}`}
+      className={`${itemClass} ${tones[tone]}`}
     >
       <Icon className="size-4 shrink-0" />
+      {children}
+    </button>
+  );
+}
+
+type DropdownOptionProps = {
+  /** Whether it's the current choice: it shows a check. */
+  checked: boolean;
+  /** Runs after the menu has closed. */
+  onSelect: () => void;
+  children: ReactNode;
+};
+
+/** One choice among a `Dropdown`'s options; the current one is checked. */
+export function DropdownOption({ checked, onSelect, children }: DropdownOptionProps) {
+  const close = useContext(CloseContext);
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      tabIndex={-1}
+      onClick={() => {
+        close();
+        onSelect();
+      }}
+      className={`${itemClass} ${tones.neutral}`}
+    >
+      <CheckIcon className={`size-4 shrink-0 ${checked ? '' : 'invisible'}`} />
       {children}
     </button>
   );

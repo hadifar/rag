@@ -1,8 +1,16 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import AgentMemory, Conversation, Share, StreamEvent, Turn
+from rag.domain.models import (
+    AgentMemory,
+    Conversation,
+    ConversationUpdate,
+    Share,
+    StreamEvent,
+    Turn,
+)
 
 
 class ConversationRepositoryPort(Protocol):
@@ -39,10 +47,9 @@ class ConversationRepositoryPort(Protocol):
         self,
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
-        title: str | None,
-        pinned: bool | None,
+        change: ConversationUpdate,
     ) -> Conversation | None:
-        """Sets each field given (None leaves it as is), without bumping it to most
+        """Sets each field `change` gives (None leaves it as is), without bumping it to most
         recently used; pinning a pinned one keeps when it was pinned. None, as
         `get_owned`, if it isn't the user's.
         """
@@ -67,7 +74,13 @@ class ConversationRepositoryPort(Protocol):
         question: str,
         answer: list[StreamEvent],
         memory: AgentMemory | None = None,
-    ) -> None: ...
+        attachment_ids: Sequence[uuid.UUID] = (),
+    ) -> None:
+        """`attachment_ids`, the conversation's attachments sent with `question`, in
+        the order the user attached them.
+        """
+        ...
+
     async def list_turns(
         self, conversation_id: uuid.UUID, limit: int | None = None
     ) -> list[Turn]:

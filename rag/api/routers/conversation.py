@@ -1,8 +1,11 @@
 import uuid
+from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, UploadFile
 
 from rag.api.deps import (
+    AttachmentServiceDep,
     AuthenticatedUserDep,
     ConversationServiceDep,
     ShareServiceDep,
@@ -10,6 +13,7 @@ from rag.api.deps import (
 )
 from rag.api.schema.conversation import (
     DEFAULT_PAGE_LIMIT,
+    AttachmentResponse,
     ConversationPageResponse,
     ConversationResponse,
     ConversationUpdateRequest,
@@ -56,6 +60,18 @@ async def list_pinned_conversations(
     return [ConversationResponse.model_validate(c) for c in conversations]
 
 
+@router.get("/{conversation_id}")
+async def get_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    conversation_service: ConversationServiceDep,
+) -> ConversationResponse:
+    conversation = await conversation_service.get_owned(
+        current_user.id, conversation_id
+    )
+    return ConversationResponse.model_validate(conversation)
+
+
 @router.patch("/{conversation_id}")
 async def update_conversation(
     conversation_id: uuid.UUID,
@@ -63,12 +79,9 @@ async def update_conversation(
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> ConversationResponse:
-    """Renames, pins or unpins it."""
+    """Renames, pins or unpins it, or sets the model and effort its turns run on."""
     conversation = await conversation_service.update(
-        current_user.id,
-        conversation_id,
-        title=update_request.title,
-        pinned=update_request.pinned,
+        current_user.id, conversation_id, update_request.to_update()
     )
     return ConversationResponse.model_validate(conversation)
 
@@ -129,6 +142,67 @@ async def unshare_conversation(
     share_service: ShareServiceDep,
 ) -> None:
     await share_service.unshare(current_user.id, conversation_id)
+
+
+async def _read_attachment(
+    file: UploadFile, attachment_service: AttachmentServiceDep
+) -> tuple[str, bytes]:
+    """The upload's name and content. One byte over the limit is enough for the
+    service to reject it, without ever holding an oversized one in memory.
+    """
+    return file.filename or "", await file.read(attachment_service.max_bytes + 1)
+
+
+@router.post("/{conversation_id}/attachments", status_code=201)
+async def upload_attachment(
+    conversation_id: uuid.UUID,
+    upload: Annotated[tuple[str, bytes], Depends(_read_attachment)],
+    current_user: AuthenticatedUserDep,
+    attachment_service: AttachmentServiceDep,
+) -> AttachmentResponse:
+    """Keeps a file (.md, .png or .jpg) in the conversation, to send with a message by
+    its id (`attachment_ids` of `POST /api/chat/{conversation_id}`).
+    """
+    name, data = upload
+    attachment = await attachment_service.upload(
+        current_user.id, conversation_id, name, data
+    )
+    return AttachmentResponse.model_validate(attachment)
+
+
+@router.get(
+    "/{conversation_id}/attachments/{attachment_id}",
+    response_class=Response,
+    responses={200: {"content": {"application/octet-stream": {}}}},
+)
+async def get_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    attachment_service: AttachmentServiceDep,
+) -> Response:
+    """The attachment's content, typed as what it was recognized as."""
+    file = await attachment_service.get(current_user.id, conversation_id, attachment_id)
+    return Response(
+        content=file.data,
+        media_type=file.attachment.media_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(file.attachment.name)}",
+            # An attachment never changes.
+            "Cache-Control": "private, max-age=31536000, immutable",
+        },
+    )
+
+
+@router.delete("/{conversation_id}/attachments/{attachment_id}", status_code=204)
+async def discard_attachment(
+    conversation_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    attachment_service: AttachmentServiceDep,
+) -> None:
+    """Deletes an attachment that was never sent; one already sent stays (404)."""
+    await attachment_service.discard(current_user.id, conversation_id, attachment_id)
 
 
 @router.delete("/{conversation_id}", status_code=204)

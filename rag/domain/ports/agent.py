@@ -3,7 +3,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from rag.domain.models import AgentMemory, RunContext, StreamEvent
+from rag.domain.models import AgentMemory, AttachmentFile, RunContext, StreamEvent
 
 
 class ChatTurnPort(Protocol):
@@ -19,11 +19,19 @@ class ChatTurnPort(Protocol):
 
 class AgentPort(Protocol):
     def stream(
-        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+        self,
+        message: str,
+        history: Sequence[AgentMemory],
+        ctx: RunContext,
+        *,
+        attachments: Sequence[AttachmentFile] = (),
+        earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> ChatTurnPort:
-        """Answers `message` in `ctx`'s conversation for its user, remembering
-        `history`, the `memory` of each earlier turn, oldest first: the answer's events
-        as they happen, then the turn's artifacts if a tool that hands any over ran.
+        """Answers `message` and its `attachments` in `ctx`'s conversation for its
+        user, remembering `history`, the `memory` of each earlier turn, oldest first:
+        the answer's events as they happen, then the turn's artifacts if a tool that
+        hands any over ran. `memory` refers to attachments by id only; the ones the
+        earlier turns were sent with are `earlier_attachments`.
         """
         ...
 
@@ -38,11 +46,13 @@ class LLMPort(Protocol):
         prompt: str,
         schema: type[T],
         *,
+        attachments: Sequence[AttachmentFile] = (),
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
         """One-shot completion enforced to fit `schema` (a Pydantic model class), as an
-        instance of it; raises once its retries run out or the reply is rejected. `trace`
+        instance of it; raises once its retries run out or the reply is rejected.
+        `attachments` are sent after the prompt, as the model reads each kind. `trace`
         names and tags the call as a trace of its own, under `ctx`'s user and
         conversation; leave it out inside an agent's run, whose trace already has it.
         """

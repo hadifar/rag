@@ -1,10 +1,17 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from rag.domain.models.agent.agent import AgentMemory
+from rag.domain.models.agent.agent import (
+    DEFAULT_EFFORT,
+    DEFAULT_MODEL,
+    AgentMemory,
+    Effort,
+    ModelName,
+)
 from rag.domain.models.agent.stream import StreamEvent
+from rag.domain.models.attachment import Attachment
 
 
 @dataclass(frozen=True)
@@ -17,6 +24,19 @@ class Conversation:
     updated_at: datetime
     # When the user pinned it; None while it isn't pinned.
     pinned_at: datetime | None = None
+    # What its turns run on, as the user set it.
+    model: ModelName = DEFAULT_MODEL
+    effort: Effort = DEFAULT_EFFORT
+
+
+@dataclass(frozen=True)
+class ConversationUpdate:
+    """What to change about a conversation; a field left None stays as is."""
+
+    title: str | None = None
+    pinned: bool | None = None
+    model: ModelName | None = None
+    effort: Effort | None = None
 
 
 @dataclass(frozen=True)
@@ -45,15 +65,18 @@ class Turn:
     events its answer streamed; and what the agent remembers of it.
     """
 
-    question: str
+    question: str  # empty if the user sent only attachments
     answer: list[StreamEvent]
     # None for a turn the agent forgot: blocked, failed or cut short.
     memory: AgentMemory | None = None
+    # Sent with the question, in the order the user attached them.
+    attachments: list[Attachment] = field(default_factory=list[Attachment])
 
 
 @dataclass(frozen=True)
 class UserMessage:
     text: str
+    attachments: list[Attachment] = field(default_factory=list[Attachment])
     role: Literal["user"] = "user"
 
 
@@ -76,7 +99,7 @@ def history_of(turns: list[Turn]) -> list[HistoryMessage]:
     """
     history: list[HistoryMessage] = []
     for turn in turns:
-        history.append(UserMessage(text=turn.question))
+        history.append(UserMessage(text=turn.question, attachments=turn.attachments))
         if turn.answer:
             history.append(AssistantMessage(events=turn.answer))
     return history

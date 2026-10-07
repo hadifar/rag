@@ -11,7 +11,15 @@ import {
 import type { ConversationResponse } from '@/shared/types';
 
 function conversation(id: string, updated_at = '2026-01-01T00:00:00Z'): ConversationResponse {
-  return { id, title: id, created_at: '2026-01-01T00:00:00Z', updated_at, pinned_at: null };
+  return {
+    id,
+    title: id,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at,
+    pinned_at: null,
+    model: 'gpt-6-luna',
+    effort: 'low',
+  };
 }
 
 const twoPages: ConversationPages = {

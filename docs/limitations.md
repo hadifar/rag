@@ -22,6 +22,32 @@ Known gaps. None of these is addressed yet.
 * The LLM reranker (`RETRIEVAL__RERANK_CANDIDATES`) only sees the `RETRIEVAL__RETRIEVAL_CANDIDATES` passages the search found, so it can't recover a passage ranked below them. It scores each passage by its summary alone, and a passage with no summary is shown to it blank. If its call fails, the search order is kept.
 * No retrieval evaluation set.
 
+## Attachments
+
+* Only `.md`, `.png` and `.jpg` files can be attached. The limits are 200 KB per `.md`, 5 MB per image, and 3 files per message.
+* Files are stored in Postgres as `bytea`. Nothing streams them: every upload and download is held whole in memory.
+* Every turn reloads and resends all images sent earlier in the conversation, which costs tokens and makes long image-heavy chats more likely to exceed the context window.
+* The chat model must accept image input.
+* `GroundednessGuard` checks an answer against attached markdown, but not against attached images.
+* A file that is uploaded but never sent stays stored until someone runs `rag prune-attachments`. Nothing schedules it. Removing a file while it is still uploading leaves it behind in the same way.
+* A share link's JSON includes each attachment's id, type and size. The shared page shows only the file name, and the content needs the owner's login.
+
+## Skills
+
+* A user can save up to 20 skills of up to 50 KB each. The limit is checked before the insert, so two uploads at once can go past it.
+* Without a `/<name>` command, the model decides when to load a skill. A message invokes at most one skill.
+* An off-topic (`restrict`) message loads nothing, even the skill it invokes. The guard classifies the message with its `/<name>` command, so a style skill (`/tone ...`) can be classified as off-topic.
+* The off-topic guard doesn't know about skills, so a request a skill covers can still be classified `restrict` and get no tools.
+* Nothing checks what a skill asks for. The prompt only tells the model that its own rules come first. A skill is the user's own text, so it can do no more than a message could.
+* The chat shows a `load_skill` call as a generic tool bubble.
+
+## Models
+
+* The three models are fixed in code (`ModelName` in `rag/domain/models/agent/agent.py`) and in a check constraint (migration `0022`). Adding one takes a migration.
+* The provider must serve all three. For Azure, deployments must be named `gpt-6-luna`, `gpt-6-astra` and `gpt-6-sol`; `infra/azure/main.bicep` doesn't provision them.
+* All three are treated alike: either they all reason (`LLM__REASONING_EFFORT` set) or the effort is ignored for all.
+* A new chat's picks live in the browser until its first message; leaving the page before that drops them.
+
 ## Guardrails
 
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.
@@ -36,10 +62,6 @@ Known gaps. None of these is addressed yet.
 * Paging by `(updated_at, id)` can repeat a conversation across pages.
 * The agent's whole memory of the conversation goes to the LLM every turn. Long conversations can exceed the context window.
 * Turns from before migration `0014` have no agent memory: the agent starts those conversations afresh.
-
-## Frontend
-
-* The Settings page Save button persists nothing.
 
 ## Security
 

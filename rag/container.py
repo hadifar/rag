@@ -13,7 +13,7 @@ from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
-from rag.domain.models import Chunk, InputVerdict
+from rag.domain.models import MODEL_NAMES, Chunk, InputVerdict
 from rag.domain.ports import CachePort
 from rag.repository.cache_repository import (
     EmbeddingCacheRepository,
@@ -21,13 +21,16 @@ from rag.repository.cache_repository import (
     NoCache,
     SearchCacheRepository,
 )
+from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
+from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
@@ -37,6 +40,7 @@ from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 from rag.services.share_service.service import ShareService
+from rag.services.skill_service.service import SkillService
 
 
 @dataclass
@@ -47,6 +51,8 @@ class Container:
     conversation_service: ConversationService
     chat_service: ChatService
     share_service: ShareService
+    attachment_service: AttachmentService
+    skill_service: SkillService
 
 
 @dataclass
@@ -110,6 +116,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             model=build_llm(settings),
             trace_config=trace_config,
             attempts=settings.LLM.RETRY_ATTEMPTS,
+            models={model: build_llm(settings, model) for model in MODEL_NAMES},
+            reasoning=settings.LLM.REASONING_EFFORT is not None,
         )
 
         retrieval_service = RetrievalService(
@@ -124,8 +132,13 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             cache=caches.search,
         )
 
+        skill_service = SkillService(skills=SkillRepository(db_pool))
+
         rag_agent = RagAgent(
-            llm=llm, search=retrieval_service, verdicts=caches.verdicts
+            llm=llm,
+            search=retrieval_service,
+            skills=skill_service,
+            verdicts=caches.verdicts,
         )
 
         ingestion_service = IngestionService(
@@ -147,6 +160,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
 
         conversation_repo = ConversationRepository(db_pool)
+        attachment_repo = AttachmentRepository(db_pool)
         conversation_service = ConversationService(
             repository=conversation_repo,
             llm=llm,
@@ -154,6 +168,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         chat_service = ChatService(
             repository=conversation_repo,
+            attachments=attachment_repo,
             agent=rag_agent,
         )
 
@@ -167,4 +182,9 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 shares=ShareRepository(db_pool),
                 conversations=conversation_repo,
             ),
+            attachment_service=AttachmentService(
+                attachments=attachment_repo,
+                conversations=conversation_repo,
+            ),
+            skill_service=skill_service,
         )

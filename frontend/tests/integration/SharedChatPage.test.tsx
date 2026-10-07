@@ -14,7 +14,7 @@ const shared: SharedConversationResponse = {
   title: 'Plans and pricing',
   shared_at: '2026-03-04T10:00:00Z',
   messages: [
-    { role: 'user', text: 'What plans are there?' },
+    { role: 'user', text: 'What plans are there?', attachments: [] },
     {
       role: 'assistant',
       events: [
@@ -53,6 +53,22 @@ describe('SharedChatPage', () => {
     expect(screen.queryByRole('button', { name: 'pricing.md' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(authorization).toBeNull();
+  });
+
+  it('lists the files sent with a message by name only', async () => {
+    const screenshot = { id: 'a1', name: 'error.png', media_type: 'image/png', size: 10 };
+    server.use(
+      http.get(`/api/shares/${SHARE_ID}`, () =>
+        HttpResponse.json({
+          ...shared,
+          messages: [{ role: 'user', text: 'What is this?', attachments: [screenshot] }],
+        } satisfies SharedConversationResponse),
+      ),
+    );
+    renderShared();
+
+    expect(await screen.findByText('error.png')).toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
   it('says so when the link was taken down', async () => {

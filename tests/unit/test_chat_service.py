@@ -5,15 +5,22 @@ import pytest
 
 from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
+    ConversationUpdate,
     AgentMemory,
     ArtifactsReady,
+    AttachmentFile,
     RunContext,
     StreamEvent,
     TextDelta,
     Turn,
 )
 from rag.services.chat_service.service import ChatService
-from tests.unit.fakes import FakeConversationRepository, StubAgent, StubTurn
+from tests.unit.fakes import (
+    FakeAttachmentRepository,
+    FakeConversationRepository,
+    StubAgent,
+    StubTurn,
+)
 
 ALICE = uuid.uuid4()
 BOB = uuid.uuid4()
@@ -23,7 +30,11 @@ def _service(
     agent: StubAgent | None = None,
 ) -> tuple[ChatService, FakeConversationRepository]:
     repository = FakeConversationRepository()
-    service = ChatService(repository=repository, agent=agent or StubAgent())
+    service = ChatService(
+        repository=repository,
+        attachments=FakeAttachmentRepository(repository),
+        agent=agent or StubAgent(),
+    )
     return service, repository
 
 
@@ -96,7 +107,13 @@ class _FailingTurn(StubTurn):
 
 class _FailingAgent(StubAgent):
     def stream(
-        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+        self,
+        message: str,
+        history: Sequence[AgentMemory],
+        ctx: RunContext,
+        *,
+        attachments: Sequence[AttachmentFile] = (),
+        earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> StubTurn:
         return _FailingTurn([], [{"said": message}])
 
@@ -128,3 +145,39 @@ async def test_sending_to_a_conversation_that_does_not_exist_is_not_found() -> N
 
     with pytest.raises(ConversationNotFoundError):
         await _chat(service, uuid.uuid4(), "hi")
+
+
+async def test_attachments_go_to_the_agent_and_are_saved_with_their_turn() -> None:
+    agent = StubAgent()
+    service, repository = _service(agent)
+    conversation_id = (await repository.get_or_create_empty(ALICE)).id
+    await FakeAttachmentRepository(repository).create(
+        conversation_id, "error.png", "image/png", b"png"
+    )
+    [file] = repository.attachments.values()
+
+    [_ async for _ in service.send_message(ALICE, conversation_id, "", [file])]
+    await _chat(service, conversation_id, "and now?")
+
+    assert agent.attachments == [[file], []]
+    # The second turn reads the first one's attachment again.
+    assert agent.earlier_attachments == [[], [file]]
+    turns = await repository.list_turns(conversation_id)
+    assert [t.attachments for t in turns] == [[file.attachment], []]
+
+
+async def test_a_turn_runs_on_the_model_and_effort_its_conversation_is_set_to() -> None:
+    agent = StubAgent()
+    service, repository = _service(agent)
+    conversation_id = (await repository.get_or_create_empty(ALICE)).id
+
+    await _chat(service, conversation_id, "hi")
+    await repository.update_owned(
+        ALICE, conversation_id, ConversationUpdate(model="gpt-6-sol", effort="max")
+    )
+    await _chat(service, conversation_id, "again")
+
+    assert [(c.model, c.effort) for c in agent.contexts] == [
+        ("gpt-6-luna", "low"),
+        ("gpt-6-sol", "max"),
+    ]
