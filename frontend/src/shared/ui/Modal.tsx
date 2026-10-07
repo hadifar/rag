@@ -1,5 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, type MouseEvent, type ReactNode, type SyntheticEvent } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 type Props = {
@@ -13,7 +12,10 @@ type Props = {
   children: ReactNode;
 };
 
-/** A centred card over a blurred backdrop; Escape, the backdrop and the X all close it. */
+/**
+ * A centred card over a blurred backdrop; Escape, the backdrop and the X all close it. A
+ * modal `<dialog>`: the browser keeps focus inside it and makes the page behind it inert.
+ */
 export function Modal({
   isOpen,
   onClose,
@@ -23,45 +25,45 @@ export function Modal({
   className = '',
   children,
 }: Props) {
-  // On the document, not the dialog: focus isn't always inside it.
-  useEffect(() => {
-    if (!isOpen) return;
-    const closeOnEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [isOpen, onClose]);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // Separate from the Escape listener so a new onClose doesn't re-run it and steal focus.
   useEffect(() => {
-    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const { overflow } = document.body.style;
+    dialog.showModal();
     document.body.style.overflow = 'hidden';
     return () => {
+      dialog.close();
       document.body.style.overflow = overflow;
       opener?.focus();
     };
   }, [isOpen]);
 
+  // Escape: the dialog stays open until the parent closes it through `isOpen`.
+  const handleCancel = (e: SyntheticEvent<HTMLDialogElement>) => {
+    e.preventDefault();
+    onClose();
+  };
+
+  // The card fills the dialog, so a click on the dialog itself is on its backdrop.
+  const handleClick = (e: MouseEvent<HTMLDialogElement>) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
   if (!isOpen) return null;
 
-  // Portalled so a parent's overflow or stacking context can't clip it.
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-200 starting:opacity-0 motion-reduce:transition-none"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledBy}
-        aria-describedby={describedBy}
-        className={`relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/5 transition duration-200 ease-out starting:scale-95 starting:opacity-0 motion-reduce:transition-none sm:p-8 ${className}`}
-      >
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+      onCancel={handleCancel}
+      onClick={handleClick}
+      className="m-auto w-full max-w-[min(28rem,calc(100%-2rem))] rounded-3xl bg-white p-0 shadow-2xl ring-1 ring-slate-900/5 transition duration-200 ease-out backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+    >
+      <div className={`relative p-6 sm:p-8 ${className}`}>
         {showCloseButton && (
           <button
             type="button"
@@ -74,7 +76,6 @@ export function Modal({
         )}
         {children}
       </div>
-    </div>,
-    document.body
+    </dialog>
   );
 }
