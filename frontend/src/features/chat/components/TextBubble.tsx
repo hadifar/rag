@@ -1,36 +1,12 @@
-import Markdown, { type Components } from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import type { TextContent } from '../types';
-import { isFencedCodeBlock } from '../model/markdown';
 import { BubbleFrame } from './BubbleFrame';
-
-const Code: Components['code'] = ({ className, children }) => {
-  if (isFencedCodeBlock(children)) {
-    return (
-      <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-slate-100">
-        <code className={className}>{children}</code>
-      </pre>
-    );
-  }
-  return <code className="rounded bg-slate-200 px-1 py-0.5 text-[13px]">{children}</code>;
-};
-
-// Module-level so they keep one identity: components created during render would be
-// new types every time, remounting the whole answer on each streamed chunk.
-const markdownComponents: Components = {
-  p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
-  pre: ({ children }) => <>{children}</>,
-  code: Code,
-};
-const remarkPlugins = [remarkBreaks];
+import { MarkdownBody } from './MarkdownBody';
 
 /** The assistant's answer, as markdown. */
 export function TextBubble({ text }: TextContent) {
   return (
     <BubbleFrame className="leading-6 text-slate-800">
-      <Markdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-        {text}
-      </Markdown>
+      <MarkdownBody text={text} />
     </BubbleFrame>
   );
 }
