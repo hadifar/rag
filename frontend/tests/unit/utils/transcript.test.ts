@@ -197,12 +197,17 @@ describe('turns', () => {
     ]);
   });
 
-  it('offers to retry a failed answer once it has ended, with its question', () => {
-    const failed = applyEvent(startTurn(emptyTranscript(), 'Hi'), { type: 'error', message: 'Oops' });
+  it('offers to retry a failed answer once it has ended, with its question and attachments', () => {
+    const notes = { id: 'a1', name: 'notes.md', isImage: false };
+    const failed = applyEvent(startTurn(emptyTranscript(), 'Hi', [notes]), { type: 'error', message: 'Oops' });
     expect(retryable(failed)).toBeNull();
 
     const ended = endTurn(failed);
-    expect(retryable(ended)).toEqual({ bubbleId: ended.bubbles.at(-1)!.id, question: 'Hi' });
+    expect(retryable(ended)).toEqual({
+      bubbleId: ended.bubbles.at(-1)!.id,
+      question: 'Hi',
+      attachments: [notes],
+    });
   });
 
   it('offers no retry after an answer, or for a conversation that failed to load', () => {
@@ -224,9 +229,9 @@ describe('turns', () => {
 describe('fromHistory', () => {
   it('replays each answer as the live stream showed it, each one closed', () => {
     const t = fromHistory([
-      { role: 'user', text: 'Q1' },
+      { role: 'user', text: 'Q1', attachments: [] },
       { role: 'assistant', events: [{ type: 'reasoning', text: 'R' }] },
-      { role: 'user', text: 'Q2' },
+      { role: 'user', text: 'Q2', attachments: [] },
       { role: 'assistant', events: [{ type: 'text', text: 'A2' }] },
     ]);
 
@@ -236,6 +241,32 @@ describe('fromHistory', () => {
       { type: 'reasoning', content: { text: 'R', streaming: false } },
       { type: 'user', content: { text: 'Q2' } },
       { type: 'text', content: { text: 'A2' } },
+    ]);
+  });
+
+  it('shows the files sent with each message', () => {
+    const t = fromHistory([
+      {
+        role: 'user',
+        text: '',
+        attachments: [
+          { id: 'a1', name: 'error.png', media_type: 'image/png', size: 10 },
+          { id: 'a2', name: 'notes.md', media_type: 'text/markdown', size: 5 },
+        ],
+      },
+    ]);
+
+    expect(t.bubbles).toMatchObject([
+      {
+        type: 'user',
+        content: {
+          text: '',
+          attachments: [
+            { id: 'a1', name: 'error.png', isImage: true },
+            { id: 'a2', name: 'notes.md', isImage: false },
+          ],
+        },
+      },
     ]);
   });
 });

@@ -22,6 +22,16 @@ Known gaps. None of these is addressed yet.
 * The LLM reranker (`RETRIEVAL__RERANK_CANDIDATES`) only sees the `RETRIEVAL__RETRIEVAL_CANDIDATES` passages the search found, so it can't recover a passage ranked below them. It scores each passage by its summary alone, and a passage with no summary is shown to it blank. If its call fails, the search order is kept.
 * No retrieval evaluation set.
 
+## Attachments
+
+* Only `.md`, `.png` and `.jpg` files can be attached. The limits are 200 KB per `.md`, 5 MB per image, and 3 files per message.
+* Files are stored in Postgres as `bytea`. Nothing streams them: every upload and download is held whole in memory.
+* Every turn reloads and resends all images sent earlier in the conversation, which costs tokens and makes long image-heavy chats more likely to exceed the context window.
+* The chat model must accept image input.
+* `GroundednessGuard` checks an answer against attached markdown, but not against attached images.
+* A file that is uploaded but never sent stays stored until someone runs `rag prune-attachments`. Nothing schedules it. Removing a file while it is still uploading leaves it behind in the same way.
+* A share link's JSON includes each attachment's id, type and size. The shared page shows only the file name, and the content needs the owner's login.
+
 ## Guardrails
 
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.

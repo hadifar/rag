@@ -11,6 +11,8 @@ from rag.domain.models import (
     AgentMemory,
     Artifact,
     ArtifactsReady,
+    Attachment,
+    AttachmentFile,
     Conversation,
     IndexedDocument,
     IngestionReport,
@@ -208,6 +210,8 @@ class FakeConversationRepository:
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
         self.turns: dict[uuid.UUID, list[Turn]] = {}
+        # The conversations' attachments, which FakeAttachmentRepository writes.
+        self.attachments: dict[uuid.UUID, AttachmentFile] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -299,6 +303,9 @@ class FakeConversationRepository:
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
         self.turns.pop(conversation_id, None)
+        for attachment_id, file in list(self.attachments.items()):
+            if file.attachment.conversation_id == conversation_id:
+                del self.attachments[attachment_id]
 
     async def append_turn(
         self,
@@ -306,14 +313,103 @@ class FakeConversationRepository:
         question: str,
         answer: list[StreamEvent],
         memory: AgentMemory | None = None,
+        attachment_ids: Sequence[uuid.UUID] = (),
     ) -> None:
-        turn = Turn(question, list(answer), memory)
+        attachments = [
+            self.attachments[i].attachment
+            for i in attachment_ids
+            if i in self.attachments
+            and self.attachments[i].attachment.conversation_id == conversation_id
+        ]
+        turn = Turn(question, list(answer), memory, attachments)
         self.turns.setdefault(conversation_id, []).append(turn)
 
     async def list_turns(
         self, conversation_id: uuid.UUID, limit: int | None = None
     ) -> list[Turn]:
         return list(self.turns.get(conversation_id, []))[:limit]
+
+
+class FakeAttachmentRepository:
+    """In-memory AttachmentRepositoryPort, keeping its files on `conversations`, whose
+    turns tell which were sent.
+    """
+
+    def __init__(self, conversations: FakeConversationRepository):
+        self.conversations = conversations
+        self._clock = datetime(2026, 3, 1, tzinfo=UTC)
+
+    async def create(
+        self, conversation_id: uuid.UUID, name: str, media_type: str, data: bytes
+    ) -> Attachment:
+        self._clock += timedelta(seconds=1)
+        attachment = Attachment(
+            id=uuid.uuid4(),
+            conversation_id=conversation_id,
+            name=name,
+            media_type=media_type,
+            size=len(data),
+            sha256=hashlib.sha256(data).hexdigest(),
+            created_at=self._clock,
+        )
+        self.conversations.attachments[attachment.id] = AttachmentFile(attachment, data)
+        return attachment
+
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, attachment_id: uuid.UUID
+    ) -> AttachmentFile | None:
+        if await self.conversations.get_owned(user_id, conversation_id) is None:
+            return None
+        files = await self.list_in(conversation_id, [attachment_id])
+        return files[0] if files else None
+
+    async def list_in(
+        self, conversation_id: uuid.UUID, attachment_ids: Sequence[uuid.UUID]
+    ) -> list[AttachmentFile]:
+        files = self.conversations.attachments
+        return [
+            files[i]
+            for i in attachment_ids
+            if i in files and files[i].attachment.conversation_id == conversation_id
+        ]
+
+    async def list_sent(self, conversation_id: uuid.UUID) -> list[AttachmentFile]:
+        sent = self._sent()
+        return [
+            f
+            for f in self.conversations.attachments.values()
+            if f.attachment.conversation_id == conversation_id
+            and f.attachment.id in sent
+        ]
+
+    async def delete_unsent(
+        self, conversation_id: uuid.UUID, attachment_id: uuid.UUID
+    ) -> bool:
+        if not await self.list_in(conversation_id, [attachment_id]):
+            return False
+        if attachment_id in self._sent():
+            return False
+        del self.conversations.attachments[attachment_id]
+        return True
+
+    async def delete_unsent_before(self, cutoff: datetime) -> int:
+        sent = self._sent()
+        stale = [
+            i
+            for i, f in self.conversations.attachments.items()
+            if f.attachment.created_at < cutoff and i not in sent
+        ]
+        for attachment_id in stale:
+            del self.conversations.attachments[attachment_id]
+        return len(stale)
+
+    def _sent(self) -> set[uuid.UUID]:
+        return {
+            a.id
+            for turns in self.conversations.turns.values()
+            for turn in turns
+            for a in turn.attachments
+        }
 
 
 class FakeShareRepository:
@@ -372,6 +468,7 @@ class StubGeneration:
         prompt: str,
         schema: type[T],
         *,
+        attachments: Sequence[AttachmentFile] = (),
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
@@ -399,7 +496,7 @@ class StubTurn:
 class StubAgent:
     """AgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
-    history each turn was given.
+    history and the attachments each turn was given.
     """
 
     def __init__(
@@ -410,11 +507,21 @@ class StubAgent:
         self.extra_events = extra_events or []
         self.artifacts = artifacts
         self.histories: list[list[AgentMemory]] = []
+        self.attachments: list[list[AttachmentFile]] = []
+        self.earlier_attachments: list[list[AttachmentFile]] = []
 
     def stream(
-        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+        self,
+        message: str,
+        history: Sequence[AgentMemory],
+        ctx: RunContext,
+        *,
+        attachments: Sequence[AttachmentFile] = (),
+        earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> StubTurn:
         self.histories.append(list(history))
+        self.attachments.append(list(attachments))
+        self.earlier_attachments.append(list(earlier_attachments))
         events: list[StreamEvent] = [
             TextDelta(text=f"echo: {message}"),
             *self.extra_events,

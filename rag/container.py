@@ -21,6 +21,7 @@ from rag.repository.cache_repository import (
     NoCache,
     SearchCacheRepository,
 )
+from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
@@ -28,6 +29,7 @@ from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
+from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
@@ -47,6 +49,7 @@ class Container:
     conversation_service: ConversationService
     chat_service: ChatService
     share_service: ShareService
+    attachment_service: AttachmentService
 
 
 @dataclass
@@ -147,6 +150,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
 
         conversation_repo = ConversationRepository(db_pool)
+        attachment_repo = AttachmentRepository(db_pool)
         conversation_service = ConversationService(
             repository=conversation_repo,
             llm=llm,
@@ -154,6 +158,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
 
         chat_service = ChatService(
             repository=conversation_repo,
+            attachments=attachment_repo,
             agent=rag_agent,
         )
 
@@ -165,6 +170,10 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             chat_service=chat_service,
             share_service=ShareService(
                 shares=ShareRepository(db_pool),
+                conversations=conversation_repo,
+            ),
+            attachment_service=AttachmentService(
+                attachments=attachment_repo,
                 conversations=conversation_repo,
             ),
         )

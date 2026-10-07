@@ -2,12 +2,26 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { uploadAttachment } from '@/features/chat/api/attachments';
 import { ChatPage } from '@/pages/ChatPage';
-import type { ConversationResponse, HistoryMessageResponse, MessageRequest } from '@/shared/types';
+import type {
+  AttachmentResponse,
+  ChatMessageRequest,
+  ConversationResponse,
+  HistoryMessageResponse,
+  MessageRequest,
+} from '@/shared/types';
 import { withQueryClient } from '../queryClient';
 import { server, sse } from '../server';
+
+// jsdom's FormData can't carry a File into a fetch Request here (the browser's can), so
+// the upload is the one call faked above the network.
+vi.mock('@/features/chat/api/attachments', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/chat/api/attachments')>()),
+  uploadAttachment: vi.fn(),
+}));
 
 // The real page, hook and API client; only the backend is faked (see ../server.ts).
 function renderChat(path: string) {
@@ -91,7 +105,7 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'How long is data kept?' },
+          { role: 'user', text: 'How long is data kept?', attachments: [] },
           {
             role: 'assistant',
             events: [
@@ -124,9 +138,9 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'hi' },
+          { role: 'user', text: 'hi', attachments: [] },
           { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
-          { role: 'user', text: 'Who won the cup?' },
+          { role: 'user', text: 'Who won the cup?', attachments: [] },
           {
             role: 'assistant',
             events: [
@@ -147,7 +161,7 @@ describe('ChatPage', () => {
     server.use(
       http.get('/api/conversations/:id/messages', () =>
         HttpResponse.json<HistoryMessageResponse[]>([
-          { role: 'user', text: 'hi' },
+          { role: 'user', text: 'hi', attachments: [] },
           { role: 'assistant', events: [{ type: 'text', text: 'Hello!' }] },
         ]),
       ),
@@ -188,5 +202,59 @@ describe('ChatPage', () => {
     expect(
       await screen.findByText("This conversation doesn't exist or was deleted."),
     ).toBeInTheDocument();
+  });
+
+  it('sends a file without text to a new chat, named after the file', async () => {
+    const notes: AttachmentResponse = { id: 'a1', name: 'notes.md', media_type: 'text/markdown', size: 7 };
+    vi.mocked(uploadAttachment).mockResolvedValueOnce(notes);
+    let sent: ChatMessageRequest | undefined;
+    let titledFrom: string | undefined;
+    server.use(
+      http.post('/api/conversations', () => HttpResponse.json(newConversation)),
+      http.post('/api/chat/:id', async ({ request }) => {
+        sent = (await request.json()) as ChatMessageRequest;
+        return sse([{ type: 'text', text: 'These are setup notes.' }]);
+      }),
+      http.post('/api/conversations/:id/title', async ({ request }) => {
+        titledFrom = ((await request.json()) as MessageRequest).message;
+        return HttpResponse.json({ ...newConversation, title: 'Setup notes' });
+      }),
+    );
+    const { user } = renderChat('/chat');
+
+    const file = new File(['# Notes'], 'notes.md');
+    await user.upload(screen.getByTestId('attachment-input'), file);
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('These are setup notes.')).toBeInTheDocument();
+    // Uploaded to the new chat, before it had a URL.
+    expect(uploadAttachment).toHaveBeenCalledExactlyOnceWith(newConversation.id, file);
+    expect(sent).toEqual({ message: '', attachment_ids: ['a1'] });
+    expect(titledFrom).toBe('notes.md');
+    // Sent: the composer is empty again, and the message shows the file.
+    expect(screen.queryByRole('button', { name: 'Remove notes.md' })).not.toBeInTheDocument();
+    expect(screen.getByRole('log')).toHaveTextContent('notes.md');
+  });
+
+  it('discards a file removed before sending', async () => {
+    const notes: AttachmentResponse = { id: 'a1', name: 'notes.md', media_type: 'text/markdown', size: 7 };
+    vi.mocked(uploadAttachment).mockResolvedValueOnce(notes);
+    let discarded: string | undefined;
+    server.use(
+      http.get('/api/conversations/:id/messages', () => HttpResponse.json([])),
+      http.delete('/api/conversations/:id/attachments/:attachmentId', ({ params }) => {
+        discarded = params.attachmentId as string;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { user } = renderChat('/chat/c1');
+
+    await user.upload(screen.getByTestId('attachment-input'), new File(['# Notes'], 'notes.md'));
+    await vi.waitFor(() => expect(screen.queryByText('Uploading…')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Remove notes.md' }));
+
+    await vi.waitFor(() => expect(discarded).toBe('a1'));
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 });

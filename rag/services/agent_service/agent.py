@@ -1,5 +1,4 @@
 import logging
-import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import Any, Literal, NotRequired, cast
 
@@ -24,6 +23,7 @@ from langgraph.types import Command, RetryPolicy
 
 from rag.domain.models import (
     AgentMemory,
+    AttachmentFile,
     InputDecision,
     InputVerdict,
     RunContext,
@@ -31,6 +31,12 @@ from rag.domain.models import (
     TurnFailed,
 )
 from rag.domain.ports import CachePort, SearchPort
+from rag.services.agent_service.attachments import (
+    attachments_of,
+    question_message,
+    text_of,
+    with_attachments,
+)
 from rag.services.agent_service.guards.groundedness import (
     is_grounded,
     verification_inputs,
@@ -38,6 +44,7 @@ from rag.services.agent_service.guards.groundedness import (
 from rag.services.agent_service.guards.off_topic import classify_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.prompts import (
+    ATTACHMENTS_INSTRUCTION,
     BLOCKED_MESSAGE,
     OFF_TOPIC_INSTRUCTION,
     PLANNING_INSTRUCTIONS,
@@ -52,7 +59,7 @@ from rag.services.agent_service.streaming import (
     parse_event,
 )
 from rag.services.agent_service.tools import search_tool
-from rag.services.agent_service.turn import is_final_answer, remember
+from rag.services.agent_service.turn import current_turn, is_final_answer, remember
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +81,8 @@ class ChatState(MessagesState):
     ]  # the off-topic guard's verdict on the turn's question
     todos: NotRequired[list[Todo]]  # the plan, which write_todos replaces whole
     revisions: NotRequired[int]  # answers sent back to revise this turn
+    # The thread's attachments by id: its messages list ids, each model call reads these.
+    attachments: NotRequired[dict[str, AttachmentFile]]
 
 
 class RagAgent:
@@ -126,16 +135,25 @@ class RagAgent:
         self.graph = graph.compile()
 
     def stream(
-        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+        self,
+        message: str,
+        history: Sequence[AgentMemory],
+        ctx: RunContext,
+        *,
+        attachments: Sequence[AttachmentFile] = (),
+        earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> "AgentTurn":
-        """Answers `message`, given the agent's memory of each earlier turn."""
-        question = HumanMessage(content=message, id=str(uuid.uuid4()))
+        """Answers `message` and its `attachments`, given the agent's memory of each
+        earlier turn and the attachments those were sent with.
+        """
+        question = question_message(message, attachments)
         # The earlier turns' messages, as the state types them.
         earlier = cast(
             list[AnyMessage], [m for turn in history for m in messages_from_dict(turn)]
         )
+        files = {str(f.attachment.id): f for f in [*earlier_attachments, *attachments]}
         run = self.graph.astream_events(
-            ChatState(messages=[*earlier, question]),
+            ChatState(messages=[*earlier, question], attachments=files),
             config={
                 "recursion_limit": RECURSION_LIMIT,
                 **self._trace_config("chat", ctx),
@@ -148,12 +166,17 @@ class RagAgent:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
-        decision = await classify_input(self._llm, state["messages"], self._verdicts)
+        question = state["messages"][-1]
+        decision = await classify_input(
+            self._llm,
+            state["messages"],
+            self._verdicts,
+            attachments_of(question, state.get("attachments", {})),
+        )
         if decision != "block":
             return Command(goto="model", update={"decision": decision})
 
         await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
-        question = state["messages"][-1]
         # The thread's reducer gives every message an id.
         assert question.id is not None
         return Command(
@@ -164,7 +187,7 @@ class RagAgent:
         off_topic = state.get("decision") == "restrict"
         messages: list[BaseMessage] = [
             SystemMessage(_system_prompt(off_topic=off_topic)),
-            *state["messages"],
+            *with_attachments(state["messages"], state.get("attachments", {})),
         ]
         # The model only runs right after a final answer when verify rejected it.
         if is_final_answer(state["messages"][-1]):
@@ -178,7 +201,9 @@ class RagAgent:
         a rejected answer never reaches the user.
         """
         revisions = state.get("revisions", 0)
-        inputs = verification_inputs(state["messages"])
+        question = current_turn(state["messages"])[0]
+        attached = text_of(attachments_of(question, state.get("attachments", {})))
+        inputs = verification_inputs(state["messages"], attached)
         if revisions >= MAX_REVISIONS or inputs is None:
             return Command(goto="__end__")
 
@@ -202,7 +227,7 @@ def _system_prompt(*, off_topic: bool) -> str:
         if off_topic
         else [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
     )
-    return "\n\n".join([RAG_SYSTEM_PROMPT, *steps])
+    return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])
 
 
 def _after_model(state: ChatState) -> Literal["tools", "verify"]:

@@ -15,6 +15,7 @@ from rag.domain.models.agent.stream import (
     ToolCall,
     TurnFailed,
 )
+from rag.domain.models.attachment import Attachment, AttachmentFile
 from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
     AssistantMessage,
@@ -43,6 +44,8 @@ __all__ = [
     "Artifact",
     "ArtifactsReady",
     "AssistantMessage",
+    "Attachment",
+    "AttachmentFile",
     "Chunk",
     "Conversation",
     "ConversationPage",

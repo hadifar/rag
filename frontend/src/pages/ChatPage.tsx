@@ -4,7 +4,8 @@ import { useOpenKbSource } from '@/features/knowledge-base';
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { bubbles, isWaiting, showWelcome, sendMessage, retryBubbleId, retry } = useChat(conversationId);
+  const { bubbles, isWaiting, showWelcome, sendMessage, attachments, retryBubbleId, retry } =
+    useChat(conversationId);
   const openSource = useOpenKbSource();
 
   return (
@@ -15,12 +16,13 @@ export function ChatPage() {
         <MessageList
           bubbles={bubbles}
           isWaiting={isWaiting}
+          conversationId={conversationId}
           onOpenSource={openSource}
           retryBubbleId={retryBubbleId}
           onRetry={retry}
         />
       )}
-      <Composer onSend={sendMessage} />
+      <Composer onSend={sendMessage} attachments={attachments} />
     </div>
   );
 }

@@ -29,6 +29,7 @@ from rag.domain.models import (
     SourceArtifact,
     ToolCall,
 )
+from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
@@ -38,6 +39,7 @@ from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
+    FakeAttachmentRepository,
     FakeConversationRepository,
     FakeShareRepository,
     FakeDocumentIndex,
@@ -99,6 +101,7 @@ def client() -> Generator[TestClient]:
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
 
     conversation_repository = FakeConversationRepository()
+    attachment_repository = FakeAttachmentRepository(conversation_repository)
     generation = StubGeneration("Greeting")
     agent = StubAgent(
         extra_events=[
@@ -120,9 +123,17 @@ def client() -> Generator[TestClient]:
             repository=conversation_repository,
             llm=generation,
         ),
-        chat_service=ChatService(repository=conversation_repository, agent=agent),
+        chat_service=ChatService(
+            repository=conversation_repository,
+            attachments=attachment_repository,
+            agent=agent,
+        ),
         share_service=ShareService(
             shares=FakeShareRepository(conversation_repository),
+            conversations=conversation_repository,
+        ),
+        attachment_service=AttachmentService(
+            attachments=attachment_repository,
             conversations=conversation_repository,
         ),
     )
@@ -525,7 +536,7 @@ def test_a_shared_conversation_is_readable_without_signing_in(
     assert shared.status_code == 200
     body = shared.json()
     assert body["title"] == "Greeting"
-    assert body["messages"][0] == {"role": "user", "text": "hi"}
+    assert body["messages"][0] == {"role": "user", "text": "hi", "attachments": []}
     assert body["messages"][1]["role"] == "assistant"
 
 
@@ -625,7 +636,7 @@ def test_conversation_messages_and_delete(
 
     # The answer as the same events its stream sent, for the frontend to replay.
     assert client.get(messages_url, headers=auth_headers).json() == [
-        {"role": "user", "text": "hi"},
+        {"role": "user", "text": "hi", "attachments": []},
         {
             "role": "assistant",
             "events": [
@@ -696,6 +707,135 @@ def test_conversation_endpoints_require_auth(
     client: TestClient, method: str, path: str
 ) -> None:
     assert client.request(method, path).status_code == 401
+
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
+
+
+def _attach(
+    client: TestClient,
+    headers: dict[str, str],
+    conversation_id: str,
+    name: str = "error.png",
+    data: bytes = _PNG,
+):
+    return client.post(
+        f"/api/conversations/{conversation_id}/attachments",
+        files={"file": (name, data, "application/octet-stream")},
+        headers=headers,
+    )
+
+
+def test_an_attachment_is_sent_with_a_message_and_shown_in_its_history(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+    uploaded = _attach(client, auth_headers, conversation_id)
+    assert uploaded.status_code == 201
+    attachment = uploaded.json()
+    assert attachment == {
+        "id": attachment["id"],
+        "name": "error.png",
+        "media_type": "image/png",
+        "size": len(_PNG),
+    }
+
+    # A message may be only its attachments.
+    with client.stream(
+        "POST",
+        f"/api/chat/{conversation_id}",
+        json={"attachment_ids": [attachment["id"]]},
+        headers=auth_headers,
+    ) as response:
+        assert response.status_code == 200
+        response.read()
+
+    messages = client.get(
+        f"/api/conversations/{conversation_id}/messages", headers=auth_headers
+    ).json()
+    assert messages[0] == {"role": "user", "text": "", "attachments": [attachment]}
+    content = client.get(
+        f"/api/conversations/{conversation_id}/attachments/{attachment['id']}",
+        headers=auth_headers,
+    )
+    assert content.status_code == 200
+    assert content.content == _PNG
+    assert content.headers["content-type"] == "image/png"
+    assert "error.png" in content.headers["content-disposition"]
+
+
+def test_an_unsupported_upload_is_rejected(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+
+    response = _attach(client, auth_headers, conversation_id, "run.exe", b"MZ")
+
+    assert response.status_code == 415
+    assert response.json()["detail"] == "Only .md, .png, .jpg files can be attached"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"message": "  "},  # neither text nor attachments
+        {"message": "hi", "attachment_ids": [str(uuid.uuid4())] * 2},
+        {"message": "hi", "attachment_ids": [str(uuid.uuid4()) for _ in range(4)]},
+    ],
+)
+def test_send_message_rejects_a_bad_request(
+    client: TestClient, auth_headers: dict[str, str], body: dict[str, object]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+
+    response = client.post(
+        f"/api/chat/{conversation_id}", json=body, headers=auth_headers
+    )
+
+    assert response.status_code == 422
+
+
+def test_an_unknown_attachment_is_not_found_before_the_stream_starts(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+
+    response = client.post(
+        f"/api/chat/{conversation_id}",
+        json={"message": "hi", "attachment_ids": [str(uuid.uuid4())]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    history = client.get(
+        f"/api/conversations/{conversation_id}/messages", headers=auth_headers
+    )
+    assert history.json() == []
+
+
+def test_attachments_of_another_user_are_invisible(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+    attachment_id = _attach(client, auth_headers, conversation_id).json()["id"]
+    other = _login(client, _OTHER_EMAIL)
+    url = f"/api/conversations/{conversation_id}/attachments"
+
+    assert _attach(client, other, conversation_id).status_code == 404
+    assert client.get(f"{url}/{attachment_id}", headers=other).status_code == 404
+    assert client.delete(f"{url}/{attachment_id}", headers=other).status_code == 404
+    assert client.get(f"{url}/{attachment_id}", headers=auth_headers).status_code == 200
+
+
+def test_an_unsent_attachment_can_be_discarded(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+    attachment_id = _attach(client, auth_headers, conversation_id).json()["id"]
+    url = f"/api/conversations/{conversation_id}/attachments/{attachment_id}"
+
+    assert client.delete(url, headers=auth_headers).status_code == 204
+    assert client.get(url, headers=auth_headers).status_code == 404
 
 
 # Routes anyone may call. Every other route must require a signed-in user.

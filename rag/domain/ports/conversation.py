@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
@@ -67,7 +68,13 @@ class ConversationRepositoryPort(Protocol):
         question: str,
         answer: list[StreamEvent],
         memory: AgentMemory | None = None,
-    ) -> None: ...
+        attachment_ids: Sequence[uuid.UUID] = (),
+    ) -> None:
+        """`attachment_ids`, the conversation's attachments sent with `question`, in
+        the order the user attached them.
+        """
+        ...
+
     async def list_turns(
         self, conversation_id: uuid.UUID, limit: int | None = None
     ) -> list[Turn]:

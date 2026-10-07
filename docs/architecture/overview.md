@@ -22,6 +22,13 @@ Each turn (`conversation_turns`) is kept two ways.
 * `agent_messages` is the agent's memory of the turn: its question, tool calls, tool results and answers, rejected drafts included. It is NULL for a turn the agent forgot (blocked, failed, or cut short). Each turn, the chat service hands the agent the memory of the earlier turns.
 * A user has at most one untitled conversation.
 
+A user can attach files (`.md`, `.png`, `.jpg`) to a message.
+
+* `POST /api/conversations/{id}/attachments` stores a file in `conversation_attachments` (as `bytea`). The backend checks the file's content, not the type the client sends.
+* The chat request lists the files by `attachment_ids`. `conversation_turn_attachments` links each turn to the files it was sent with, in order. A retry sends the same files again.
+* The agent's memory stores only attachment ids. Every model call reads the files again, so a later turn still sees an earlier image.
+* `rag prune-attachments` deletes files that were uploaded but never sent.
+
 The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`, default `data/data.zip`).
 
 * The file basename is the document id.

@@ -1,8 +1,10 @@
 """Multi-turn tests for the chat agent: per-turn state must not leak into later turns."""
 
+import hashlib
 import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -24,6 +26,8 @@ from rag.domain.models import (
     AgentMemory,
     AnswerVerified,
     ArtifactsReady,
+    Attachment,
+    AttachmentFile,
     Chunk,
     InputVerdict,
     RunContext,
@@ -59,6 +63,8 @@ class _ScriptedChatModel(BaseChatModel):
     groundedness_verdicts: list[bool] = Field(default_factory=list)
     agent_calls: list[dict[str, Any]] = Field(default_factory=list)
     classifier_calls: list[str] = Field(default_factory=list)
+    # The content blocks sent after each classifier prompt: the message's attachments.
+    classifier_attachments: list[list[Any]] = Field(default_factory=list)
     verifier_calls: list[str] = Field(default_factory=list)
     bound_tools: list[str] = Field(default_factory=list)
 
@@ -70,13 +76,20 @@ class _ScriptedChatModel(BaseChatModel):
         return self.model_copy(update={"bound_tools": [tool.name for tool in tools]})
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
-        return RunnableLambda(lambda prompt: self._verdict(str(prompt), schema))
+        return RunnableLambda(lambda request: self._verdict(request, schema))
 
-    def _verdict(self, prompt: str, schema: type[BaseModel]) -> BaseModel:
+    def _verdict(self, request: Any, schema: type[BaseModel]) -> BaseModel:
         if self.failing_guards:
             raise RuntimeError("guard model down")
+        # A prompt alone is a str; with attachments, one message of content blocks.
+        prompt, attached = (
+            (request, [])
+            if isinstance(request, str)
+            else (request[0].content[0]["text"], request[0].content[1:])
+        )
         if schema is InputVerdict:
             self.classifier_calls.append(prompt)
+            self.classifier_attachments.append(attached)
             message = prompt.rsplit("LATEST MESSAGE:\n<<<\n", 1)[1].removesuffix(
                 "\n>>>"
             )
@@ -189,12 +202,23 @@ class _Chat:
         )
         self.history: list[AgentMemory] = []
 
-    async def send(self, text: str) -> list[StreamEvent]:
-        """Sends `text`, then keeps the turn's memory as the chat service does, through
-        JSON as the database stores it.
+        self.sent_attachments: list[AttachmentFile] = []
+
+    async def send(
+        self, text: str, attachments: Sequence[AttachmentFile] = ()
+    ) -> list[StreamEvent]:
+        """Sends `text` and its `attachments`, then keeps the turn's memory as the chat
+        service does, through JSON as the database stores it.
         """
         ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
-        turn = self.agent.stream(text, self.history, ctx)
+        turn = self.agent.stream(
+            text,
+            self.history,
+            ctx,
+            attachments=attachments,
+            earlier_attachments=self.sent_attachments,
+        )
+        self.sent_attachments.extend(attachments)
         events = [event async for event in turn]
         if turn.memory is not None:
             self.history.append(json.loads(json.dumps(turn.memory)))
@@ -593,3 +617,107 @@ async def test_a_fail_open_verdict_is_not_cached() -> None:
     await _Chat(model, retry_attempts=1, verdicts=verdicts).send("hi")
 
     assert verdicts.puts == []
+
+
+def _file(name: str, media_type: str, data: bytes) -> AttachmentFile:
+    attachment = Attachment(
+        id=uuid.uuid4(),
+        conversation_id=_CONVERSATION,
+        name=name,
+        media_type=media_type,
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
+        created_at=datetime.now(UTC),
+    )
+    return AttachmentFile(attachment, data)
+
+
+_NOTES = _file("notes.md", "text/markdown", b"# Setup\nRun the sync job.")
+_SCREENSHOT = _file("error.png", "image/png", b"\x89PNG\r\n\x1a\nscreen")
+_SCREENSHOT_BLOCK = {
+    "type": "image",
+    "base64": "iVBORw0KGgpzY3JlZW4=",  # the screenshot's bytes
+    "mime_type": "image/png",
+}
+
+
+def _user_messages(call: dict[str, Any]) -> list[HumanMessage]:
+    return [m for m in call["messages"] if isinstance(m, HumanMessage)]
+
+
+async def test_the_model_reads_the_attachments_after_the_message() -> None:
+    model = _ScriptedChatModel(answers=[_answer("It means the sync failed.")])
+
+    await _Chat(model).send("What does this mean?", [_NOTES, _SCREENSHOT])
+
+    [question] = _user_messages(model.agent_calls[0])
+    assert question.content == [
+        {"type": "text", "text": "What does this mean?"},
+        {
+            "type": "text",
+            "text": '<attachment name="notes.md">\n# Setup\nRun the sync job.\n'
+            "</attachment>",
+        },
+        _SCREENSHOT_BLOCK,
+    ]
+
+
+async def test_memory_keeps_the_attachments_ids_not_their_content() -> None:
+    model = _ScriptedChatModel(answers=[_answer("A screenshot.")])
+    chat = _Chat(model)
+
+    await chat.send("", [_SCREENSHOT])
+
+    question = chat.saved_messages()[0]
+    assert question.content == ""
+    assert question.additional_kwargs == {
+        "attachment_ids": [str(_SCREENSHOT.attachment.id)]
+    }
+    assert _SCREENSHOT_BLOCK["base64"] not in json.dumps(chat.history)
+
+
+async def test_later_turns_read_the_earlier_attachments_again() -> None:
+    model = _ScriptedChatModel(answers=[_answer("An error."), _answer("Red.")])
+    chat = _Chat(model)
+    await chat.send("What is this?", [_SCREENSHOT])
+
+    await chat.send("What colour is it?")
+
+    first, second = _user_messages(model.agent_calls[1])
+    assert first.content == [
+        {"type": "text", "text": "What is this?"},
+        _SCREENSHOT_BLOCK,
+    ]
+    assert second.content == "What colour is it?"
+
+
+async def test_the_off_topic_guard_classifies_the_attachments_with_the_message() -> (
+    None
+):
+    model = _ScriptedChatModel(answers=[_answer("A screenshot.")])
+
+    await _Chat(model).send("", [_SCREENSHOT])
+
+    assert len(model.classifier_calls) == 1
+    assert model.classifier_attachments == [[_SCREENSHOT_BLOCK]]
+
+
+async def test_the_same_message_with_other_attachments_is_classified_afresh() -> None:
+    model = _ScriptedChatModel(answers=[_answer("A."), _answer("B.")])
+    verdicts: FakeCache[InputVerdict] = FakeCache()
+
+    await _Chat(model, verdicts=verdicts).send("What is this?", [_SCREENSHOT])
+    await _Chat(model, verdicts=verdicts).send("What is this?", [_NOTES])
+
+    assert len(model.classifier_calls) == 2
+
+
+async def test_an_answer_may_draw_on_the_attached_text() -> None:
+    model = _ScriptedChatModel(answers=[_search("sync"), _answer("Run the sync job.")])
+
+    await _Chat(model).send("How do I set it up?", [_NOTES])
+
+    [verifier_prompt] = model.verifier_calls
+    assert "facts about sync" in verifier_prompt
+    assert "ATTACHED BY THE USER:" in verifier_prompt
+    assert "Run the sync job." in verifier_prompt

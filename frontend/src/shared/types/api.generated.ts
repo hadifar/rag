@@ -232,6 +232,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Attachment
+         * @description Keeps a file (.md, .png or .jpg) in the conversation, to send with a message by
+         *     its id (`attachment_ids` of `POST /api/chat/{conversation_id}`).
+         */
+        post: operations["upload_attachment_api_conversations__conversation_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attachment
+         * @description The attachment's content, typed as what it was recognized as.
+         */
+        get: operations["get_attachment_api_conversations__conversation_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard Attachment
+         * @description Deletes an attachment that was never sent; one already sent stays (404).
+         */
+        delete: operations["discard_attachment_api_conversations__conversation_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/{conversation_id}": {
         parameters: {
             query?: never;
@@ -243,7 +288,9 @@ export interface paths {
         put?: never;
         /**
          * Send Message
-         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each. The
+         *     message's attachments are uploaded to the conversation first
+         *     (`POST /api/conversations/{conversation_id}/attachments`).
          */
         post: operations["send_message_api_chat__conversation_id__post"];
         delete?: never;
@@ -392,10 +439,50 @@ export interface components {
             /** Events */
             events: components["schemas"]["StreamEventResponse"][];
         };
+        /**
+         * AttachmentResponse
+         * @description A file attached to a message; its content is at
+         *     `GET /api/conversations/{conversation_id}/attachments/{id}`.
+         */
+        AttachmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Media Type */
+            media_type: string;
+            /** Size */
+            size: number;
+        };
+        /** Body_upload_attachment_api_conversations__conversation_id__attachments_post */
+        Body_upload_attachment_api_conversations__conversation_id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_knowledge_base_api_ingestions_post */
         Body_upload_knowledge_base_api_ingestions_post: {
             /** File */
             file: string;
+        };
+        /**
+         * ChatMessageRequest
+         * @description A message to the chat: its text, its attachments (uploaded to the conversation
+         *     first), or both.
+         */
+        ChatMessageRequest: {
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Attachment Ids
+             * @default []
+             */
+            attachment_ids: string[];
         };
         /** ConversationPageResponse */
         ConversationPageResponse: {
@@ -657,6 +744,11 @@ export interface components {
             role: "user";
             /** Text */
             text: string;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["AttachmentResponse"][];
         };
         /** UserResponse */
         UserResponse: {
@@ -1146,6 +1238,103 @@ export interface operations {
             };
         };
     };
+    upload_attachment_api_conversations__conversation_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_conversations__conversation_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attachment_api_conversations__conversation_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_attachment_api_conversations__conversation_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_message_api_chat__conversation_id__post: {
         parameters: {
             query?: never;
@@ -1157,7 +1346,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MessageRequest"];
+                "application/json": components["schemas"]["ChatMessageRequest"];
             };
         };
         responses: {

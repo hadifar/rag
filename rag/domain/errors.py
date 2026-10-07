@@ -159,3 +159,36 @@ class InvalidCursorError(AppError):
 
     def __init__(self):
         super().__init__("Invalid pagination cursor")
+
+
+class AttachmentNotFoundError(AppError):
+    """Raised when an attachment doesn't exist, isn't in the conversation, or (to
+    discard it) was already sent.
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, attachment_id: object):
+        super().__init__(f"No attachment found for id={attachment_id!r}")
+
+
+class UnsupportedAttachmentError(AppError):
+    """Raised when an uploaded file isn't one of the kinds that can be attached."""
+
+    status_code: ClassVar[int] = 415
+
+    def __init__(self, accepted: str):
+        super().__init__(f"Only {accepted} files can be attached")
+
+
+class AttachmentTooLargeError(AppError):
+    """Raised when an uploaded file is over its kind's size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The file is larger than {_size(max_bytes)}")
+
+
+def _size(n: int) -> str:
+    return f"{n // (1024 * 1024)} MB" if n >= 1024 * 1024 else f"{n // 1024} KB"

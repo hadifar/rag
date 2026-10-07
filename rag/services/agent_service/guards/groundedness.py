@@ -20,9 +20,11 @@ def _collect_context(messages: Sequence[BaseMessage]) -> str:
     )
 
 
-def verification_inputs(messages: Sequence[BaseMessage]) -> tuple[str, str] | None:
-    """The turn's retrieved context and the answer to check against it; None if there's
-    nothing to check.
+def verification_inputs(
+    messages: Sequence[BaseMessage], attached: str = ""
+) -> tuple[str, str] | None:
+    """The turn's retrieved context, with the text the user `attached` to their
+    message, and the answer to check against it; None if there's nothing to check.
     """
     context = _collect_context(messages)
     answer = messages[-1]
@@ -32,6 +34,8 @@ def verification_inputs(messages: Sequence[BaseMessage]) -> tuple[str, str] | No
     if not context or not isinstance(answer, AIMessage) or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to verify against.
         return None
+    if attached:
+        context = f"{context}\n\nATTACHED BY THE USER:\n{attached}"
     return context, answer.text
 
 
