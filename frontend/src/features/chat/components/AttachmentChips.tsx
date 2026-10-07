@@ -7,7 +7,8 @@ import type { AttachmentChip, AttachmentDraft } from '../types';
 function FileName({ name, isImage }: { name: string; isImage: boolean }) {
   const Icon = isImage ? PhotoIcon : DocumentTextIcon;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-slate-700">
+    // flex, not inline-flex: an inline box grows to fit the whole name, so it never truncates.
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-slate-700">
       <Icon className="size-4 shrink-0 text-slate-500" aria-hidden />
       <span className="truncate">{name}</span>
     </span>
@@ -34,7 +35,7 @@ export function DraftAttachments({
           {draft.previewUrl ? (
             <img src={draft.previewUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
           ) : null}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <FileName name={draft.name} isImage={draft.previewUrl !== null} />
             {draft.status === 'uploading' && <p className="m-0 text-[11px] text-slate-500">Uploading…</p>}
             {draft.status === 'failed' && (
