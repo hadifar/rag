@@ -4,6 +4,7 @@ import zipfile
 import zlib
 
 from rag.domain.errors import InvalidSkillError
+from rag.shared import zip_reader
 from rag.shared.text_normalizer import normalize_text
 
 MAX_FILES = 50  # reference files, beside its SKILL.md
@@ -32,50 +33,51 @@ def read_archive(data: bytes, max_skill_bytes: int) -> tuple[bytes, dict[str, st
     read it, never run or view it. Folders, dotfiles and `__MACOSX/` are left out.
 
     Sizes are checked as the archive declares them before anything is read, and again
-    as it is read, so an archive that inflates to far more is never held in memory.
-    Raises `InvalidSkillError` saying what's wrong.
+    as it is read (see `zip_reader`). Raises `InvalidSkillError` saying what's wrong.
     """
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            entries = _entries(archive)
-            root = _root(entries)
-            if len(entries) - 1 > MAX_FILES:
-                raise InvalidSkillError(
-                    f"it holds more than {MAX_FILES} files beside its {SKILL_FILE}"
-                )
-            if sum(e.file_size for e in entries.values()) > MAX_TOTAL_BYTES:
-                raise InvalidSkillError(
-                    f"its files add up to more than {MAX_TOTAL_BYTES // 1024} KB"
-                )
-            skill = _read(archive, entries.pop(root + SKILL_FILE), max_skill_bytes)
-            files = {
-                path.removeprefix(root): _text(path, _read(archive, entry))
-                for path, entry in sorted(entries.items())
-            }
+            return _read_skill(archive, max_skill_bytes)
     except (zipfile.BadZipFile, zlib.error, NotImplementedError, EOFError):
         raise InvalidSkillError("it isn't a readable zip archive") from None
+    except zip_reader.ZipReadError as exc:
+        raise InvalidSkillError(str(exc)) from exc
+
+
+def _read_skill(
+    archive: zipfile.ZipFile, max_skill_bytes: int
+) -> tuple[bytes, dict[str, str]]:
+    entries = _entries(archive)
+    root = _root(entries)
+    if len(entries) - 1 > MAX_FILES:
+        raise InvalidSkillError(
+            f"it holds more than {MAX_FILES} files beside its {SKILL_FILE}"
+        )
+    if sum(e.file_size for e in entries.values()) > MAX_TOTAL_BYTES:
+        raise InvalidSkillError(
+            f"its files add up to more than {MAX_TOTAL_BYTES // 1024} KB"
+        )
+    skill_entry = entries.pop(root + SKILL_FILE)
+    skill = zip_reader.read_capped(archive, skill_entry, max_skill_bytes)
+    files = {
+        path.removeprefix(root): _text(
+            path, zip_reader.read_capped(archive, entry, MAX_FILE_BYTES)
+        )
+        for path, entry in sorted(entries.items())
+    }
     return skill, files
 
 
 def _entries(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
-    """The archive's files by path, but the ones it's to leave out."""
+    """The archive's files by path (see `zip_reader.files`)."""
     entries: dict[str, zipfile.ZipInfo] = {}
-    for entry in archive.infolist():
+    for entry in zip_reader.files(archive):
         path = entry.filename
-        if entry.is_dir() or _left_out(path):
-            continue
         _check_path(path)
-        if entry.flag_bits & 0x1:
-            raise InvalidSkillError(f"{path} is encrypted")
         if path in entries:
             raise InvalidSkillError(f"it holds {path} twice")
         entries[path] = entry
     return entries
-
-
-def _left_out(path: str) -> bool:
-    parts = path.split("/")
-    return parts[0] == "__MACOSX" or any(p.startswith(".") for p in parts)
 
 
 def _check_path(path: str) -> None:
@@ -105,29 +107,12 @@ def _root(entries: dict[str, zipfile.ZipInfo]) -> str:
     )
 
 
-def _read(
-    archive: zipfile.ZipFile, entry: zipfile.ZipInfo, limit: int = MAX_FILE_BYTES
-) -> bytes:
-    if entry.file_size > limit:
-        raise InvalidSkillError(f"{entry.filename} is larger than {limit // 1024} KB")
-    with archive.open(entry) as file:
-        # One byte past the limit is enough to tell a size the archive lied about.
-        content = file.read(limit + 1)
-    if len(content) > limit:
-        raise InvalidSkillError(f"{entry.filename} is larger than {limit // 1024} KB")
-    return content
-
-
 def _text(path: str, content: bytes) -> str:
     """The file's text, normalized as users' free text is (`normalize_text`), so
     nothing hidden in it reaches the model.
     """
-    try:
-        text: str | None = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = None
-    # A NUL decodes, but no text file holds one.
-    if text is None or "\x00" in text:
+    text = zip_reader.decode_text(content)
+    if text is None:
         raise InvalidSkillError(
             f"{path} isn't UTF-8 text; a skill can only hold text files"
         )

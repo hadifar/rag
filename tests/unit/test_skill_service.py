@@ -264,5 +264,5 @@ async def test_an_archive_that_lies_about_its_sizes_is_read_no_further() -> None
     assert data.count(size) == 2
     data = bytearray(bytes(data).replace(size, (10).to_bytes(4, "little")))
 
-    with pytest.raises(InvalidSkillError, match="readable zip"):
+    with pytest.raises(InvalidSkillError, match="can't read bomb.md"):
         await _service().upload(ALICE, bytes(data))
