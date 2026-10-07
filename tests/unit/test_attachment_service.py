@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,7 +9,9 @@ from rag.domain.errors import (
     ConversationNotFoundError,
     UnsupportedAttachmentError,
 )
-from rag.domain.models import TextDelta
+from rag.domain.models import Attachment, AttachmentFile, TextDelta
+from rag.services.agent_service.attachments import render
+from rag.services.attachment_service.kinds import KINDS, AttachmentKind
 from rag.services.attachment_service.service import AttachmentService
 from tests.unit.fakes import FakeAttachmentRepository, FakeConversationRepository
 
@@ -150,3 +152,23 @@ async def test_prune_deletes_only_old_unsent_attachments() -> None:
     # The fake's clock is in the past, so every upload is older than an hour.
     assert await service.prune(timedelta(hours=1)) == 1
     assert list(conversations.attachments) == [sent.id]
+
+
+@pytest.mark.parametrize("kind", KINDS, ids=lambda kind: kind.media_type)
+def test_the_model_can_read_every_kind_that_can_be_attached(
+    kind: AttachmentKind,
+) -> None:
+    """A kind without a renderer in agent_service/attachments.py would be accepted, then
+    reach the model as "(unreadable)".
+    """
+    attachment = Attachment(
+        id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        name="file",
+        media_type=kind.media_type,
+        size=len(MARKDOWN),
+        sha256="",
+        created_at=datetime.now(UTC),
+    )
+    block = render(AttachmentFile(attachment, MARKDOWN))
+    assert "(unreadable)" not in block.get("text", "")
