@@ -15,6 +15,7 @@ from rag.services.conversation_service.service import ConversationService
 from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.skill_service.service import SkillService
 
 # A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
 # not the OAuth2 password form that /docs' Authorize button would post.
@@ -65,6 +66,10 @@ def get_attachment_service(container: ContainerDep) -> AttachmentService:
     return container.attachment_service
 
 
+def get_skill_service(container: ContainerDep) -> SkillService:
+    return container.skill_service
+
+
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
@@ -86,6 +91,9 @@ ShareServiceDep = Annotated[ShareService, Depends(get_share_service)]
 
 
 AttachmentServiceDep = Annotated[AttachmentService, Depends(get_attachment_service)]
+
+
+SkillServiceDep = Annotated[SkillService, Depends(get_skill_service)]
 
 
 async def get_current_user(

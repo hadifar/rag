@@ -37,6 +37,7 @@ from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeAttachmentRepository,
@@ -45,6 +46,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakeSkillRepository,
     FakeUserRepository,
     StubAgent,
     StubGeneration,
@@ -136,6 +138,7 @@ def client() -> Generator[TestClient]:
             attachments=attachment_repository,
             conversations=conversation_repository,
         ),
+        skill_service=SkillService(skills=FakeSkillRepository()),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -836,6 +839,54 @@ def test_an_unsent_attachment_can_be_discarded(
 
     assert client.delete(url, headers=auth_headers).status_code == 204
     assert client.get(url, headers=auth_headers).status_code == 404
+
+
+_SKILL = b"---\nname: release-notes\ndescription: Write release notes.\n---\nGroup by area.\n"
+
+
+def _upload_skill(client: TestClient, headers: dict[str, str], data: bytes = _SKILL):
+    return client.post(
+        "/api/skills",
+        files={"file": ("SKILL.md", data, "text/markdown")},
+        headers=headers,
+    )
+
+
+def test_a_skill_is_uploaded_listed_and_deleted(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    uploaded = _upload_skill(client, auth_headers)
+    assert uploaded.status_code == 201
+    skill = uploaded.json()
+    assert skill["name"] == "release-notes"
+    assert skill["description"] == "Write release notes."
+
+    listed = client.get("/api/skills", headers=auth_headers)
+    assert listed.json() == [skill]
+
+    deleted = client.delete(f"/api/skills/{skill['id']}", headers=auth_headers)
+    assert deleted.status_code == 204
+    assert client.get("/api/skills", headers=auth_headers).json() == []
+
+
+def test_an_invalid_skill_file_is_rejected_saying_why(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = _upload_skill(client, auth_headers, b"# No frontmatter")
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Not a valid skill file: ")
+
+
+def test_skills_of_another_user_are_invisible(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    skill_id = _upload_skill(client, auth_headers).json()["id"]
+    other = _login(client, _OTHER_EMAIL)
+
+    assert client.get("/api/skills", headers=other).json() == []
+    assert client.delete(f"/api/skills/{skill_id}", headers=other).status_code == 404
+    assert len(client.get("/api/skills", headers=auth_headers).json()) == 1
 
 
 # Routes anyone may call. Every other route must require a signed-in user.

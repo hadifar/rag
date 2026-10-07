@@ -38,6 +38,9 @@ export type HealthResponse = Schemas['HealthResponse'];
 // ingestion.py
 export type IngestionRunResponse = Schemas['IngestionRunResponse'];
 
+// skill.py
+export type SkillResponse = Schemas['SkillResponse'];
+
 // share.py
 export type ShareResponse = Schemas['ShareResponse'];
 export type SharedConversationResponse = Schemas['SharedConversationResponse'];

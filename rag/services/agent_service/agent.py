@@ -19,6 +19,7 @@ from langchain_core.messages import (
 )
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.runtime import Runtime
 from langgraph.types import Command, RetryPolicy
 
 from rag.domain.models import (
@@ -27,10 +28,11 @@ from rag.domain.models import (
     InputDecision,
     InputVerdict,
     RunContext,
+    Skill,
     StreamEvent,
     TurnFailed,
 )
-from rag.domain.ports import CachePort, SearchPort
+from rag.domain.ports import CachePort, SearchPort, SkillsPort
 from rag.services.agent_service.attachments import (
     attachments_of,
     question_message,
@@ -50,6 +52,7 @@ from rag.services.agent_service.prompts import (
     PLANNING_INSTRUCTIONS,
     RAG_SYSTEM_PROMPT,
     REVISION_INSTRUCTION,
+    SKILLS_INSTRUCTION,
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.streaming import (
@@ -58,7 +61,7 @@ from rag.services.agent_service.streaming import (
     AnswerGate,
     parse_event,
 )
-from rag.services.agent_service.tools import search_tool
+from rag.services.agent_service.tools import search_tool, skill_tool
 from rag.services.agent_service.turn import current_turn, is_final_answer, remember
 
 logger = logging.getLogger(__name__)
@@ -83,6 +86,8 @@ class ChatState(MessagesState):
     revisions: NotRequired[int]  # answers sent back to revise this turn
     # The thread's attachments by id: its messages list ids, each model call reads these.
     attachments: NotRequired[dict[str, AttachmentFile]]
+    # The user's skills, loaded on the turn's first model call.
+    skills: NotRequired[list[Skill]]
 
 
 class RagAgent:
@@ -96,6 +101,8 @@ class RagAgent:
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times. Every LLM call, the model's and the guards', is tried up to
     `llm.attempts` times; then a model call's error ends the turn (see `AgentTurn`).
+    The model sees the name and description of each of the user's `skills`, and loads
+    one's instructions with a tool when a question fits it.
     Instructions for one model call (declining an off-topic question, revising an
     answer) are added to that call only, never saved to the thread, so they can't leak
     into later turns. It keeps nothing between turns but the off-topic guard's
@@ -106,10 +113,11 @@ class RagAgent:
         self,
         llm: Llm,
         search: SearchPort,
+        skills: SkillsPort,
         *,
         verdicts: CachePort[InputVerdict],
     ):
-        tools = [search_tool(search), write_todos]
+        tools = [search_tool(search), skill_tool(skills), write_todos]
         self._on_topic_model = llm.model.bind_tools(tools)
         # Off-topic, the model gets no tools: it is only to decline.
         self._off_topic_model = llm.model
@@ -118,8 +126,10 @@ class RagAgent:
         self._llm = llm
         self._trace_config = llm.trace_config
         self._verdicts = verdicts  # the off-topic guard's
+        self._skills = skills
 
-        graph = StateGraph(ChatState)
+        # The turn's RunContext: whose skills the model sees and load_skill reads.
+        graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("classify", self._classify)
         # "model" is the node whose output the user sees (see streaming.parse_event).
         graph.add_node(
@@ -158,6 +168,7 @@ class RagAgent:
                 "recursion_limit": RECURSION_LIMIT,
                 **self._trace_config("chat", ctx),
             },
+            context=ctx,
             version="v2",
         )
         return AgentTurn(run, question)
@@ -183,10 +194,15 @@ class RagAgent:
             goto="__end__", update={"messages": [RemoveMessage(id=question.id)]}
         )
 
-    async def _model(self, state: ChatState) -> dict[str, Any]:
+    async def _model(
+        self, state: ChatState, runtime: Runtime[RunContext]
+    ) -> dict[str, Any]:
         off_topic = state.get("decision") == "restrict"
+        skills = state.get("skills")
+        if skills is None:
+            skills = await self._skills.list_for_user(runtime.context.user_id)
         messages: list[BaseMessage] = [
-            SystemMessage(_system_prompt(off_topic=off_topic)),
+            SystemMessage(_system_prompt(off_topic=off_topic, skills=skills)),
             *with_attachments(state["messages"], state.get("attachments", {})),
         ]
         # The model only runs right after a final answer when verify rejected it.
@@ -194,7 +210,7 @@ class RagAgent:
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
         model = self._off_topic_model if off_topic else self._on_topic_model
-        return {"messages": [await model.ainvoke(messages)]}
+        return {"messages": [await model.ainvoke(messages)], "skills": skills}
 
     async def _verify(self, state: ChatState) -> Command[_Next]:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
@@ -218,15 +234,17 @@ class RagAgent:
         return Command(goto="model", update={"revisions": revisions + 1})
 
 
-def _system_prompt(*, off_topic: bool) -> str:
-    """Off-topic, the model is told to decline, and not to plan with a tool it doesn't
-    have.
+def _system_prompt(*, off_topic: bool, skills: Sequence[Skill] = ()) -> str:
+    """Off-topic, the model is told to decline, and not to plan or load skills with
+    tools it doesn't have.
     """
-    steps = (
-        [OFF_TOPIC_INSTRUCTION]
-        if off_topic
-        else [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
-    )
+    if off_topic:
+        steps = [OFF_TOPIC_INSTRUCTION]
+    else:
+        steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+        if skills:
+            listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
+            steps.append(SKILLS_INSTRUCTION.format(skills=listed))
     return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])
 
 

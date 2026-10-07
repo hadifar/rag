@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Composer, type ComposerAttachments } from '@/features/chat/components/Composer';
+import {
+  Composer,
+  type ComposerAttachments,
+  type ComposerSkills,
+} from '@/features/chat/components/Composer';
 import type { AttachmentDraft } from '@/features/chat/types';
 
 function renderComposer() {
@@ -80,7 +84,10 @@ describe('Composer attachments', () => {
     render(<Composer onSend={vi.fn()} attachments={files} />);
     const user = userEvent.setup();
 
-    expect(screen.getByRole('button', { name: 'Attach files' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add files or skills' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add files or photos' }));
+    // Without skills, the menu offers files only.
+    expect(screen.queryByRole('menuitem', { name: 'Skills' })).not.toBeInTheDocument();
     await user.upload(screen.getByTestId('attachment-input'), notes);
 
     expect(files.onAttach).toHaveBeenCalledExactlyOnceWith([notes]);
@@ -131,5 +138,38 @@ describe('Composer attachments', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Remove notes.md' }));
 
     expect(files.onRemove).toHaveBeenCalledExactlyOnceWith('k1');
+  });
+});
+
+describe('Composer skills', () => {
+  const skillFile = new File(['---\nname: notes\n---'], 'SKILL.md', { type: 'text/markdown' });
+
+  function skills(overrides: Partial<ComposerSkills> = {}): ComposerSkills {
+    return { accept: '.md', onUpload: vi.fn(), uploading: false, notice: null, ...overrides };
+  }
+
+  it('uploads the skill file picked from the + menu', async () => {
+    const skill = skills();
+    render(<Composer onSend={vi.fn()} skills={skill} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Add files or skills' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Skills']);
+    await user.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    await user.upload(screen.getByTestId('skill-input'), skillFile);
+
+    expect(skill.onUpload).toHaveBeenCalledExactlyOnceWith(skillFile);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('shows how the upload went', () => {
+    render(
+      <Composer
+        onSend={vi.fn()}
+        skills={skills({ notice: { text: 'Saved skill “notes”.', tone: 'success' } })}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Saved skill “notes”.');
   });
 });

@@ -47,7 +47,8 @@ from rag.services.agent_service.prompts import (
 )
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
-from tests.unit.fakes import FakeCache
+from rag.services.skill_service.service import SkillService
+from tests.unit.fakes import FakeCache, FakeSkillRepository
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -194,10 +195,12 @@ class _Chat:
         model: _ScriptedChatModel,
         retry_attempts: int = 3,
         verdicts: FakeCache[InputVerdict] | None = None,
+        skills: SkillService | None = None,
     ):
         self.agent = RagAgent(
             Llm(model, _no_tracing, attempts=retry_attempts),
             _StubRetrievalService(),
+            skills if skills is not None else SkillService(FakeSkillRepository()),
             verdicts=verdicts if verdicts is not None else FakeCache(),
         )
         self.history: list[AgentMemory] = []
@@ -422,7 +425,11 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert off_topic_call["tools"] == []
     assert PLANNING_INSTRUCTIONS not in off_topic_call["messages"][0].text
     assert OFF_TOPIC_INSTRUCTION not in on_topic_call["messages"][0].text
-    assert sorted(on_topic_call["tools"]) == ["search_kb", "write_todos"]
+    assert sorted(on_topic_call["tools"]) == [
+        "load_skill",
+        "search_kb",
+        "write_todos",
+    ]
     assert PLANNING_INSTRUCTIONS in on_topic_call["messages"][0].text
     assert not any(isinstance(m, SystemMessage) for m in chat.saved_messages())
 
@@ -721,3 +728,81 @@ async def test_an_answer_may_draw_on_the_attached_text() -> None:
     assert "facts about sync" in verifier_prompt
     assert "ATTACHED BY THE USER:" in verifier_prompt
     assert "Run the sync job." in verifier_prompt
+
+
+_SKILL_FILE = (
+    b"---\nname: release-notes\ndescription: Write release notes.\n---\n"
+    b"Group the changes by area.\n"
+)
+
+
+def _load_skill(name: str) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[{"name": "load_skill", "args": {"name": name}, "id": "skill-1"}],
+    )
+
+
+async def _skills_of_the_user() -> SkillService:
+    skills = SkillService(FakeSkillRepository())
+    await skills.upload(_USER, _SKILL_FILE)
+    await skills.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
+    return skills
+
+
+async def test_the_model_sees_the_users_skills_but_not_off_topic() -> None:
+    model = _ScriptedChatModel(
+        answers=[_answer("hi!"), _answer("I only help with AtlasFlow.")],
+        off_topic_messages={"weather?"},
+    )
+    chat = _Chat(model, skills=await _skills_of_the_user())
+
+    await chat.send("hello")
+    await chat.send("weather?")
+
+    on_topic, off_topic = (call["messages"][0].text for call in model.agent_calls)
+    assert "- release-notes: Write release notes." in on_topic
+    assert "other-notes" not in on_topic
+    assert "load_skill" in model.agent_calls[0]["tools"]
+    assert "release-notes" not in off_topic
+
+
+async def test_without_skills_the_prompt_does_not_mention_them() -> None:
+    model = _ScriptedChatModel(answers=[_answer("hi!")])
+
+    await _Chat(model).send("hello")
+
+    assert "skills" not in model.agent_calls[0]["messages"][0].text
+
+
+async def test_load_skill_hands_the_model_the_users_instructions() -> None:
+    model = _ScriptedChatModel(
+        answers=[_load_skill("release-notes"), _load_skill("other-notes"), _answer("A")]
+    )
+
+    await _Chat(model, skills=await _skills_of_the_user()).send("notes please")
+
+    first, second = (call["messages"][-1] for call in model.agent_calls[1:])
+    assert first.content == "Group the changes by area."
+    # Another user's skill isn't found by its name.
+    assert second.content == "The user has no skill named 'other-notes'."
+
+
+async def test_a_loaded_skill_is_not_what_the_answer_is_checked_against() -> None:
+    model = _ScriptedChatModel(
+        answers=[_load_skill("release-notes"), _search("pricing"), _answer("A")]
+    )
+
+    await _Chat(model, skills=await _skills_of_the_user()).send("notes please")
+
+    assert len(model.verifier_calls) == 1
+    assert "facts about pricing" in model.verifier_calls[0]
+    assert "Group the changes by area." not in model.verifier_calls[0]
+
+
+async def test_a_turn_that_only_loads_a_skill_is_not_checked() -> None:
+    model = _ScriptedChatModel(answers=[_load_skill("release-notes"), _answer("A")])
+
+    events = await _Chat(model, skills=await _skills_of_the_user()).send("notes")
+
+    assert not any(isinstance(e, AnswerVerified) for e in events)

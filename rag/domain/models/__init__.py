@@ -36,6 +36,7 @@ from rag.domain.models.ingestion import (
     RawDocument,
 )
 from rag.domain.models.retrieval import Chunk
+from rag.domain.models.skill import Skill
 
 __all__ = [
     "ARTIFACTS",
@@ -61,6 +62,7 @@ __all__ = [
     "RunContext",
     "Share",
     "SharedConversation",
+    "Skill",
     "SourceArtifact",
     "StreamEvent",
     "TaggedStreamEvent",

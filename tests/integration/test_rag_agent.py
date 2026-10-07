@@ -23,7 +23,12 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
             _no_tracing,
             attempts=integration_settings.LLM.RETRY_ATTEMPTS,
         )
-        agent = RagAgent(llm, search=container.retrieval_service, verdicts=NoCache())
+        agent = RagAgent(
+            llm,
+            search=container.retrieval_service,
+            skills=container.skill_service,
+            verdicts=NoCache(),
+        )
         answer = ""
         tool_calls = []
 

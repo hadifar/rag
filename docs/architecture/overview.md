@@ -29,6 +29,12 @@ A user can attach files (`.md`, `.png`, `.jpg`) to a message.
 * The agent's memory stores only attachment ids. Every model call reads the files again, so a later turn still sees an earlier image.
 * `rag prune-attachments` deletes files that were uploaded but never sent.
 
+A user can save skills: SKILL.md files with YAML frontmatter (`name`, `description`) and markdown instructions.
+
+* `POST /api/skills` parses the file and stores it in `user_skills`. A skill with the same name as an existing one replaces it. `GET /api/skills` lists them, and `DELETE /api/skills/{id}` deletes one.
+* A user's skills apply to all of their conversations. The agent sees each skill's name and description on every turn, and loads a skill's instructions (`load_skill`) when a question fits its description.
+* Skills change how the agent answers, not where facts come from. The groundedness guard ignores `load_skill` results.
+
 The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`, default `data/data.zip`).
 
 * The file basename is the document id.

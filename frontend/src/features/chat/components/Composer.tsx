@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useRef,
   useState,
   type ChangeEvent,
@@ -7,9 +8,15 @@ import {
   type KeyboardEvent,
   type SubmitEvent,
 } from 'react';
-import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/outline';
+import {
+  LanguageIcon,
+  PaperAirplaneIcon,
+  PaperClipIcon,
+  PlusIcon,
+} from '@heroicons/react/24/outline';
 
 import { Button } from '@/shared/ui/Button';
+import { Dropdown, DropdownItem } from '@/shared/ui/Dropdown';
 import { ATTACHMENT_ACCEPT } from '../model/attachments';
 import type { AttachmentDraft } from '../types';
 import { DraftAttachments } from './AttachmentChips';
@@ -24,15 +31,36 @@ export type ComposerAttachments = {
   onRemove: (key: string) => void;
 };
 
+/** Uploading a skill to the user's skills, from the + menu. */
+export type ComposerSkills = {
+  /** What the skill picker offers. */
+  accept: string;
+  onUpload: (file: File) => void;
+  uploading: boolean;
+  /** How the last upload went, for a few seconds. */
+  notice: { text: string; tone: 'success' | 'warning' } | null;
+};
+
 type ComposerProps = {
   onSend: (text: string) => void;
   /** Left out, the composer takes text only. */
   attachments?: ComposerAttachments;
+  /** Left out, the + menu offers no skills. */
+  skills?: ComposerSkills;
 };
 
-export function Composer({ onSend, attachments }: ComposerProps) {
+const noticeTones = {
+  success: 'text-success-600',
+  warning: 'text-warning-700',
+};
+
+export function Composer({ onSend, attachments, skills }: ComposerProps) {
   const [value, setValue] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setIsMenuOpen(false), []);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const skillInput = useRef<HTMLInputElement>(null);
   // A message needs text or a file, and waits for its files to finish uploading.
   const canSend = !attachments?.uploading && (value.trim() !== '' || !!attachments?.hasReady);
 
@@ -59,6 +87,12 @@ export function Composer({ onSend, attachments }: ComposerProps) {
   const handlePick = (e: ChangeEvent<HTMLInputElement>) => {
     attachments?.onAttach(Array.from(e.target.files ?? []));
     // Picking the same file again still fires a change.
+    e.target.value = '';
+  };
+
+  const handlePickSkill = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) skills?.onUpload(file);
     e.target.value = '';
   };
 
@@ -97,27 +131,64 @@ export function Composer({ onSend, attachments }: ComposerProps) {
             {attachments.notice}
           </p>
         )}
+        {skills?.notice && (
+          <p role="status" className={`m-0 px-2 pb-2 text-xs ${noticeTones[skills.notice.tone]}`}>
+            {skills.notice.text}
+          </p>
+        )}
         <div className="flex items-end gap-2">
-          {attachments && (
+          {(attachments || skills) && (
             <>
               <Button
+                ref={menuButton}
                 variant="ghost"
                 size="icon"
-                aria-label="Attach files"
-                title="Attach .md, .png or .jpg files"
-                onClick={() => fileInput.current?.click()}
+                aria-label="Add files or skills"
+                aria-haspopup="menu"
+                aria-expanded={isMenuOpen}
+                onClick={() => setIsMenuOpen((open) => !open)}
               >
                 <PlusIcon className="size-5" />
               </Button>
-              <input
-                ref={fileInput}
-                type="file"
-                accept={ATTACHMENT_ACCEPT}
-                multiple
-                hidden
-                data-testid="attachment-input"
-                onChange={handlePick}
-              />
+              <Dropdown
+                isOpen={isMenuOpen}
+                onClose={closeMenu}
+                anchorRef={menuButton}
+                label="Add to message"
+                align="start"
+              >
+                {attachments && (
+                  <DropdownItem Icon={PaperClipIcon} onSelect={() => fileInput.current?.click()}>
+                    Add files or photos
+                  </DropdownItem>
+                )}
+                {skills && (
+                  <DropdownItem Icon={LanguageIcon} onSelect={() => skillInput.current?.click()}>
+                    {skills.uploading ? 'Uploading skill…' : 'Skills'}
+                  </DropdownItem>
+                )}
+              </Dropdown>
+              {attachments && (
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept={ATTACHMENT_ACCEPT}
+                  multiple
+                  hidden
+                  data-testid="attachment-input"
+                  onChange={handlePick}
+                />
+              )}
+              {skills && (
+                <input
+                  ref={skillInput}
+                  type="file"
+                  accept={skills.accept}
+                  hidden
+                  data-testid="skill-input"
+                  onChange={handlePickSkill}
+                />
+              )}
             </>
           )}
           <textarea

@@ -26,6 +26,7 @@ from rag.repository.conversation_repository import ConversationRepository
 from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
@@ -39,6 +40,7 @@ from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
 from rag.services.share_service.service import ShareService
+from rag.services.skill_service.service import SkillService
 
 
 @dataclass
@@ -50,6 +52,7 @@ class Container:
     chat_service: ChatService
     share_service: ShareService
     attachment_service: AttachmentService
+    skill_service: SkillService
 
 
 @dataclass
@@ -127,8 +130,13 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             cache=caches.search,
         )
 
+        skill_service = SkillService(skills=SkillRepository(db_pool))
+
         rag_agent = RagAgent(
-            llm=llm, search=retrieval_service, verdicts=caches.verdicts
+            llm=llm,
+            search=retrieval_service,
+            skills=skill_service,
+            verdicts=caches.verdicts,
         )
 
         ingestion_service = IngestionService(
@@ -176,4 +184,5 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 attachments=attachment_repo,
                 conversations=conversation_repo,
             ),
+            skill_service=skill_service,
         )

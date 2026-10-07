@@ -18,4 +18,5 @@ export const emptyConversationPage: ConversationPageResponse = {
 export const server = setupServer(
   http.get('/api/conversations', () => HttpResponse.json(emptyConversationPage)),
   http.get('/api/conversations/pinned', () => HttpResponse.json([])),
+  http.get('/api/skills', () => HttpResponse.json([])),
 );

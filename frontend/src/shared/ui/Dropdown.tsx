@@ -16,15 +16,18 @@ import { createPortal } from 'react-dom';
 const GAP = 4; // px between the anchor and the menu
 const MARGIN = 8; // px the menu keeps from the window's edges
 
+type Align = 'start' | 'end';
+
 /**
- * Where the menu goes: under the anchor with their right edges lined up, or above it
+ * Where the menu goes: under the anchor with their `align` edges lined up, or above it
  * when there's no room below, and kept inside the window.
  */
-function menuPosition(anchor: DOMRect, menu: DOMRect): { top: number; left: number } {
+function menuPosition(anchor: DOMRect, menu: DOMRect, align: Align): { top: number; left: number } {
   const below = anchor.bottom + GAP;
   const top =
     below + menu.height <= window.innerHeight - MARGIN ? below : anchor.top - GAP - menu.height;
-  const left = Math.min(anchor.right - menu.width, window.innerWidth - MARGIN - menu.width);
+  const lined = align === 'start' ? anchor.left : anchor.right - menu.width;
+  const left = Math.min(lined, window.innerWidth - MARGIN - menu.width);
   return { top: Math.max(MARGIN, top), left: Math.max(MARGIN, left) };
 }
 
@@ -38,6 +41,8 @@ type DropdownProps = {
   anchorRef: RefObject<HTMLElement | null>;
   /** The menu's accessible name, e.g. "Chat options". */
   label: string;
+  /** Which edge it lines up with the anchor's: `end` (right, the default) or `start` (left). */
+  align?: Align;
   /** `DropdownItem`s. */
   children: ReactNode;
 };
@@ -46,7 +51,7 @@ type DropdownProps = {
  * A menu of actions that opens next to its anchor. Arrow keys, Home and End move between
  * the items; Escape, Tab, a click outside, scrolling or resizing close it.
  */
-export function Dropdown({ isOpen, onClose, anchorRef, label, children }: DropdownProps) {
+export function Dropdown({ isOpen, onClose, anchorRef, label, align = 'end', children }: DropdownProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => {
@@ -59,11 +64,15 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
     const menu = menuRef.current;
     const anchor = anchorRef.current;
     if (!isOpen || !menu || !anchor) return;
-    const { top, left } = menuPosition(anchor.getBoundingClientRect(), menu.getBoundingClientRect());
+    const { top, left } = menuPosition(
+      anchor.getBoundingClientRect(),
+      menu.getBoundingClientRect(),
+      align
+    );
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
     menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-  }, [isOpen, anchorRef]);
+  }, [isOpen, anchorRef, align]);
 
   // Its position is fixed to where the anchor was, so anything that moves the anchor closes it.
   useEffect(() => {
@@ -114,7 +123,7 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
       role="menu"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="fixed z-40 box-border w-44 rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-slate-900/10"
+      className="fixed z-40 box-border w-max min-w-44 rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-slate-900/10"
     >
       <CloseContext value={close}>{children}</CloseContext>
     </div>,

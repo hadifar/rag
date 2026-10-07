@@ -32,6 +32,14 @@ Known gaps. None of these is addressed yet.
 * A file that is uploaded but never sent stays stored until someone runs `rag prune-attachments`. Nothing schedules it. Removing a file while it is still uploading leaves it behind in the same way.
 * A share link's JSON includes each attachment's id, type and size. The shared page shows only the file name, and the content needs the owner's login.
 
+## Skills
+
+* A user can save up to 20 skills of up to 50 KB each. The limit is checked before the insert, so two uploads at once can go past it.
+* The model decides when to load a skill. Nothing makes it load one, and the user can't pick one for a message.
+* The off-topic guard doesn't know about skills, so a request a skill covers can still be classified `restrict` and get no tools.
+* Nothing checks what a skill asks for. The prompt only tells the model that its own rules come first. A skill is the user's own text, so it can do no more than a message could.
+* The chat shows a `load_skill` call as a generic tool bubble.
+
 ## Guardrails
 
 * `OffTopicGuard` only instructs the model to decline an off-topic (`restrict`) message. Only `block` stops the request.

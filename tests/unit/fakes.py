@@ -19,6 +19,7 @@ from rag.domain.models import (
     IngestionRun,
     RunContext,
     Share,
+    Skill,
     StreamEvent,
     TextDelta,
     Turn,
@@ -410,6 +411,53 @@ class FakeAttachmentRepository:
             for turn in turns
             for a in turn.attachments
         }
+
+
+class FakeSkillRepository:
+    """In-memory SkillRepositoryPort."""
+
+    def __init__(self):
+        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str]] = {}  # by owner, name
+        self._clock = datetime(2026, 3, 1, tzinfo=UTC)
+
+    async def save(
+        self, user_id: uuid.UUID, name: str, description: str, instructions: str
+    ) -> Skill:
+        self._clock += timedelta(seconds=1)
+        existing = self.rows.get((user_id, name))
+        skill = Skill(
+            id=existing[0].id if existing else uuid.uuid4(),
+            name=name,
+            description=description,
+            created_at=existing[0].created_at if existing else self._clock,
+            updated_at=self._clock,
+        )
+        self.rows[user_id, name] = (skill, instructions)
+        return skill
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
+        return sorted(
+            (skill for (owner, _), (skill, _) in self.rows.items() if owner == user_id),
+            key=lambda s: s.name,
+        )
+
+    async def get_instructions(self, user_id: uuid.UUID, name: str) -> str | None:
+        row = self.rows.get((user_id, name))
+        return row[1] if row else None
+
+    async def delete_owned(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> bool:
+        key = next(
+            (
+                k
+                for k, (skill, _) in self.rows.items()
+                if k[0] == user_id and skill.id == skill_id
+            ),
+            None,
+        )
+        if key is None:
+            return False
+        del self.rows[key]
+        return True
 
 
 class FakeShareRepository:

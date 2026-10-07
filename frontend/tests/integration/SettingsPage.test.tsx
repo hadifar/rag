@@ -4,8 +4,10 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthContext } from '@/features/auth/hooks/useAuth';
+import { uploadSkill } from '@/features/skills/api/skills';
 import { SettingsPage } from '@/pages/SettingsPage';
-import type { IngestionRunResponse, SettingsResponse } from '@/shared/types';
+import { ApiError } from '@/shared/api/client';
+import type { IngestionRunResponse, SettingsResponse, SkillResponse } from '@/shared/types';
 import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
@@ -30,6 +32,13 @@ const succeeded: IngestionRunResponse = {
   unchanged: 0,
   removed: 0,
 };
+
+// jsdom's FormData can't carry a File into a fetch Request here (the browser's can), so
+// the skill upload is faked above the network.
+vi.mock('@/features/skills/api/skills', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/skills/api/skills')>()),
+  uploadSkill: vi.fn(),
+}));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -155,5 +164,63 @@ describe('SettingsPage knowledge base', () => {
     await user.click(await screen.findByRole('button', { name: 'Show upload progress' }));
 
     expect(screen.getByRole('status')).toHaveTextContent('Indexing…');
+  });
+});
+
+const notes: SkillResponse = {
+  id: 's1',
+  name: 'release-notes',
+  description: 'Write release notes.',
+  created_at: '2026-10-07T10:00:00Z',
+  updated_at: '2026-10-07T10:00:00Z',
+};
+
+describe('SettingsPage skills', () => {
+  it('lists the user’s skills, or says there are none', async () => {
+    renderSettings({ isAdmin: false });
+    expect(await screen.findByText('No skills yet.')).toBeInTheDocument();
+  });
+
+  it('uploads a skill and adds it to the list', async () => {
+    vi.mocked(uploadSkill).mockResolvedValue(notes);
+    const user = renderSettings({ isAdmin: false });
+    await screen.findByText('No skills yet.');
+
+    const file = new File(['---'], 'SKILL.md', { type: 'text/markdown' });
+    await user.upload(screen.getByLabelText('Skill file'), file);
+
+    expect(await screen.findByText('release-notes')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved skill “release-notes”.');
+    expect(uploadSkill).toHaveBeenCalledWith(file);
+  });
+
+  it("shows the backend's reason when a skill is rejected", async () => {
+    vi.mocked(uploadSkill).mockRejectedValue(
+      new ApiError(422, 'Unprocessable', 'Not a valid skill file: its frontmatter has no `name`'),
+    );
+    const user = renderSettings({ isAdmin: false });
+    await screen.findByText('No skills yet.');
+
+    await user.upload(screen.getByLabelText('Skill file'), new File(['x'], 'SKILL.md'));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('has no `name`');
+  });
+
+  it('deletes a skill once the user confirms', async () => {
+    let deleted = false;
+    server.use(
+      http.get('/api/skills', () => HttpResponse.json(deleted ? [] : [notes])),
+      http.delete('/api/skills/s1', () => {
+        deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = renderSettings({ isAdmin: false });
+
+    await user.click(await screen.findByRole('button', { name: 'Delete release-notes' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(await screen.findByText('No skills yet.')).toBeInTheDocument();
+    expect(deleted).toBe(true);
   });
 });
