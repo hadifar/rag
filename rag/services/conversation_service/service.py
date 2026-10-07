@@ -81,6 +81,30 @@ class ConversationService:
         next_cursor = _encode_cursor(items[-1]) if len(rows) > limit else None
         return ConversationPage(items=items, next_cursor=next_cursor)
 
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        """The user's pinned conversations, last pinned first. Not paged: the user
+        picks each one, so there are few.
+        """
+        return await self._repository.list_pinned(user_id)
+
+    async def update(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        *,
+        title: str | None = None,
+        pinned: bool | None = None,
+    ) -> Conversation:
+        """Renames it, pins or unpins it; a field left None stays as is. Neither
+        counts as using it, so it keeps its place among the recent ones.
+        """
+        conversation = await self._repository.update_owned(
+            user_id, conversation_id, title, pinned
+        )
+        if conversation is None:
+            raise ConversationNotFoundError(conversation_id)
+        return conversation
+
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:

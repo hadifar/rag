@@ -112,6 +112,38 @@ async def test_keyset_pagination_visits_every_row_once_newest_first(
     assert [c.id for c in seen] == sorted((c.id for c in created), reverse=True)
 
 
+async def test_update_renames_and_pins_without_bumping_and_moves_it_between_lists(
+    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
+) -> None:
+    repository = ConversationRepository(pool)
+    conversation = await repository.get_or_create_empty(user_id)
+
+    pinned = await repository.update_owned(
+        user_id, conversation.id, title="renamed", pinned=True
+    )
+    assert pinned is not None
+    assert pinned.title == "renamed"
+    assert pinned.pinned_at is not None
+    assert pinned.updated_at == conversation.updated_at
+    assert [c.id for c in await repository.list_pinned(user_id)] == [conversation.id]
+    assert await repository.list_for_user(user_id, limit=10, before=None) == []
+
+    # Neither field given: both kept, including when it was pinned.
+    kept = await repository.update_owned(user_id, conversation.id, None, None)
+    assert kept == pinned
+
+    unpinned = await repository.update_owned(user_id, conversation.id, None, False)
+    assert unpinned is not None
+    assert unpinned.title == "renamed"
+    assert unpinned.pinned_at is None
+    assert await repository.list_pinned(user_id) == []
+    assert await repository.list_for_user(user_id, limit=10, before=None) == [unpinned]
+
+    assert (
+        await repository.update_owned(uuid.uuid4(), conversation.id, "x", True) is None
+    )
+
+
 async def test_deleting_a_user_deletes_their_conversations(
     pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
 ) -> None:

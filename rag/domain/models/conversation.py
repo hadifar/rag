@@ -15,6 +15,8 @@ class Conversation:
     title: str | None
     created_at: datetime
     updated_at: datetime
+    # When the user pinned it; None while it isn't pinned.
+    pinned_at: datetime | None = None
 
 
 @dataclass(frozen=True)

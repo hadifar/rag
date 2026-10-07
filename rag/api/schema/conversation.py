@@ -4,13 +4,14 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import Query
-from pydantic import BaseModel, ConfigDict, Field, RootModel
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, RootModel
 
 from rag.api.schema.chat import StreamEventResponse
 from rag.api.schema.common import UserText
 from rag.domain.models import HistoryMessage
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
+MAX_TITLE_LENGTH = 200  # characters in a title the user writes
 
 # Conversation list paging
 MAX_PAGE_SIZE = 100
@@ -25,6 +26,7 @@ class ConversationResponse(BaseModel):
     title: str | None  # Null until the conversation's first turn
     created_at: datetime
     updated_at: datetime
+    pinned_at: datetime | None  # Null while it isn't pinned
 
 
 class ConversationPageResponse(BaseModel):
@@ -64,3 +66,22 @@ def to_history_message(message: HistoryMessage) -> HistoryMessageResponse:
 
 class MessageRequest(BaseModel):
     message: UserText = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+
+
+def _one_line(title: str) -> str:
+    return " ".join(title.split())
+
+
+# A title the user writes: one line, never blank (a null title marks the empty draft).
+UserTitle = Annotated[
+    UserText,
+    AfterValidator(_one_line),
+    Field(min_length=1, max_length=MAX_TITLE_LENGTH),
+]
+
+
+class ConversationUpdateRequest(BaseModel):
+    """The fields to change; each one left out stays as is."""
+
+    title: UserTitle | None = None
+    pinned: bool | None = None

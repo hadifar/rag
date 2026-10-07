@@ -14,7 +14,7 @@ from rag.domain.models import (
 )
 from rag.repository.base_repository import BaseRepository
 
-_COLUMNS = "id, user_id, title, created_at, updated_at"
+_COLUMNS = "id, user_id, title, created_at, updated_at, pinned_at"
 # Turn events are stored as the JSON objects their `type` tells apart.
 _EVENTS = TypeAdapter(list[TaggedStreamEvent])
 
@@ -55,7 +55,7 @@ class ConversationRepository(BaseRepository[Conversation]):
             return await self._fetch_all(
                 f"""
                 SELECT {_COLUMNS} FROM conversations
-                WHERE user_id = %s
+                WHERE user_id = %s AND pinned_at IS NULL
                 ORDER BY updated_at DESC, id DESC
                 LIMIT %s
                 """,
@@ -66,11 +66,48 @@ class ConversationRepository(BaseRepository[Conversation]):
         return await self._fetch_all(
             f"""
             SELECT {_COLUMNS} FROM conversations
-            WHERE user_id = %s AND (updated_at, id) < (%s, %s)
+            WHERE user_id = %s AND pinned_at IS NULL AND (updated_at, id) < (%s, %s)
             ORDER BY updated_at DESC, id DESC
             LIMIT %s
             """,
             (user_id, *before, limit),
+        )
+
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        return await self._fetch_all(
+            f"""
+            SELECT {_COLUMNS} FROM conversations
+            WHERE user_id = %s AND pinned_at IS NOT NULL
+            ORDER BY pinned_at DESC, id DESC
+            """,
+            (user_id,),
+        )
+
+    async def update_owned(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str | None,
+        pinned: bool | None,
+    ) -> Conversation | None:
+        return await self._fetch_one(
+            f"""
+            UPDATE conversations SET
+                title = COALESCE(%(title)s::text, title),
+                pinned_at = CASE
+                    WHEN %(pinned)s::boolean IS NULL THEN pinned_at
+                    WHEN %(pinned)s::boolean THEN COALESCE(pinned_at, now())
+                    ELSE NULL
+                END
+            WHERE id = %(id)s AND user_id = %(user_id)s
+            RETURNING {_COLUMNS}
+            """,
+            {
+                "title": title,
+                "pinned": pinned,
+                "id": conversation_id,
+                "user_id": user_id,
+            },
         )
 
     async def touch_owned(

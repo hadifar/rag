@@ -26,7 +26,26 @@ class ConversationRepositoryPort(Protocol):
         limit: int,
         before: tuple[datetime, uuid.UUID] | None,
     ) -> list[Conversation]:
-        """Newest first by (updated_at, id); `before` is exclusive (keyset pagination)."""
+        """The unpinned ones, newest first by (updated_at, id); `before` is exclusive
+        (keyset pagination).
+        """
+        ...
+
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        """The pinned ones, last pinned first."""
+        ...
+
+    async def update_owned(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str | None,
+        pinned: bool | None,
+    ) -> Conversation | None:
+        """Sets each field given (None leaves it as is), without bumping it to most
+        recently used; pinning a pinned one keeps when it was pinned. None, as
+        `get_owned`, if it isn't the user's.
+        """
         ...
 
     async def touch_owned(

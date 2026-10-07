@@ -11,6 +11,7 @@ from rag.api.schema.conversation import (
     DEFAULT_PAGE_LIMIT,
     ConversationPageResponse,
     ConversationResponse,
+    ConversationUpdateRequest,
     HistoryMessageResponse,
     MessageRequest,
     PageLimit,
@@ -42,6 +43,32 @@ async def list_conversations(
 ) -> ConversationPageResponse:
     page = await conversation_service.list_for_user(current_user.id, limit, cursor)
     return ConversationPageResponse.model_validate(page)
+
+
+@router.get("/pinned")
+async def list_pinned_conversations(
+    current_user: AuthenticatedUserDep, conversation_service: ConversationServiceDep
+) -> list[ConversationResponse]:
+    """The caller's pinned conversations, last pinned first; `GET ""` lists the rest."""
+    conversations = await conversation_service.list_pinned(current_user.id)
+    return [ConversationResponse.model_validate(c) for c in conversations]
+
+
+@router.patch("/{conversation_id}")
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    update_request: ConversationUpdateRequest,
+    current_user: AuthenticatedUserDep,
+    conversation_service: ConversationServiceDep,
+) -> ConversationResponse:
+    """Renames, pins or unpins it."""
+    conversation = await conversation_service.update(
+        current_user.id,
+        conversation_id,
+        title=update_request.title,
+        pinned=update_request.pinned,
+    )
+    return ConversationResponse.model_validate(conversation)
 
 
 @router.get("/{conversation_id}/messages")

@@ -300,8 +300,15 @@ def test_create_conversation_starts_it_untitled_and_empty(
 
     assert response.status_code == 200
     conversation = response.json()
-    assert set(conversation) == {"id", "title", "created_at", "updated_at"}
+    assert set(conversation) == {
+        "id",
+        "title",
+        "created_at",
+        "updated_at",
+        "pinned_at",
+    }
     assert conversation["title"] is None
+    assert conversation["pinned_at"] is None
     messages_url = f"/api/conversations/{conversation['id']}/messages"
     assert client.get(messages_url, headers=auth_headers).json() == []
 
@@ -425,6 +432,70 @@ def test_conversations_list_is_newest_first_and_paginated(
     assert [c["id"] for c in page1["items"] + page2["items"]] == [second, first]
     assert page1["items"][0]["title"] == "Greeting"  # named from its first message
     assert page2["next_cursor"] is None
+
+
+def test_pinning_moves_a_conversation_from_the_list_to_the_pinned_ones(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    first = _start_conversation(client, auth_headers, "first")
+    second = _start_conversation(client, auth_headers, "second")
+
+    response = client.patch(
+        f"/api/conversations/{first}", json={"pinned": True}, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["pinned_at"] is not None
+    pinned = client.get("/api/conversations/pinned", headers=auth_headers).json()
+    listed = client.get("/api/conversations", headers=auth_headers).json()
+    assert [c["id"] for c in pinned] == [first]
+    assert [c["id"] for c in listed["items"]] == [second]
+
+
+def test_rename_stores_the_title_on_one_line(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"title": "  Billing\n  questions "},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Billing questions"
+    listed = client.get("/api/conversations", headers=auth_headers).json()
+    assert listed["items"][0]["title"] == "Billing questions"
+
+
+@pytest.mark.parametrize("title", ["", "   ", "x" * 201])
+def test_rename_rejects_a_blank_or_too_long_title(
+    client: TestClient, auth_headers: dict[str, str], title: str
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"title": title},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_404s_for_a_conversation_the_user_does_not_own(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, _login(client, _OTHER_EMAIL))
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"title": "mine now", "pinned": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
 
 
 def test_a_message_moves_a_conversation_to_the_top_of_the_list(

@@ -17,4 +17,5 @@ export const emptyConversationPage: ConversationPageResponse = {
 /** The fake backend every test starts from; a test overrides a route with `server.use`. */
 export const server = setupServer(
   http.get('/api/conversations', () => HttpResponse.json(emptyConversationPage)),
+  http.get('/api/conversations/pinned', () => HttpResponse.json([])),
 );

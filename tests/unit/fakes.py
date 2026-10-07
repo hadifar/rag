@@ -244,13 +244,43 @@ class FakeConversationRepository:
         before: tuple[datetime, uuid.UUID] | None,
     ) -> list[Conversation]:
         mine = sorted(
-            (c for c in self.rows.values() if c.user_id == user_id),
+            (
+                c
+                for c in self.rows.values()
+                if c.user_id == user_id and c.pinned_at is None
+            ),
             key=lambda c: (c.updated_at, c.id),
             reverse=True,
         )
         if before is not None:
             mine = [c for c in mine if (c.updated_at, c.id) < before]
         return mine[:limit]
+
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        pinned = [
+            c
+            for c in self.rows.values()
+            if c.user_id == user_id and c.pinned_at is not None
+        ]
+        return sorted(pinned, key=lambda c: (c.pinned_at, c.id), reverse=True)
+
+    async def update_owned(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str | None,
+        pinned: bool | None,
+    ) -> Conversation | None:
+        conversation = await self.get_owned(user_id, conversation_id)
+        if conversation is None:
+            return None
+        if title is not None:
+            conversation = replace(conversation, title=title)
+        if pinned is not None:
+            pinned_at = (conversation.pinned_at or self._now()) if pinned else None
+            conversation = replace(conversation, pinned_at=pinned_at)
+        self.rows[conversation_id] = conversation
+        return conversation
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID

@@ -2,6 +2,7 @@ import { api, unwrap } from '@/shared/api/client';
 import type {
   ConversationPageResponse,
   ConversationResponse,
+  ConversationUpdateRequest,
   HistoryMessageResponse,
 } from '@/shared/types';
 
@@ -24,6 +25,19 @@ export function listConversations(
   signal?: AbortSignal
 ): Promise<ConversationPageResponse> {
   return unwrap(api.GET('/api/conversations', { params: { query: cursor ? { cursor } : {} }, signal }));
+}
+
+/** The pinned conversations, last pinned first; `listConversations` lists the rest. */
+export function listPinnedConversations(signal?: AbortSignal): Promise<ConversationResponse[]> {
+  return unwrap(api.GET('/api/conversations/pinned', { signal }));
+}
+
+/** Renames, pins or unpins it; a field left out stays as is. */
+export function updateConversation(
+  id: string,
+  body: ConversationUpdateRequest
+): Promise<ConversationResponse> {
+  return unwrap(api.PATCH('/api/conversations/{conversation_id}', { params: byId(id), body }));
 }
 
 export function fetchConversationMessages(
