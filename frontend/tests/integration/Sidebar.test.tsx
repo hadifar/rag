@@ -213,3 +213,47 @@ describe('Sidebar chat menu', () => {
     expect(screen.getByRole('textbox', { name: 'Chat title' })).toHaveValue('Plans and pricing v2');
   });
 });
+
+describe('Sidebar share chat', () => {
+  const shareUrl = `/api/conversations/${chat.id}/share`;
+  const share = { id: 'share-1', title: chat.title!, shared_at: '2026-03-04T10:00:00Z' };
+
+  it('creates a link, copies it, and stops sharing', async () => {
+    let current: typeof share | null = null;
+    server.use(
+      http.get(shareUrl, () => HttpResponse.json(current)),
+      http.put(shareUrl, () => HttpResponse.json((current = share))),
+      http.delete(shareUrl, () => {
+        current = null;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = renderSidebar();
+
+    await chooseFromMenu(user, 'Share');
+    const dialog = screen.getByRole('dialog', { name: 'Share chat' });
+    await user.click(await within(dialog).findByRole('button', { name: 'Create link' }));
+
+    const link = await within(dialog).findByRole('textbox', { name: 'Share link' });
+    expect(link).toHaveValue(`${window.location.origin}/share/share-1`);
+    await user.click(within(dialog).getByRole('button', { name: 'Copy' }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/share/share-1`);
+    expect(within(dialog).getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Stop sharing' }));
+    expect(await within(dialog).findByRole('button', { name: 'Create link' })).toBeInTheDocument();
+  });
+
+  it('shows why sharing failed', async () => {
+    server.use(
+      http.get(shareUrl, () => HttpResponse.json(null)),
+      http.put(shareUrl, () => HttpResponse.json({ detail: 'empty' }, { status: 409 })),
+    );
+    const user = renderSidebar();
+
+    await chooseFromMenu(user, 'Share');
+    await user.click(await screen.findByRole('button', { name: 'Create link' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('no messages to share yet');
+  });
+});

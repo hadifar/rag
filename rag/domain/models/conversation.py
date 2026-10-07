@@ -20,6 +20,19 @@ class Conversation:
 
 
 @dataclass(frozen=True)
+class Share:
+    """A read-only public link to a conversation as it was when shared: its title then,
+    and its first `turn_count` turns.
+    """
+
+    id: uuid.UUID  # the link's token
+    conversation_id: uuid.UUID
+    title: str
+    turn_count: int
+    shared_at: datetime
+
+
+@dataclass(frozen=True)
 class ConversationPage:
     items: list[Conversation]
     # Opaque; pass back to fetch the next (older) page. None on the last page.
@@ -55,3 +68,23 @@ class AssistantMessage:
 
 
 HistoryMessage = UserMessage | AssistantMessage
+
+
+def history_of(turns: list[Turn]) -> list[HistoryMessage]:
+    """The turns as the user saw them: each question, then its answer's events, if it
+    sent any. Never the agent's memory of them.
+    """
+    history: list[HistoryMessage] = []
+    for turn in turns:
+        history.append(UserMessage(text=turn.question))
+        if turn.answer:
+            history.append(AssistantMessage(events=turn.answer))
+    return history
+
+
+@dataclass(frozen=True)
+class SharedConversation:
+    """What a share link shows: the snapshot's title and date, and its history."""
+
+    share: Share
+    history: list[HistoryMessage]

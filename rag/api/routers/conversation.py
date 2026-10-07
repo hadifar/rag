@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from rag.api.deps import (
     AuthenticatedUserDep,
     ConversationServiceDep,
+    ShareServiceDep,
     get_current_user,
 )
 from rag.api.schema.conversation import (
@@ -17,6 +18,7 @@ from rag.api.schema.conversation import (
     PageLimit,
     to_history_message,
 )
+from rag.api.schema.share import ShareResponse
 
 router = APIRouter(
     prefix="/api/conversations",
@@ -96,6 +98,37 @@ async def generate_title(
         current_user.id, conversation_id, message_request.message
     )
     return ConversationResponse.model_validate(conversation)
+
+
+@router.get("/{conversation_id}/share")
+async def get_share(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> ShareResponse | None:
+    """Its public link, or null if it isn't shared."""
+    share = await share_service.get(current_user.id, conversation_id)
+    return ShareResponse.model_validate(share) if share is not None else None
+
+
+@router.put("/{conversation_id}/share")
+async def share_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> ShareResponse:
+    """Shares it as it is now, behind its link (made on first share, kept after)."""
+    share = await share_service.share(current_user.id, conversation_id)
+    return ShareResponse.model_validate(share)
+
+
+@router.delete("/{conversation_id}/share", status_code=204)
+async def unshare_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> None:
+    await share_service.unshare(current_user.id, conversation_id)
 
 
 @router.delete("/{conversation_id}", status_code=204)

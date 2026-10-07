@@ -10,12 +10,11 @@ from rag.domain.errors import (
     InvalidCursorError,
 )
 from rag.domain.models import (
-    AssistantMessage,
     Conversation,
     ConversationPage,
     HistoryMessage,
     RunContext,
-    UserMessage,
+    history_of,
 )
 from rag.domain.ports import (
     ConversationRepositoryPort,
@@ -110,12 +109,7 @@ class ConversationService:
     ) -> list[HistoryMessage]:
         """Each question, then its answer's events, if it sent any."""
         await self.get_owned(user_id, conversation_id)
-        history: list[HistoryMessage] = []
-        for turn in await self._repository.list_turns(conversation_id):
-            history.append(UserMessage(text=turn.question))
-            if turn.answer:
-                history.append(AssistantMessage(events=turn.answer))
-        return history
+        return history_of(await self._repository.list_turns(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         """Its turns, and the agent's memory of them, go with the row."""

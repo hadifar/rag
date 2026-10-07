@@ -7,7 +7,9 @@ import { useConversationList } from '../hooks/useConversationList';
 import { usePinnedConversations } from '../hooks/usePinnedConversations';
 import { useConfirmDeleteConversation } from '../hooks/useConfirmDeleteConversation';
 import { useEditConversation } from '../hooks/useEditConversation';
+import { useShareConversation } from '../hooks/useShareConversation';
 import { ConversationRow, NEW_CHAT_TITLE } from './ConversationRow';
+import { ShareDialog } from './ShareDialog';
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
@@ -19,7 +21,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 /**
  * The sidebar's chats: the pinned ones, then the recent ones paged in on demand. Each
- * can be pinned, renamed, or deleted after a confirmation, from its menu.
+ * can be pinned, renamed, shared, or deleted after a confirmation, from its menu.
  */
 export function ConversationList() {
   const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversationList();
@@ -36,6 +38,7 @@ export function ConversationList() {
     isSavingRename,
     renameError,
   } = useEditConversation();
+  const share = useShareConversation();
 
   const row = (conversation: ConversationResponse) => {
     const isRenaming = renamingId === conversation.id;
@@ -52,6 +55,7 @@ export function ConversationList() {
         onStartRename={startRename}
         onSaveRename={saveRename}
         onCancelRename={cancelRename}
+        onShare={share.open}
         onDelete={requestDelete}
       />
     );
@@ -115,6 +119,21 @@ export function ConversationList() {
         error={error}
         onConfirm={confirm}
         onCancel={cancel}
+      />
+      <ShareDialog
+        isOpen={share.sharing !== null}
+        title={share.sharing?.title ?? NEW_CHAT_TITLE}
+        status={share.status}
+        link={share.link}
+        sharedOn={share.sharedOn}
+        isSaving={share.isSaving}
+        isStopping={share.isStopping}
+        copied={share.copied}
+        error={share.error}
+        onSave={share.saveShare}
+        onStop={share.stopSharing}
+        onCopy={share.copy}
+        onClose={share.close}
       />
     </>
   );

@@ -46,7 +46,7 @@
             "group": [
               "**/features/chat"
             ],
-            "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+            "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
           }
         ]
       }
@@ -93,7 +93,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -137,7 +137,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -194,7 +194,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -246,7 +246,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -314,7 +314,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -369,7 +369,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -425,7 +425,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -469,7 +469,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               }
             ]
           }
@@ -507,7 +507,7 @@
                 "group": [
                   "**/features/chat"
                 ],
-                "message": "Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer."
+                "message": "Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer."
               },
               {
                 "group": [
@@ -528,7 +528,8 @@
     },
     {
       "files": [
-        "src/pages/ChatPage.tsx"
+        "src/pages/ChatPage.tsx",
+        "src/pages/SharedChatPage.tsx"
       ],
       "rules": {
         "no-restricted-imports": [

@@ -1,7 +1,8 @@
 import type { SourcesContent } from '../types';
 import { BubbleFrame } from './BubbleFrame';
 
-type SourcesBubbleProps = SourcesContent & { onOpen: (name: string) => void };
+/** Without `onOpen` (a shared chat, read signed out), each source is a plain name. */
+type SourcesBubbleProps = SourcesContent & { onOpen?: (name: string) => void };
 
 export function SourcesBubble({ sources, onOpen }: SourcesBubbleProps) {
   if (sources.length === 0) {
@@ -19,13 +20,17 @@ export function SourcesBubble({ sources, onOpen }: SourcesBubbleProps) {
       <ul className="mt-1 list-inside list-disc text-slate-600">
         {sources.map((name) => (
           <li key={name}>
-            <button
-              type="button"
-              onClick={() => onOpen(name)}
-              className="text-primary-600 hover:underline"
-            >
-              {name}
-            </button>
+            {onOpen ? (
+              <button
+                type="button"
+                onClick={() => onOpen(name)}
+                className="text-primary-600 hover:underline"
+              >
+                {name}
+              </button>
+            ) : (
+              name
+            )}
           </li>
         ))}
       </ul>

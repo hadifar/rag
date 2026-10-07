@@ -12,7 +12,7 @@ import { VerificationBubble } from './VerificationBubble';
 
 type BubbleViewProps<K extends BubbleType> = {
   bubble: BubbleOf<K>;
-  onOpenSource: (name: string) => void;
+  onOpenSource?: (name: string) => void;
   onRetry?: () => void;
 };
 
@@ -40,10 +40,11 @@ const MessageBubble = memo(function MessageBubble({ bubble, onOpenSource, onRetr
 type MessageListProps = {
   bubbles: Bubble[];
   isWaiting: boolean;
-  onOpenSource: (name: string) => void;
+  /** Opens a cited document; without it (a shared chat), sources are listed as plain names. */
+  onOpenSource?: (name: string) => void;
   /** The error bubble that offers a retry, if any, and what retrying does. */
-  retryBubbleId: string | null;
-  onRetry: () => void;
+  retryBubbleId?: string | null;
+  onRetry?: () => void;
 };
 
 export function MessageList({ bubbles, isWaiting, onOpenSource, retryBubbleId, onRetry }: MessageListProps) {

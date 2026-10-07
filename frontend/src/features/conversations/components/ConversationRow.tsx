@@ -5,6 +5,7 @@ import {
   BookmarkSlashIcon,
   EllipsisHorizontalIcon,
   PencilIcon,
+  ShareIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 
@@ -69,10 +70,11 @@ type ConversationRowProps = {
   onStartRename: (conversation: ConversationResponse) => void;
   onSaveRename: (conversation: ConversationResponse, draft: string) => void;
   onCancelRename: () => void;
+  onShare: (conversation: ConversationResponse) => void;
   onDelete: (conversation: ConversationResponse) => void;
 };
 
-/** One chat in the sidebar: a link to it, and a menu to pin, rename or delete it. */
+/** One chat in the sidebar: a link to it, and a menu to pin, rename, share or delete it. */
 export const ConversationRow = memo(function ConversationRow({
   conversation,
   vanishing,
@@ -84,13 +86,14 @@ export const ConversationRow = memo(function ConversationRow({
   onStartRename,
   onSaveRename,
   onCancelRename,
+  onShare,
   onDelete,
 }: ConversationRowProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setIsMenuOpen(false), []);
   const menuButton = useRef<HTMLButtonElement>(null);
   const title = conversation.title ?? NEW_CHAT_TITLE;
-  // The empty draft has nothing to pin or name yet: its first message names it.
+  // The empty draft has nothing to pin, name or share yet: its first message names it.
   const isDraft = conversation.title === null;
 
   if (isRenaming) {
@@ -153,6 +156,11 @@ export const ConversationRow = memo(function ConversationRow({
         {!isDraft && (
           <DropdownItem Icon={PencilIcon} onSelect={() => onStartRename(conversation)}>
             Rename
+          </DropdownItem>
+        )}
+        {!isDraft && (
+          <DropdownItem Icon={ShareIcon} onSelect={() => onShare(conversation)}>
+            Share
           </DropdownItem>
         )}
         <DropdownItem Icon={TrashIcon} tone="danger" onSelect={() => onDelete(conversation)}>

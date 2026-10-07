@@ -4,6 +4,7 @@ import type {
   ConversationResponse,
   ConversationUpdateRequest,
   HistoryMessageResponse,
+  ShareResponse,
 } from '@/shared/types';
 
 const byId = (id: string) => ({ path: { conversation_id: id } });
@@ -49,4 +50,18 @@ export function fetchConversationMessages(
 
 export async function deleteConversation(id: string): Promise<void> {
   await unwrap(api.DELETE('/api/conversations/{conversation_id}', { params: byId(id) }));
+}
+
+/** Its public link, or null if it isn't shared. */
+export function fetchShare(id: string, signal?: AbortSignal): Promise<ShareResponse | null> {
+  return unwrap(api.GET('/api/conversations/{conversation_id}/share', { params: byId(id), signal }));
+}
+
+/** Shares it as it is now; sharing again updates what the same link shows. */
+export function shareConversation(id: string): Promise<ShareResponse> {
+  return unwrap(api.PUT('/api/conversations/{conversation_id}/share', { params: byId(id) }));
+}
+
+export async function unshareConversation(id: string): Promise<void> {
+  await unwrap(api.DELETE('/api/conversations/{conversation_id}/share', { params: byId(id) }));
 }

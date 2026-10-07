@@ -5,7 +5,7 @@ import uuid
 import zipfile
 from collections.abc import Callable, Generator
 from datetime import timedelta
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi.dependencies.models import Dependant
@@ -32,12 +32,14 @@ from rag.domain.models import (
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeConversationRepository,
+    FakeShareRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
@@ -119,6 +121,10 @@ def client() -> Generator[TestClient]:
             llm=generation,
         ),
         chat_service=ChatService(repository=conversation_repository, agent=agent),
+        share_service=ShareService(
+            shares=FakeShareRepository(conversation_repository),
+            conversations=conversation_repository,
+        ),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -498,6 +504,97 @@ def test_update_404s_for_a_conversation_the_user_does_not_own(
     assert response.status_code == 404
 
 
+def _share(client: TestClient, headers: dict[str, str], conversation_id: str):
+    return client.put(f"/api/conversations/{conversation_id}/share", headers=headers)
+
+
+def _questions(shared: dict[str, Any]) -> list[str]:
+    return [m["text"] for m in shared["messages"] if m["role"] == "user"]
+
+
+def test_a_shared_conversation_is_readable_without_signing_in(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers, "hi")
+
+    share = _share(client, auth_headers, conversation_id)
+
+    assert share.status_code == 200
+    assert share.json()["title"] == "Greeting"
+    shared = client.get(f"/api/shares/{share.json()['id']}")  # no auth headers
+    assert shared.status_code == 200
+    body = shared.json()
+    assert body["title"] == "Greeting"
+    assert body["messages"][0] == {"role": "user", "text": "hi"}
+    assert body["messages"][1]["role"] == "assistant"
+
+
+def test_a_share_is_a_snapshot_until_shared_again(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers, "hi")
+    share_id = _share(client, auth_headers, conversation_id).json()["id"]
+
+    _send(client, auth_headers, conversation_id, "later")
+    before = client.get(f"/api/shares/{share_id}").json()
+    again = _share(client, auth_headers, conversation_id).json()
+    after = client.get(f"/api/shares/{share_id}").json()
+
+    assert _questions(before) == ["hi"]
+    assert again["id"] == share_id  # same link, new snapshot
+    assert _questions(after) == ["hi", "later"]
+
+
+def test_get_share_is_null_until_shared_and_after_unsharing(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+    url = f"/api/conversations/{conversation_id}/share"
+    assert client.get(url, headers=auth_headers).json() is None
+
+    share_id = _share(client, auth_headers, conversation_id).json()["id"]
+    assert client.get(url, headers=auth_headers).json()["id"] == share_id
+
+    assert client.delete(url, headers=auth_headers).status_code == 204
+    assert client.get(url, headers=auth_headers).json() is None
+    assert client.get(f"/api/shares/{share_id}").status_code == 404
+
+
+def test_deleting_a_conversation_takes_its_link_down(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+    share_id = _share(client, auth_headers, conversation_id).json()["id"]
+
+    client.delete(f"/api/conversations/{conversation_id}", headers=auth_headers)
+
+    assert client.get(f"/api/shares/{share_id}").status_code == 404
+
+
+def test_an_empty_conversation_cannot_be_shared(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _create_conversation(client, auth_headers)
+
+    assert _share(client, auth_headers, conversation_id).status_code == 409
+
+
+def test_only_the_owner_can_share_or_unshare(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    other = _login(client, _OTHER_EMAIL)
+    conversation_id = _start_conversation(client, other)
+    url = f"/api/conversations/{conversation_id}/share"
+
+    assert client.put(url, headers=auth_headers).status_code == 404
+    assert client.get(url, headers=auth_headers).status_code == 404
+    assert client.delete(url, headers=auth_headers).status_code == 404
+
+
+def test_an_unknown_share_link_is_not_found(client: TestClient) -> None:
+    assert client.get(f"/api/shares/{uuid.uuid4()}").status_code == 404
+
+
 def test_a_message_moves_a_conversation_to_the_top_of_the_list(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
@@ -608,6 +705,7 @@ _PUBLIC_ROUTES = {
     ("POST", "/api/auth/logout"),
     ("GET", "/api/health/live"),
     ("GET", "/api/health/ready"),
+    ("GET", "/api/shares/{share_id}"),
 }
 
 

@@ -152,13 +152,15 @@ class ConversationRepository(BaseRepository[Conversation]):
             ),
         )
 
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
+    async def list_turns(
+        self, conversation_id: uuid.UUID, limit: int | None = None
+    ) -> list[Turn]:
         # Raw rows: the _fetch_* helpers map onto Conversation, not Turn.
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 "SELECT question, answer, agent_messages FROM conversation_turns "
-                "WHERE conversation_id = %s ORDER BY id",
-                (conversation_id,),
+                "WHERE conversation_id = %s ORDER BY id LIMIT %s",  # LIMIT NULL: all
+                (conversation_id, limit),
             )
             rows: list[tuple[str, Any, AgentMemory | None]] = await cur.fetchall()
         return [

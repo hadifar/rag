@@ -2,4 +2,6 @@
 export const conversationKeys = {
   list: ['conversations', 'list'] as const,
   pinned: ['conversations', 'pinned'] as const,
+  /** A conversation's public link, or null. */
+  share: (conversationId: string) => ['conversations', 'share', conversationId] as const,
 };

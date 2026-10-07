@@ -207,6 +207,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share
+         * @description Its public link, or null if it isn't shared.
+         */
+        get: operations["get_share_api_conversations__conversation_id__share_get"];
+        /**
+         * Share Conversation
+         * @description Shares it as it is now, behind its link (made on first share, kept after).
+         */
+        put: operations["share_conversation_api_conversations__conversation_id__share_put"];
+        post?: never;
+        /** Unshare Conversation */
+        delete: operations["unshare_conversation_api_conversations__conversation_id__share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/{conversation_id}": {
         parameters: {
             query?: never;
@@ -308,6 +333,26 @@ export interface paths {
         };
         /** Get Settings */
         get: operations["get_settings_api_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Shared Conversation
+         * @description A shared conversation as it was when shared; 404 once its link is taken down.
+         */
+        get: operations["get_shared_conversation_api_shares__share_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -482,6 +527,39 @@ export interface components {
             temperature: number;
             /** Top K */
             top_k: number;
+        };
+        /**
+         * ShareResponse
+         * @description A conversation's public read-only link: `id` is its token.
+         */
+        ShareResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Shared At
+             * Format: date-time
+             */
+            shared_at: string;
+        };
+        /**
+         * SharedConversationResponse
+         * @description What anyone with the link sees: the snapshot's title, date and messages.
+         */
+        SharedConversationResponse: {
+            /** Title */
+            title: string;
+            /**
+             * Shared At
+             * Format: date-time
+             */
+            shared_at: string;
+            /** Messages */
+            messages: components["schemas"]["HistoryMessageResponse"][];
         };
         /**
          * SourceArtifactItem
@@ -977,6 +1055,97 @@ export interface operations {
             };
         };
     };
+    get_share_api_conversations__conversation_id__share_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_conversation_api_conversations__conversation_id__share_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unshare_conversation_api_conversations__conversation_id__share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_message_api_chat__conversation_id__post: {
         parameters: {
             query?: never;
@@ -1143,6 +1312,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    get_shared_conversation_api_shares__share_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

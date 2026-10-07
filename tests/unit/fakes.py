@@ -16,6 +16,7 @@ from rag.domain.models import (
     IngestionReport,
     IngestionRun,
     RunContext,
+    Share,
     StreamEvent,
     TextDelta,
     Turn,
@@ -309,8 +310,51 @@ class FakeConversationRepository:
         turn = Turn(question, list(answer), memory)
         self.turns.setdefault(conversation_id, []).append(turn)
 
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
-        return list(self.turns.get(conversation_id, []))
+    async def list_turns(
+        self, conversation_id: uuid.UUID, limit: int | None = None
+    ) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))[:limit]
+
+
+class FakeShareRepository:
+    """In-memory ShareRepositoryPort, reading turn counts from `conversations`."""
+
+    def __init__(self, conversations: FakeConversationRepository):
+        self.conversations = conversations
+        self.rows: dict[uuid.UUID, Share] = {}  # by conversation id
+        self._clock = datetime(2026, 2, 1, tzinfo=UTC)
+
+    async def save(self, conversation_id: uuid.UUID, title: str) -> Share | None:
+        turn_count = len(self.conversations.turns.get(conversation_id, []))
+        if turn_count == 0:
+            return None
+        self._clock += timedelta(seconds=1)
+        current = self.rows.get(conversation_id)
+        self.rows[conversation_id] = Share(
+            id=current.id if current else uuid.uuid4(),
+            conversation_id=conversation_id,
+            title=title,
+            turn_count=turn_count,
+            shared_at=self._clock,
+        )
+        return self.rows[conversation_id]
+
+    async def get_for_conversation(self, conversation_id: uuid.UUID) -> Share | None:
+        return self.rows.get(conversation_id)
+
+    async def get(self, share_id: uuid.UUID) -> Share | None:
+        # Deleting a conversation takes its link down, as the foreign key does.
+        return next(
+            (
+                s
+                for s in self.rows.values()
+                if s.id == share_id and s.conversation_id in self.conversations.rows
+            ),
+            None,
+        )
+
+    async def delete_for_conversation(self, conversation_id: uuid.UUID) -> None:
+        self.rows.pop(conversation_id, None)
 
 
 class StubGeneration:

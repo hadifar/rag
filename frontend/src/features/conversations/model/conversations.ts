@@ -1,5 +1,6 @@
 import type { InfiniteData } from '@tanstack/react-query';
 
+import { routes } from '@/shared/routes';
 import type { ConversationPageResponse, ConversationResponse } from '@/shared/types';
 
 /** The sidebar list as it's cached: the pages loaded so far, each with its cursor. */
@@ -101,4 +102,14 @@ export function patchPages(
 ): ConversationPages {
   const list = update(flattenPages(data));
   return { ...data, pages: data.pages.map((page, i) => ({ ...page, items: i === 0 ? list : [] })) };
+}
+
+/** The full URL of a share link, to paste anywhere: `origin` is the app's own. */
+export function shareUrl(origin: string, shareId: string): string {
+  return `${origin}${routes.share(shareId)}`;
+}
+
+/** When a snapshot was taken, as a date in the viewer's locale. */
+export function sharedOn(sharedAt: string): string {
+  return new Date(sharedAt).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
