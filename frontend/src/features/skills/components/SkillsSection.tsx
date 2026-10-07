@@ -41,7 +41,9 @@ export function SkillsSection() {
             <li key={skill.id} className="flex items-start gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-mono text-sm text-slate-900">{skill.name}</p>
-                <p className="m-0 mt-0.5 text-[13px] break-words text-slate-600">{skill.description}</p>
+                <p title={skill.description} className="m-0 mt-0.5 truncate text-[13px] text-slate-600">
+                  {skill.description}
+                </p>
               </div>
               <IconButton label={`Delete ${skill.name}`} tone="danger" onClick={() => requestDelete(skill)}>
                 <TrashIcon className="size-4" />
