@@ -1,5 +1,6 @@
 import type { HistoryMessageResponse, StreamEventResponse } from '@/shared/types';
-import type { Bubble, BubbleOf, BubbleType, Transcript, Turn } from '../types';
+import type { AttachmentChip, Bubble, BubbleOf, BubbleType, Transcript, Turn } from '../types';
+import { toChip } from './attachments';
 
 // Every function here is pure: it returns a new transcript and leaves the old one as it
 // was. A bubble that didn't change keeps its identity, so only changed bubbles re-render.
@@ -153,22 +154,27 @@ export function endTurn(transcript: Transcript, error?: string): Transcript {
 }
 
 /** The user's message, and an answer opened for it (shown as typing until it ends). */
-export function startTurn(transcript: Transcript, text: string): Transcript {
+export function startTurn(transcript: Transcript, text: string, attachments: AttachmentChip[] = []): Transcript {
   const t = draft(endTurn(transcript));
-  push(t, { type: 'user', content: { text } });
+  push(t, { type: 'user', content: { text, attachments } });
   t.turn = openTurn();
   return t;
 }
 
 /**
  * The failed answer that can be asked for again: the last bubble, if it's an error after
- * a question, and the question to send again. None while an answer is open.
+ * a question, and the question to send again, with its attachments. None while an answer
+ * is open.
  */
-export function retryable(t: Transcript): { bubbleId: string; question: string } | null {
+export function retryable(
+  t: Transcript
+): { bubbleId: string; question: string; attachments: AttachmentChip[] } | null {
   const last = t.bubbles.at(-1);
   if (t.turn !== null || last?.type !== 'error') return null;
   const question = t.bubbles.findLast((b) => b.type === 'user');
-  return question?.type === 'user' ? { bubbleId: last.id, question: question.content.text } : null;
+  return question?.type === 'user'
+    ? { bubbleId: last.id, question: question.content.text, attachments: question.content.attachments }
+    : null;
 }
 
 /** Whether the assistant shows as typing: for as long as an answer is open. */
@@ -184,7 +190,7 @@ export function fromHistory(history: HistoryMessageResponse[]): Transcript {
   return history.reduce((t, message) => {
     if (message.role === 'user') {
       const next = draft(t);
-      push(next, { type: 'user', content: { text: message.text } });
+      push(next, { type: 'user', content: { text: message.text, attachments: message.attachments.map(toChip) } });
       return next;
     }
     return endTurn(applyEvents(t, message.events));

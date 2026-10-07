@@ -132,6 +132,26 @@ class ConversationNotFoundError(AppError):
         super().__init__(f"No conversation found for id={conversation_id!r}")
 
 
+class NothingToShareError(AppError):
+    """Raised when sharing a conversation that has no messages yet."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, conversation_id: object):
+        super().__init__(f"Conversation {conversation_id!r} has no messages to share")
+
+
+class ShareNotFoundError(AppError):
+    """Raised when a share link doesn't exist, was taken down, or its conversation
+    was deleted.
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, share_id: object):
+        super().__init__(f"No shared conversation found for id={share_id!r}")
+
+
 class InvalidCursorError(AppError):
     """Raised when a pagination cursor wasn't produced by this API."""
 
@@ -139,3 +159,74 @@ class InvalidCursorError(AppError):
 
     def __init__(self):
         super().__init__("Invalid pagination cursor")
+
+
+class AttachmentNotFoundError(AppError):
+    """Raised when an attachment doesn't exist, isn't in the conversation, or (to
+    discard it) was already sent.
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, attachment_id: object):
+        super().__init__(f"No attachment found for id={attachment_id!r}")
+
+
+class UnsupportedAttachmentError(AppError):
+    """Raised when an uploaded file isn't one of the kinds that can be attached."""
+
+    status_code: ClassVar[int] = 415
+
+    def __init__(self, accepted: str):
+        super().__init__(f"Only {accepted} files can be attached")
+
+
+class AttachmentTooLargeError(AppError):
+    """Raised when an uploaded file is over its kind's size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The file is larger than {_size(max_bytes)}")
+
+
+class SkillNotFoundError(AppError):
+    """Raised when a skill doesn't exist or belongs to another user."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, skill_id: object):
+        super().__init__(f"No skill found for id={skill_id!r}")
+
+
+class InvalidSkillError(AppError):
+    """Raised when an uploaded skill file can't be read as a skill."""
+
+    status_code: ClassVar[int] = 422
+
+    def __init__(self, reason: str):
+        super().__init__(f"Not a valid skill file: {reason}")
+
+
+class SkillTooLargeError(AppError):
+    """Raised when an uploaded skill file is over the size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The skill file is larger than {_size(max_bytes)}")
+
+
+class TooManySkillsError(AppError):
+    """Raised when saving a new skill would take a user over the limit."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, max_skills: int):
+        super().__init__(
+            f"You can save up to {max_skills} skills. Delete one to add another."
+        )
+
+
+def _size(n: int) -> str:
+    return f"{n // (1024 * 1024)} MB" if n >= 1024 * 1024 else f"{n // 1024} KB"

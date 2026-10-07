@@ -5,15 +5,18 @@ import { useNavigate } from 'react-router-dom';
 import {
   createConversation,
   generateTitle,
+  updateConversation,
   useConversationCache,
 } from '@/features/conversations';
 import { errorMessage } from '@/shared/api/errors';
-import type { StreamEventResponse } from '@/shared/types';
+import type { ConversationResponse, StreamEventResponse } from '@/shared/types';
 import { routes } from '@/shared/routes';
 import { streamChat } from '../api/chat';
 import { chatKeys } from '../api/queryKeys';
+import { titleSource } from '../model/attachments';
+import { settingsToChange } from '../model/runSettings';
 import { applyEvents, emptyTranscript, endTurn, startTurn } from '../model/transcript';
-import type { Transcript } from '../types';
+import type { AttachmentChip, RunSettings, Transcript } from '../types';
 import { frameBatcher } from './frameBatcher';
 
 /** Why the answer stopped, for the user: never the raw error, which reads as gibberish. */
@@ -31,9 +34,13 @@ function answerErrorText(err: unknown): string {
 type Stream = { conversationId: string | undefined; controller: AbortController };
 
 /**
- * Sends the user's message and streams the answer into the conversation's transcript.
+ * Sends the user's message, with the attachments already uploaded to the conversation,
+ * and streams the answer into the conversation's transcript.
  * `conversationId` is the one on screen (undefined for a new chat, which is created on
- * its first message and then followed by the URL). Leaving the conversation stops it.
+ * its first message and then followed by the URL). A new chat whose files were uploaded
+ * first passes `newChat`, the conversation they went to. A new chat is set to `settings`,
+ * the model and effort the user picked for it, before its message goes. Leaving the
+ * conversation stops it.
  */
 export function useSendMessage(conversationId: string | undefined) {
   const queryClient = useQueryClient();
@@ -63,9 +70,14 @@ export function useSendMessage(conversationId: string | undefined) {
   );
 
   return useCallback(
-    async (val: string) => {
+    async (
+      val: string,
+      attachments: AttachmentChip[] = [],
+      newChat: ConversationResponse | null = null,
+      settings: RunSettings | null = null
+    ) => {
       const text = val.trim();
-      if (!text) return;
+      if (!text && attachments.length === 0) return;
 
       // A new turn supersedes whatever is still streaming.
       active.current?.controller.abort();
@@ -87,16 +99,19 @@ export function useSendMessage(conversationId: string | undefined) {
       // A history load still in flight would overwrite the new turn when it lands.
       await queryClient.cancelQueries({ queryKey: chatKeys.transcript(conversationId), exact: true });
       // A new chat starts from nothing, not from whatever an earlier new chat left there.
-      write((t) => startTurn(conversationId ? t : emptyTranscript(), text));
+      write((t) => startTurn(conversationId ? t : emptyTranscript(), text, attachments));
 
       try {
         if (conversationId) {
           // The server lists it first too, as it takes the message.
           bump(conversationId);
         } else {
-          const conversation = await createConversation(controller.signal);
+          const created = newChat ?? (await createConversation(controller.signal));
+          const change = settings && settingsToChange(created, settings);
+          const conversation = change ? await updateConversation(created.id, change) : created;
+          queryClient.setQueryData(chatKeys.conversation(conversation.id), conversation);
           upsert(conversation);
-          void nameConversation(conversation.id, text);
+          void nameConversation(conversation.id, titleSource(text, attachments));
           // Move what's on screen to the new chat's own entry, then let the URL follow.
           const shown = queryClient.getQueryData<Transcript>(chatKeys.transcript(undefined));
           queryClient.setQueryData(chatKeys.transcript(conversation.id), shown);
@@ -106,6 +121,7 @@ export function useSendMessage(conversationId: string | undefined) {
         await streamChat({
           conversationId: stream.conversationId!,
           message: text,
+          attachment_ids: attachments.map((a) => a.id),
           onEvent: events.push,
           signal: controller.signal,
         });

@@ -10,12 +10,12 @@ from rag.domain.errors import (
     InvalidCursorError,
 )
 from rag.domain.models import (
-    AssistantMessage,
     Conversation,
     ConversationPage,
+    ConversationUpdate,
     HistoryMessage,
     RunContext,
-    UserMessage,
+    history_of,
 )
 from rag.domain.ports import (
     ConversationRepositoryPort,
@@ -81,17 +81,35 @@ class ConversationService:
         next_cursor = _encode_cursor(items[-1]) if len(rows) > limit else None
         return ConversationPage(items=items, next_cursor=next_cursor)
 
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        """The user's pinned conversations, last pinned first. Not paged: the user
+        picks each one, so there are few.
+        """
+        return await self._repository.list_pinned(user_id)
+
+    async def update(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        change: ConversationUpdate,
+    ) -> Conversation:
+        """Renames it, pins or unpins it, or sets the model and effort its turns run
+        on; a field `change` leaves None stays as is. No change counts as using it,
+        so it keeps its place among the recent ones.
+        """
+        conversation = await self._repository.update_owned(
+            user_id, conversation_id, change
+        )
+        if conversation is None:
+            raise ConversationNotFoundError(conversation_id)
+        return conversation
+
     async def history(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> list[HistoryMessage]:
         """Each question, then its answer's events, if it sent any."""
         await self.get_owned(user_id, conversation_id)
-        history: list[HistoryMessage] = []
-        for turn in await self._repository.list_turns(conversation_id):
-            history.append(UserMessage(text=turn.question))
-            if turn.answer:
-                history.append(AssistantMessage(events=turn.answer))
-        return history
+        return history_of(await self._repository.list_turns(conversation_id))
 
     async def delete(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
         """Its turns, and the agent's memory of them, go with the row."""

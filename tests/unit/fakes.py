@@ -11,11 +11,16 @@ from rag.domain.models import (
     AgentMemory,
     Artifact,
     ArtifactsReady,
+    Attachment,
+    AttachmentFile,
     Conversation,
+    ConversationUpdate,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
     RunContext,
+    Share,
+    Skill,
     StreamEvent,
     TextDelta,
     Turn,
@@ -207,6 +212,8 @@ class FakeConversationRepository:
     def __init__(self):
         self.rows: dict[uuid.UUID, Conversation] = {}
         self.turns: dict[uuid.UUID, list[Turn]] = {}
+        # The conversations' attachments, which FakeAttachmentRepository writes.
+        self.attachments: dict[uuid.UUID, AttachmentFile] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     def _now(self) -> datetime:
@@ -244,13 +251,46 @@ class FakeConversationRepository:
         before: tuple[datetime, uuid.UUID] | None,
     ) -> list[Conversation]:
         mine = sorted(
-            (c for c in self.rows.values() if c.user_id == user_id),
+            (
+                c
+                for c in self.rows.values()
+                if c.user_id == user_id and c.pinned_at is None
+            ),
             key=lambda c: (c.updated_at, c.id),
             reverse=True,
         )
         if before is not None:
             mine = [c for c in mine if (c.updated_at, c.id) < before]
         return mine[:limit]
+
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        pinned = [
+            c
+            for c in self.rows.values()
+            if c.user_id == user_id and c.pinned_at is not None
+        ]
+        return sorted(pinned, key=lambda c: (c.pinned_at, c.id), reverse=True)
+
+    async def update_owned(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        change: ConversationUpdate,
+    ) -> Conversation | None:
+        conversation = await self.get_owned(user_id, conversation_id)
+        if conversation is None:
+            return None
+        fields = {
+            k: v for k, v in asdict(change).items() if v is not None and k != "pinned"
+        }
+        conversation = replace(conversation, **fields)
+        if change.pinned is not None:
+            pinned_at = (
+                (conversation.pinned_at or self._now()) if change.pinned else None
+            )
+            conversation = replace(conversation, pinned_at=pinned_at)
+        self.rows[conversation_id] = conversation
+        return conversation
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
@@ -268,6 +308,9 @@ class FakeConversationRepository:
     async def delete(self, conversation_id: uuid.UUID) -> None:
         self.rows.pop(conversation_id, None)
         self.turns.pop(conversation_id, None)
+        for attachment_id, file in list(self.attachments.items()):
+            if file.attachment.conversation_id == conversation_id:
+                del self.attachments[attachment_id]
 
     async def append_turn(
         self,
@@ -275,12 +318,191 @@ class FakeConversationRepository:
         question: str,
         answer: list[StreamEvent],
         memory: AgentMemory | None = None,
+        attachment_ids: Sequence[uuid.UUID] = (),
     ) -> None:
-        turn = Turn(question, list(answer), memory)
+        attachments = [
+            self.attachments[i].attachment
+            for i in attachment_ids
+            if i in self.attachments
+            and self.attachments[i].attachment.conversation_id == conversation_id
+        ]
+        turn = Turn(question, list(answer), memory, attachments)
         self.turns.setdefault(conversation_id, []).append(turn)
 
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
-        return list(self.turns.get(conversation_id, []))
+    async def list_turns(
+        self, conversation_id: uuid.UUID, limit: int | None = None
+    ) -> list[Turn]:
+        return list(self.turns.get(conversation_id, []))[:limit]
+
+
+class FakeAttachmentRepository:
+    """In-memory AttachmentRepositoryPort, keeping its files on `conversations`, whose
+    turns tell which were sent.
+    """
+
+    def __init__(self, conversations: FakeConversationRepository):
+        self.conversations = conversations
+        self._clock = datetime(2026, 3, 1, tzinfo=UTC)
+
+    async def create(
+        self, conversation_id: uuid.UUID, name: str, media_type: str, data: bytes
+    ) -> Attachment:
+        self._clock += timedelta(seconds=1)
+        attachment = Attachment(
+            id=uuid.uuid4(),
+            conversation_id=conversation_id,
+            name=name,
+            media_type=media_type,
+            size=len(data),
+            sha256=hashlib.sha256(data).hexdigest(),
+            created_at=self._clock,
+        )
+        self.conversations.attachments[attachment.id] = AttachmentFile(attachment, data)
+        return attachment
+
+    async def get_owned(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, attachment_id: uuid.UUID
+    ) -> AttachmentFile | None:
+        if await self.conversations.get_owned(user_id, conversation_id) is None:
+            return None
+        files = await self.list_in(conversation_id, [attachment_id])
+        return files[0] if files else None
+
+    async def list_in(
+        self, conversation_id: uuid.UUID, attachment_ids: Sequence[uuid.UUID]
+    ) -> list[AttachmentFile]:
+        files = self.conversations.attachments
+        return [
+            files[i]
+            for i in attachment_ids
+            if i in files and files[i].attachment.conversation_id == conversation_id
+        ]
+
+    async def list_sent(self, conversation_id: uuid.UUID) -> list[AttachmentFile]:
+        sent = self._sent()
+        return [
+            f
+            for f in self.conversations.attachments.values()
+            if f.attachment.conversation_id == conversation_id
+            and f.attachment.id in sent
+        ]
+
+    async def delete_unsent(
+        self, conversation_id: uuid.UUID, attachment_id: uuid.UUID
+    ) -> bool:
+        if not await self.list_in(conversation_id, [attachment_id]):
+            return False
+        if attachment_id in self._sent():
+            return False
+        del self.conversations.attachments[attachment_id]
+        return True
+
+    async def delete_unsent_before(self, cutoff: datetime) -> int:
+        sent = self._sent()
+        stale = [
+            i
+            for i, f in self.conversations.attachments.items()
+            if f.attachment.created_at < cutoff and i not in sent
+        ]
+        for attachment_id in stale:
+            del self.conversations.attachments[attachment_id]
+        return len(stale)
+
+    def _sent(self) -> set[uuid.UUID]:
+        return {
+            a.id
+            for turns in self.conversations.turns.values()
+            for turn in turns
+            for a in turn.attachments
+        }
+
+
+class FakeSkillRepository:
+    """In-memory SkillRepositoryPort."""
+
+    def __init__(self):
+        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str]] = {}  # by owner, name
+        self._clock = datetime(2026, 3, 1, tzinfo=UTC)
+
+    async def save(
+        self, user_id: uuid.UUID, name: str, description: str, instructions: str
+    ) -> Skill:
+        self._clock += timedelta(seconds=1)
+        existing = self.rows.get((user_id, name))
+        skill = Skill(
+            id=existing[0].id if existing else uuid.uuid4(),
+            name=name,
+            description=description,
+            created_at=existing[0].created_at if existing else self._clock,
+            updated_at=self._clock,
+        )
+        self.rows[user_id, name] = (skill, instructions)
+        return skill
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
+        return sorted(
+            (skill for (owner, _), (skill, _) in self.rows.items() if owner == user_id),
+            key=lambda s: s.name,
+        )
+
+    async def get_instructions(self, user_id: uuid.UUID, name: str) -> str | None:
+        row = self.rows.get((user_id, name))
+        return row[1] if row else None
+
+    async def delete_owned(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> bool:
+        key = next(
+            (
+                k
+                for k, (skill, _) in self.rows.items()
+                if k[0] == user_id and skill.id == skill_id
+            ),
+            None,
+        )
+        if key is None:
+            return False
+        del self.rows[key]
+        return True
+
+
+class FakeShareRepository:
+    """In-memory ShareRepositoryPort, reading turn counts from `conversations`."""
+
+    def __init__(self, conversations: FakeConversationRepository):
+        self.conversations = conversations
+        self.rows: dict[uuid.UUID, Share] = {}  # by conversation id
+        self._clock = datetime(2026, 2, 1, tzinfo=UTC)
+
+    async def save(self, conversation_id: uuid.UUID, title: str) -> Share | None:
+        turn_count = len(self.conversations.turns.get(conversation_id, []))
+        if turn_count == 0:
+            return None
+        self._clock += timedelta(seconds=1)
+        current = self.rows.get(conversation_id)
+        self.rows[conversation_id] = Share(
+            id=current.id if current else uuid.uuid4(),
+            conversation_id=conversation_id,
+            title=title,
+            turn_count=turn_count,
+            shared_at=self._clock,
+        )
+        return self.rows[conversation_id]
+
+    async def get_for_conversation(self, conversation_id: uuid.UUID) -> Share | None:
+        return self.rows.get(conversation_id)
+
+    async def get(self, share_id: uuid.UUID) -> Share | None:
+        # Deleting a conversation takes its link down, as the foreign key does.
+        return next(
+            (
+                s
+                for s in self.rows.values()
+                if s.id == share_id and s.conversation_id in self.conversations.rows
+            ),
+            None,
+        )
+
+    async def delete_for_conversation(self, conversation_id: uuid.UUID) -> None:
+        self.rows.pop(conversation_id, None)
 
 
 class StubGeneration:
@@ -298,6 +520,7 @@ class StubGeneration:
         prompt: str,
         schema: type[T],
         *,
+        attachments: Sequence[AttachmentFile] = (),
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:
@@ -325,7 +548,7 @@ class StubTurn:
 class StubAgent:
     """AgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
-    history each turn was given.
+    history, the context and the attachments each turn was given.
     """
 
     def __init__(
@@ -336,11 +559,23 @@ class StubAgent:
         self.extra_events = extra_events or []
         self.artifacts = artifacts
         self.histories: list[list[AgentMemory]] = []
+        self.contexts: list[RunContext] = []
+        self.attachments: list[list[AttachmentFile]] = []
+        self.earlier_attachments: list[list[AttachmentFile]] = []
 
     def stream(
-        self, message: str, history: Sequence[AgentMemory], ctx: RunContext
+        self,
+        message: str,
+        history: Sequence[AgentMemory],
+        ctx: RunContext,
+        *,
+        attachments: Sequence[AttachmentFile] = (),
+        earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> StubTurn:
         self.histories.append(list(history))
+        self.contexts.append(ctx)
+        self.attachments.append(list(attachments))
+        self.earlier_attachments.append(list(earlier_attachments))
         events: list[StreamEvent] = [
             TextDelta(text=f"echo: {message}"),
             *self.extra_events,

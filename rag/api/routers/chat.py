@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse
 
 from rag.api.deps import (
+    AttachmentsToSendDep,
     AuthenticatedUserDep,
     ChatServiceDep,
     ConversationServiceDep,
     get_current_user,
 )
 from rag.api.schema.chat import StreamEventResponse, to_stream_event
-from rag.api.schema.conversation import MessageRequest
+from rag.api.schema.conversation import ChatMessageRequest
 
 router = APIRouter(
     prefix="/api/chat", tags=["chat"], dependencies=[Depends(get_current_user)]
@@ -36,12 +37,16 @@ async def _require_owned_conversation(
 )
 async def send_message(
     conversation_id: uuid.UUID,
-    message_request: MessageRequest,
+    message_request: ChatMessageRequest,
+    attachments: AttachmentsToSendDep,
     current_user: AuthenticatedUserDep,
     chat_service: ChatServiceDep,
 ) -> AsyncIterable[StreamEventResponse]:
-    """Streams the answer as server-sent events, one `StreamEventResponse` each."""
+    """Streams the answer as server-sent events, one `StreamEventResponse` each. The
+    message's attachments are uploaded to the conversation first
+    (`POST /api/conversations/{conversation_id}/attachments`).
+    """
     async for event in chat_service.send_message(
-        current_user.id, conversation_id, message_request.message
+        current_user.id, conversation_id, message_request.message, attachments
     ):
         yield to_stream_event(event)

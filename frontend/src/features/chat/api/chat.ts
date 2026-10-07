@@ -4,15 +4,15 @@ import {
 } from '@microsoft/fetch-event-source';
 
 import { ApiError, apiUrl, authFetch, jsonPostInit } from '@/shared/api/client';
-import type { MessageRequest, StreamEventResponse } from '@/shared/types';
+import type { ChatMessageRequest, StreamEventResponse } from '@/shared/types';
 
-export type StreamChatArgs = MessageRequest & {
+export type StreamChatArgs = ChatMessageRequest & {
   conversationId: string;
   onEvent: (event: StreamEventResponse) => void;
   signal?: AbortSignal;
 };
 
-/** Sends a message to a conversation and streams its answer as events. */
+/** Sends a message (and its uploaded attachments) to a conversation and streams its answer as events. */
 export function streamChat({
   conversationId,
   onEvent,

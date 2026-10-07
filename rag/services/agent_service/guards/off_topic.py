@@ -2,7 +2,7 @@ import logging
 from collections.abc import Sequence
 from langchain_core.messages import BaseMessage
 
-from rag.domain.models import InputDecision, InputVerdict
+from rag.domain.models import AttachmentFile, InputDecision, InputVerdict
 from rag.domain.ports import CachePort, LLMPort
 from rag.services.agent_service.prompts import GUARDRAIL_PROMPT, OFF_TOPIC_SCOPE
 from rag.services.agent_service.turn import is_final_answer, split_turns
@@ -31,25 +31,43 @@ async def classify_input(
     llm: LLMPort,
     messages: Sequence[BaseMessage],
     cache: CachePort[InputVerdict],
+    attachments: Sequence[AttachmentFile] = (),
 ) -> InputDecision:
-    """The decision for the latest user message, with the turns before it for context;
-    allow if there's none or the classifier failed (fail open). Verdicts are cached by
-    the whole prompt, so the same message after a different history is classified
-    afresh; a fail-open allow is never cached.
+    """The decision for the latest user message and its `attachments`, with the turns
+    before it for context; allow if there's none or the classifier failed (fail open).
     """
     turns = split_turns(messages)
-    if not turns or not (message := turns[-1][0].text):
+    if not turns or not (turns[-1][0].text or attachments):
         return "allow"
 
     prompt = GUARDRAIL_PROMPT.format(
-        scope=OFF_TOPIC_SCOPE, history=_history(turns[:-1]), message=message
+        scope=OFF_TOPIC_SCOPE, history=_history(turns[:-1]), message=turns[-1][0].text
     )
-    verdict = await or_default(cache.get(prompt), None)
+    verdict = await _verdict(llm, prompt, attachments, cache)
     if verdict is None:
-        verdict = await or_default(llm.generate_structured(prompt, InputVerdict), None)
-        if verdict is None:
-            return "allow"
-        await or_default(cache.put(prompt, verdict), None)
+        return "allow"
     if verdict.decision == "block":
         logger.info("Blocked a chat message: %s", verdict.reason)
     return verdict.decision
+
+
+async def _verdict(
+    llm: LLMPort,
+    prompt: str,
+    attachments: Sequence[AttachmentFile],
+    cache: CachePort[InputVerdict],
+) -> InputVerdict | None:
+    """The classifier's verdict, None if it failed. Verdicts are cached by the whole
+    prompt and the attachments' content, so the same message after a different history
+    is classified afresh; a failed call is never cached.
+    """
+    key = "\n".join([prompt, *(f.attachment.sha256 for f in attachments)])
+    verdict = await or_default(cache.get(key), None)
+    if verdict is not None:
+        return verdict
+    verdict = await or_default(
+        llm.generate_structured(prompt, InputVerdict, attachments=attachments), None
+    )
+    if verdict is not None:
+        await or_default(cache.put(key, verdict), None)
+    return verdict

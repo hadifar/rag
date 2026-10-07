@@ -12,14 +12,15 @@ import { VerificationBubble } from './VerificationBubble';
 
 type BubbleViewProps<K extends BubbleType> = {
   bubble: BubbleOf<K>;
-  onOpenSource: (name: string) => void;
+  conversationId?: string;
+  onOpenSource?: (name: string) => void;
   onRetry?: () => void;
 };
 
 // Which component shows each bubble type. A new type fails to compile here until it has
 // one (see model/transcript.ts for where bubbles come from).
 const bubbleViews: { [K in BubbleType]: ComponentType<BubbleViewProps<K>> } = {
-  user: ({ bubble }) => <UserBubble {...bubble.content} />,
+  user: ({ bubble, conversationId }) => <UserBubble {...bubble.content} conversationId={conversationId} />,
   text: ({ bubble }) => <TextBubble {...bubble.content} />,
   reasoning: ({ bubble }) => <ReasoningBubble {...bubble.content} />,
   tool: ({ bubble }) => <ToolBubble {...bubble.content} />,
@@ -31,22 +32,37 @@ const bubbleViews: { [K in BubbleType]: ComponentType<BubbleViewProps<K>> } = {
 
 // Memoized: while an answer streams, only the bubble whose content changed re-renders
 // (and re-parses its markdown), not every earlier one.
-const MessageBubble = memo(function MessageBubble({ bubble, onOpenSource, onRetry }: BubbleViewProps<BubbleType>) {
+const MessageBubble = memo(function MessageBubble({
+  bubble,
+  conversationId,
+  onOpenSource,
+  onRetry,
+}: BubbleViewProps<BubbleType>) {
   // The map pairs each type with its own view; TypeScript can't follow that through a lookup.
   const View = bubbleViews[bubble.type] as ComponentType<BubbleViewProps<BubbleType>>;
-  return <View bubble={bubble} onOpenSource={onOpenSource} onRetry={onRetry} />;
+  return <View bubble={bubble} conversationId={conversationId} onOpenSource={onOpenSource} onRetry={onRetry} />;
 });
 
 type MessageListProps = {
   bubbles: Bubble[];
   isWaiting: boolean;
-  onOpenSource: (name: string) => void;
+  /** The conversation, to show the images sent in it; without it (a shared chat), files are listed by name. */
+  conversationId?: string;
+  /** Opens a cited document; without it (a shared chat), sources are listed as plain names. */
+  onOpenSource?: (name: string) => void;
   /** The error bubble that offers a retry, if any, and what retrying does. */
-  retryBubbleId: string | null;
-  onRetry: () => void;
+  retryBubbleId?: string | null;
+  onRetry?: () => void;
 };
 
-export function MessageList({ bubbles, isWaiting, onOpenSource, retryBubbleId, onRetry }: MessageListProps) {
+export function MessageList({
+  bubbles,
+  isWaiting,
+  conversationId,
+  onOpenSource,
+  retryBubbleId,
+  onRetry,
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,6 +78,7 @@ export function MessageList({ bubbles, isWaiting, onOpenSource, retryBubbleId, o
         >
           <MessageBubble
             bubble={bubble}
+            conversationId={conversationId}
             onOpenSource={onOpenSource}
             onRetry={bubble.id === retryBubbleId ? onRetry : undefined}
           />

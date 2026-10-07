@@ -142,5 +142,22 @@ def set_admin(
     typer.echo(f"{user.email} is {'now' if user.is_admin else 'no longer'} an admin")
 
 
+@app.command(name="prune-attachments")
+def prune_attachments(
+    older_than_hours: int = typer.Option(
+        24, min=1, help="Delete unsent attachments uploaded longer ago than this"
+    ),
+) -> None:
+    """Delete attachments uploaded to a chat but never sent with a message."""
+    from datetime import timedelta
+
+    pruned = _run(
+        lambda container: container.attachment_service.prune(
+            timedelta(hours=older_than_hours)
+        )
+    )
+    typer.echo(f"Deleted {pruned} unsent attachment(s)")
+
+
 if __name__ == "__main__":
     app()

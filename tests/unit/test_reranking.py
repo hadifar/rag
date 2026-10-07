@@ -1,9 +1,10 @@
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from rag.domain.models import Chunk, RunContext
+from rag.domain.models import AttachmentFile, Chunk, RunContext
 from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
@@ -29,6 +30,7 @@ class _ScoringAgent:
         prompt: str,
         schema: type[T],
         *,
+        attachments: Sequence[AttachmentFile] = (),
         trace: str | None = None,
         ctx: RunContext | None = None,
     ) -> T:

@@ -22,6 +22,25 @@ Each turn (`conversation_turns`) is kept two ways.
 * `agent_messages` is the agent's memory of the turn: its question, tool calls, tool results and answers, rejected drafts included. It is NULL for a turn the agent forgot (blocked, failed, or cut short). Each turn, the chat service hands the agent the memory of the earlier turns.
 * A user has at most one untitled conversation.
 
+A user can attach files (`.md`, `.png`, `.jpg`) to a message.
+
+* `POST /api/conversations/{id}/attachments` stores a file in `conversation_attachments` (as `bytea`). The backend checks the file's content, not the type the client sends.
+* The chat request lists the files by `attachment_ids`. `conversation_turn_attachments` links each turn to the files it was sent with, in order. A retry sends the same files again.
+* The agent's memory stores only attachment ids. Every model call reads the files again, so a later turn still sees an earlier image.
+* `rag prune-attachments` deletes files that were uploaded but never sent.
+
+Each conversation has a model (`gpt-6-luna`, `gpt-6-astra` or `gpt-6-sol`) and an effort (`low`, `medium` or `max`), on `conversations`. The user picks them in the composer (`PATCH /api/conversations/{id}`); a new chat applies its picks when its first message creates it.
+
+* The model is the one the provider is called with (for Azure, the deployment name). Only the agent's answers use it; titles and the guards run on `LLM__MODEL`.
+* The effort is sent as the model's reasoning effort (`max` is `high`), only when `LLM__REASONING_EFFORT` is set (reasoning models).
+
+A user can save skills: SKILL.md files with YAML frontmatter (`name`, `description`) and markdown instructions.
+
+* `POST /api/skills` parses the file and stores it in `user_skills`. A skill with the same name as an existing one replaces it. `GET /api/skills` lists them, and `DELETE /api/skills/{id}` deletes one.
+* A user's skills apply to all of their conversations. The agent sees each skill's name and description on every turn, and loads a skill's instructions (`load_skill`) when a question fits its description.
+* A message that starts with `/<name>` invokes that skill: the turn starts with it loaded. The composer suggests the user's skills while a `/` command is typed.
+* Skills change how the agent answers, not where facts come from. The groundedness guard ignores `load_skill` results.
+
 The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`, default `data/data.zip`).
 
 * The file basename is the document id.

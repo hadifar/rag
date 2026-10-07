@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { ToolContent } from '../types';
 import { BubbleFrame } from './BubbleFrame';
+import { MarkdownBody } from './MarkdownBody';
 
 export function ToolBubble({ name, query, output, status }: ToolContent) {
   const [collapsed, setCollapsed] = useState(true);
@@ -20,8 +21,8 @@ export function ToolBubble({ name, query, output, status }: ToolContent) {
         🔧 {name}
       </button>
       {!collapsed && (
-        <div className="mt-1 whitespace-pre-wrap break-words text-slate-600">
-          {status === 'pending' ? `Searching for: ${query ?? ''}` : output}
+        <div className="mt-1 break-words text-slate-600">
+          {status === 'pending' ? `Searching for: ${query ?? ''}` : <MarkdownBody text={output ?? ''} />}
         </div>
       )}
     </BubbleFrame>

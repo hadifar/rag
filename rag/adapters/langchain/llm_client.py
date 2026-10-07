@@ -14,11 +14,14 @@ from rag.domain.ports import EmbeddingsPort
 EMBEDDING_DIMENSIONS = 1536
 
 
-def build_llm(settings: Settings) -> BaseChatModel:
+def build_llm(settings: Settings, model: str | None = None) -> BaseChatModel:
+    """The main chat model (MODEL or DEPLOYMENT), or `model`, one a user picks: for
+    Azure, the name of its deployment.
+    """
     match settings.LLM:
         case OpenAILLMConfig() as config:
             return ChatOpenAI(
-                model=config.MODEL,
+                model=model or config.MODEL,
                 api_key=config.API_KEY,
                 streaming=True,
                 **_sampling(config),
@@ -26,7 +29,7 @@ def build_llm(settings: Settings) -> BaseChatModel:
         case AzureOpenAILLMConfig() as config:
             return AzureChatOpenAI(
                 azure_endpoint=config.ENDPOINT,
-                azure_deployment=config.DEPLOYMENT,
+                azure_deployment=model or config.DEPLOYMENT,
                 api_version=config.API_VERSION,
                 api_key=config.API_KEY,
                 streaming=True,

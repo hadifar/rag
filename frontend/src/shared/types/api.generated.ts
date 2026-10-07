@@ -127,6 +127,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/pinned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pinned Conversations
+         * @description The caller's pinned conversations, last pinned first; `GET ""` lists the rest.
+         */
+        get: operations["list_pinned_conversations_api_conversations_pinned_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation */
+        get: operations["get_conversation_api_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_conversation_api_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Conversation
+         * @description Renames, pins or unpins it, or sets the model and effort its turns run on.
+         */
+        patch: operations["update_conversation_api_conversations__conversation_id__patch"];
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
@@ -166,7 +208,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{conversation_id}": {
+    "/api/conversations/{conversation_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share
+         * @description Its public link, or null if it isn't shared.
+         */
+        get: operations["get_share_api_conversations__conversation_id__share_get"];
+        /**
+         * Share Conversation
+         * @description Shares it as it is now, behind its link (made on first share, kept after).
+         */
+        put: operations["share_conversation_api_conversations__conversation_id__share_put"];
+        post?: never;
+        /** Unshare Conversation */
+        delete: operations["unshare_conversation_api_conversations__conversation_id__share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/attachments": {
         parameters: {
             query?: never;
             header?: never;
@@ -175,9 +242,37 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * Upload Attachment
+         * @description Keeps a file (.md, .png or .jpg) in the conversation, to send with a message by
+         *     its id (`attachment_ids` of `POST /api/chat/{conversation_id}`).
+         */
+        post: operations["upload_attachment_api_conversations__conversation_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attachment
+         * @description The attachment's content, typed as what it was recognized as.
+         */
+        get: operations["get_attachment_api_conversations__conversation_id__attachments__attachment_id__get"];
+        put?: never;
         post?: never;
-        /** Delete Conversation */
-        delete: operations["delete_conversation_api_conversations__conversation_id__delete"];
+        /**
+         * Discard Attachment
+         * @description Deletes an attachment that was never sent; one already sent stays (404).
+         */
+        delete: operations["discard_attachment_api_conversations__conversation_id__attachments__attachment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -194,7 +289,9 @@ export interface paths {
         put?: never;
         /**
          * Send Message
-         * @description Streams the answer as server-sent events, one `StreamEventResponse` each.
+         * @description Streams the answer as server-sent events, one `StreamEventResponse` each. The
+         *     message's attachments are uploaded to the conversation first
+         *     (`POST /api/conversations/{conversation_id}/attachments`).
          */
         post: operations["send_message_api_chat__conversation_id__post"];
         delete?: never;
@@ -292,6 +389,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Shared Conversation
+         * @description A shared conversation as it was when shared; 404 once its link is taken down.
+         */
+        get: operations["get_shared_conversation_api_shares__share_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Skills
+         * @description The caller's skills, by name.
+         */
+        get: operations["list_skills_api_skills_get"];
+        put?: never;
+        /**
+         * Upload Skill
+         * @description Saves a SKILL.md file (frontmatter with `name` and `description`, then the
+         *     instructions), replacing the caller's skill of that name if they have one.
+         */
+        post: operations["upload_skill_api_skills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Skill */
+        delete: operations["delete_skill_api_skills__skill_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -323,10 +482,55 @@ export interface components {
             /** Events */
             events: components["schemas"]["StreamEventResponse"][];
         };
+        /**
+         * AttachmentResponse
+         * @description A file attached to a message; its content is at
+         *     `GET /api/conversations/{conversation_id}/attachments/{id}`.
+         */
+        AttachmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Media Type */
+            media_type: string;
+            /** Size */
+            size: number;
+        };
+        /** Body_upload_attachment_api_conversations__conversation_id__attachments_post */
+        Body_upload_attachment_api_conversations__conversation_id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_knowledge_base_api_ingestions_post */
         Body_upload_knowledge_base_api_ingestions_post: {
             /** File */
             file: string;
+        };
+        /** Body_upload_skill_api_skills_post */
+        Body_upload_skill_api_skills_post: {
+            /** File */
+            file: string;
+        };
+        /**
+         * ChatMessageRequest
+         * @description A message to the chat: its text, its attachments (uploaded to the conversation
+         *     first), or both.
+         */
+        ChatMessageRequest: {
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Attachment Ids
+             * @default []
+             */
+            attachment_ids: string[];
         };
         /** ConversationPageResponse */
         ConversationPageResponse: {
@@ -354,6 +558,32 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Pinned At */
+            pinned_at: string | null;
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
+            /**
+             * Effort
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "max";
+        };
+        /**
+         * ConversationUpdateRequest
+         * @description The fields to change; each one left out stays as is.
+         */
+        ConversationUpdateRequest: {
+            /** Title */
+            title?: string | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Model */
+            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "max") | null;
         };
         /**
          * ErrorEvent
@@ -446,6 +676,65 @@ export interface components {
             temperature: number;
             /** Top K */
             top_k: number;
+        };
+        /**
+         * ShareResponse
+         * @description A conversation's public read-only link: `id` is its token.
+         */
+        ShareResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Shared At
+             * Format: date-time
+             */
+            shared_at: string;
+        };
+        /**
+         * SharedConversationResponse
+         * @description What anyone with the link sees: the snapshot's title, date and messages.
+         */
+        SharedConversationResponse: {
+            /** Title */
+            title: string;
+            /**
+             * Shared At
+             * Format: date-time
+             */
+            shared_at: string;
+            /** Messages */
+            messages: components["schemas"]["HistoryMessageResponse"][];
+        };
+        /**
+         * SkillResponse
+         * @description A skill the user saved; the agent loads its instructions when a request fits its
+         *     description.
+         */
+        SkillResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * SourceArtifactItem
@@ -543,6 +832,11 @@ export interface components {
             role: "user";
             /** Text */
             text: string;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["AttachmentResponse"][];
         };
         /** UserResponse */
         UserResponse: {
@@ -791,6 +1085,121 @@ export interface operations {
             };
         };
     };
+    list_pinned_conversations_api_conversations_pinned_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"][];
+                };
+            };
+        };
+    };
+    get_conversation_api_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conversation_api_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_api_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_messages_api_conversations__conversation_id__messages_get: {
         parameters: {
             query?: never;
@@ -857,12 +1266,171 @@ export interface operations {
             };
         };
     };
-    delete_conversation_api_conversations__conversation_id__delete: {
+    get_share_api_conversations__conversation_id__share_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_conversation_api_conversations__conversation_id__share_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unshare_conversation_api_conversations__conversation_id__share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_conversations__conversation_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_conversations__conversation_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attachment_api_conversations__conversation_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_attachment_api_conversations__conversation_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                attachment_id: string;
             };
             cookie?: never;
         };
@@ -897,7 +1465,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MessageRequest"];
+                "application/json": components["schemas"]["ChatMessageRequest"];
             };
         };
         responses: {
@@ -1052,6 +1620,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    get_shared_conversation_api_shares__share_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skills_api_skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillResponse"][];
+                };
+            };
+        };
+    };
+    upload_skill_api_skills_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_skill_api_skills_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_skill_api_skills__skill_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

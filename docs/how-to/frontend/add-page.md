@@ -18,4 +18,4 @@ Add a route and its page. Use when the app needs a new URL.
 
 * A page holds no logic.
 * Build every link and redirect from `routes`. Do not write a URL string elsewhere.
-* Only `frontend/src/pages/ChatPage.tsx` imports `@/features/chat`.
+* Only `frontend/src/pages/ChatPage.tsx` and `frontend/src/pages/SharedChatPage.tsx` import `@/features/chat`. Both are loaded with `lazy`.
