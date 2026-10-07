@@ -123,8 +123,9 @@ export function Dropdown({ isOpen, onClose, anchorRef, label, children }: Dropdo
 }
 
 const tones = {
-  neutral: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:bg-slate-100 focus:text-slate-900',
-  danger: 'text-danger-600 hover:bg-danger-50 focus:bg-danger-50',
+  neutral:
+    'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:bg-slate-100 focus-visible:text-slate-900',
+  danger: 'text-danger-600 hover:bg-danger-50 focus-visible:bg-danger-50',
 };
 
 type DropdownItemProps = {
