@@ -1,10 +1,10 @@
-from pydantic import BaseModel
-
-from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
+from pydantic import BaseModel, ConfigDict
 
 
 class UploadLimitsResponse(BaseModel):
-    """The largest file each upload takes, in bytes (the `UPLOADS__*` settings)."""
+    """The largest file each upload takes, in bytes."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     kb_max_bytes: int
     skill_max_bytes: int
@@ -13,18 +13,10 @@ class UploadLimitsResponse(BaseModel):
 
 
 class SettingsResponse(BaseModel):
+    """How the app is configured, as far as its users need to know."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     model: str
     top_k: int
     uploads: UploadLimitsResponse
-
-    @classmethod
-    def from_settings(cls, settings: Settings, top_k: int) -> "SettingsResponse":
-        match settings.LLM:
-            case OpenAILLMConfig() as llm:
-                model = llm.MODEL
-            case AzureOpenAILLMConfig() as llm:
-                model = llm.DEPLOYMENT
-        uploads = UploadLimitsResponse(
-            **{name.lower(): value for name, value in settings.UPLOADS}
-        )
-        return cls(model=model, top_k=top_k, uploads=uploads)

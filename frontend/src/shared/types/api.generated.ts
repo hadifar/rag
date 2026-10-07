@@ -669,7 +669,10 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** SettingsResponse */
+        /**
+         * SettingsResponse
+         * @description How the app is configured, as far as its users need to know.
+         */
         SettingsResponse: {
             /** Model */
             model: string;
@@ -827,7 +830,7 @@ export interface components {
         };
         /**
          * UploadLimitsResponse
-         * @description The largest file each upload takes, in bytes (the `UPLOADS__*` settings).
+         * @description The largest file each upload takes, in bytes.
          */
         UploadLimitsResponse: {
             /** Kb Max Bytes */

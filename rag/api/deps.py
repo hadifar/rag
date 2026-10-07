@@ -6,9 +6,8 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from rag.api.schema.conversation import ChatMessageRequest
-from rag.config import Settings
 from rag.container import Container
-from rag.domain.models import AttachmentFile
+from rag.domain.models import AppSettings, AttachmentFile
 from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.chat_service.service import ChatService
@@ -29,14 +28,6 @@ def get_container(request: Request) -> Container:
 
 
 ContainerDep = Annotated[Container, Depends(get_container)]
-
-
-def get_app_settings(request: Request) -> Settings:
-    """The Settings create_app stashed on app.state."""
-    return request.app.state.settings
-
-
-SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 def _from_container[T](service: Callable[[Container], T]) -> Any:
@@ -64,6 +55,7 @@ AttachmentServiceDep = Annotated[
     AttachmentService, _from_container(lambda c: c.attachment_service)
 ]
 SkillServiceDep = Annotated[SkillService, _from_container(lambda c: c.skill_service)]
+AppSettingsDep = Annotated[AppSettings, _from_container(lambda c: c.app_settings)]
 
 
 async def get_current_user(

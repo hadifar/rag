@@ -13,7 +13,13 @@ from rag.adapters.langchain.llm_client import build_embeddings, build_llm
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
-from rag.domain.models import MODEL_NAMES, Chunk, InputVerdict
+from rag.domain.models import (
+    MODEL_NAMES,
+    AppSettings,
+    Chunk,
+    InputVerdict,
+    UploadLimits,
+)
 from rag.domain.ports import CachePort
 from rag.repository.cache_repository import (
     EmbeddingCacheRepository,
@@ -54,6 +60,7 @@ class Container:
     share_service: ShareService
     attachment_service: AttachmentService
     skill_service: SkillService
+    app_settings: AppSettings
 
 
 @dataclass
@@ -134,11 +141,11 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         )
 
         skill_repo = SkillRepository(db_pool)
-        uploads = settings.UPLOADS
+        uploads = UploadLimits(**{k.lower(): v for k, v in settings.UPLOADS})
         skill_service = SkillService(
             skills=skill_repo,
-            max_skill_bytes=uploads.SKILL_MAX_BYTES,
-            max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+            max_skill_bytes=uploads.skill_max_bytes,
+            max_archive_bytes=uploads.skill_archive_max_bytes,
         )
 
         rag_agent = RagAgent(
@@ -157,7 +164,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             chunker=WholeDocumentChunker(),
             archives=archive_store,
             runs=IngestionRunRepository(db_pool),
-            max_archive_bytes=uploads.KB_MAX_BYTES,
+            max_archive_bytes=uploads.kb_max_bytes,
         )
 
         auth_service = AuthService(
@@ -197,7 +204,13 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             attachment_service=AttachmentService(
                 attachments=attachment_repo,
                 conversations=conversation_repo,
-                max_bytes=uploads.ATTACHMENT_MAX_BYTES,
+                max_bytes=uploads.attachment_max_bytes,
             ),
             skill_service=skill_service,
+            app_settings=AppSettings(
+                model=settings.LLM.chat_model_name,
+                # The search's: the reranker's pick, or every fetched passage.
+                top_k=retrieval_service.top_k,
+                uploads=uploads,
+            ),
         )

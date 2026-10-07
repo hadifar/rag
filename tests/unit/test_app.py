@@ -26,6 +26,8 @@ from rag.config import (
 from rag.container import Container
 from rag.domain.errors import DocumentNotFoundError
 from rag.domain.models import (
+    AppSettings,
+    UploadLimits,
     Chunk,
     SourceArtifact,
     ToolCall,
@@ -146,6 +148,13 @@ def client() -> Generator[TestClient]:
             max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
             max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
         ),
+        app_settings=AppSettings(
+            model="gpt-4o-mini",
+            top_k=4,
+            uploads=UploadLimits(
+                **{k.lower(): v for k, v in UploadsConfig().model_dump().items()}
+            ),
+        ),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -189,6 +198,7 @@ def test_settings_endpoint_returns_the_upload_limits(
     response = client.get("/api/settings", headers=auth_headers)
 
     assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4o-mini"
     assert response.json()["uploads"] == {
         "kb_max_bytes": UploadsConfig().KB_MAX_BYTES,
         "skill_max_bytes": UploadsConfig().SKILL_MAX_BYTES,

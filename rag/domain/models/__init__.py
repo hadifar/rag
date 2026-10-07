@@ -46,6 +46,7 @@ from rag.domain.models.ingestion import (
     RawDocument,
 )
 from rag.domain.models.retrieval import Chunk
+from rag.domain.models.settings import AppSettings, UploadLimits
 from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill, SkillContent
 from rag.domain.models.upload import Upload
 
@@ -57,6 +58,7 @@ __all__ = [
     "ARTIFACTS",
     "AgentMemory",
     "AnswerVerified",
+    "AppSettings",
     "Artifact",
     "ArtifactsReady",
     "AssistantMessage",
@@ -93,6 +95,7 @@ __all__ = [
     "Turn",
     "TurnFailed",
     "Upload",
+    "UploadLimits",
     "User",
     "UserMessage",
     "history_of",

@@ -60,7 +60,6 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
-    app.state.settings = settings
 
     app.include_router(auth_router)
     app.include_router(health_router)
