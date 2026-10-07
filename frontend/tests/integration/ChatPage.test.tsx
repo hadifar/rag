@@ -237,6 +237,36 @@ describe('ChatPage', () => {
     expect(screen.getByRole('log')).toHaveTextContent('notes.md');
   });
 
+  it("sends a new chat's message to the conversation its files went to", async () => {
+    const notes: AttachmentResponse = { id: 'a1', name: 'notes.md', media_type: 'text/markdown', size: 7 };
+    vi.mocked(uploadAttachment).mockResolvedValueOnce(notes);
+    // Another tab sends to the user's empty conversation after the upload: asking again
+    // would now give a different one, without the file.
+    const later: ConversationResponse = { ...newConversation, id: '0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f' };
+    let creates = 0;
+    let sentTo: string | undefined;
+    server.use(
+      http.post('/api/conversations', () => HttpResponse.json(creates++ === 0 ? newConversation : later)),
+      http.post('/api/chat/:id', ({ params }) => {
+        sentTo = params.id as string;
+        return sse([{ type: 'text', text: 'These are setup notes.' }]);
+      }),
+      http.post('/api/conversations/:id/title', () =>
+        HttpResponse.json({ ...newConversation, title: 'Setup notes' }),
+      ),
+    );
+    const { router, user } = renderChat('/chat');
+
+    await user.upload(screen.getByTestId('attachment-input'), new File(['# Notes'], 'notes.md'));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    await ask(user, 'Summarize these');
+
+    expect(await screen.findByText('These are setup notes.')).toBeInTheDocument();
+    expect(sentTo).toBe(newConversation.id);
+    expect(creates).toBe(1);
+    expect(router.state.location.pathname).toBe(`/chat/${newConversation.id}`);
+  });
+
   it('discards a file removed before sending', async () => {
     const notes: AttachmentResponse = { id: 'a1', name: 'notes.md', media_type: 'text/markdown', size: 7 };
     vi.mocked(uploadAttachment).mockResolvedValueOnce(notes);

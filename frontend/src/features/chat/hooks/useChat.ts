@@ -16,10 +16,11 @@ export function useChat(conversationId: string | undefined) {
   // The bubble's own array: stable while the transcript doesn't change.
   const questionAttachments = failed?.attachments;
 
-  // Sends the text with the files uploaded for it.
+  // Sends the text with the files uploaded for it, to the conversation they're in.
   const send = useCallback(
     (text: string) => {
-      void sendMessage(text, take());
+      const { attachments: files, conversation } = take();
+      void sendMessage(text, files, conversation);
     },
     [sendMessage, take]
   );

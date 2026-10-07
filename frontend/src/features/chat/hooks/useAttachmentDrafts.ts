@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { createConversation } from '@/features/conversations';
 import { errorDetail } from '@/shared/api/errors';
+import type { ConversationResponse } from '@/shared/types';
 import { discardAttachment, uploadAttachment } from '../api/attachments';
 import {
   MAX_ATTACHMENTS,
@@ -14,20 +15,35 @@ import {
 import type { AttachmentChip, AttachmentDraft } from '../types';
 import { readAsDataUrl } from './dataUrl';
 
-/** The drafts, and which conversation's composer they're in (undefined: a new chat). */
-type Drafts = { conversationId: string | undefined; items: AttachmentDraft[]; notice: string | null };
+/**
+ * The drafts, and which conversation's composer they're in (undefined: a new chat). A new
+ * chat's files go to a conversation created for them: `created`.
+ */
+type Drafts = {
+  conversationId: string | undefined;
+  items: AttachmentDraft[];
+  notice: string | null;
+  created: ConversationResponse | null;
+};
+
+/** The files to send with a message; `conversation`, the new chat's, to send it to. */
+export type TakenAttachments = { attachments: AttachmentChip[]; conversation: ConversationResponse | null };
 
 const UPLOAD_FAILED = "Couldn't upload this file. Please try again.";
 const NO_DRAFTS: AttachmentDraft[] = [];
 
+function emptyDrafts(conversationId: string | undefined): Drafts {
+  return { conversationId, items: [], notice: null, created: null };
+}
+
 /**
  * The files picked for the next message in the conversation on screen, each uploaded as
  * soon as it's picked. A new chat has no id yet: its files go to the user's empty
- * conversation, the one its first message is then sent to. Leaving the conversation
- * drops them (the server prunes uploads that are never sent).
+ * conversation, and its first message is sent there too (`take`). Leaving the
+ * conversation drops them (the server prunes uploads that are never sent).
  */
 export function useAttachmentDrafts(conversationId: string | undefined) {
-  const [drafts, setDrafts] = useState<Drafts>({ conversationId, items: [], notice: null });
+  const [drafts, setDrafts] = useState<Drafts>(() => emptyDrafts(conversationId));
   // Another conversation's drafts don't follow the user to this one.
   const current = drafts.conversationId === conversationId ? drafts : null;
   const items = current?.items ?? NO_DRAFTS;
@@ -36,8 +52,7 @@ export function useAttachmentDrafts(conversationId: string | undefined) {
   const update = useCallback(
     (forConversation: string | undefined, change: (d: Drafts) => Drafts) => {
       setDrafts((d) => {
-        const base = d.conversationId === forConversation ? d : { conversationId: forConversation, items: [], notice: null };
-        return change(base);
+        return change(d.conversationId === forConversation ? d : emptyDrafts(forConversation));
       });
     },
     []
@@ -62,7 +77,13 @@ export function useAttachmentDrafts(conversationId: string | undefined) {
           .catch(() => undefined);
       }
       try {
-        const target = forConversation ?? (await createConversation()).id;
+        let target = forConversation;
+        if (target === undefined) {
+          const created = await createConversation();
+          // Only while the user is still in the new chat.
+          setDrafts((d) => (d.conversationId === forConversation ? { ...d, created } : d));
+          target = created.id;
+        }
         const attachment = await uploadAttachment(target, file);
         edit(forConversation, key, { status: 'ready', attachment: toChip(attachment), conversationId: target });
       } catch (err) {
@@ -110,11 +131,14 @@ export function useAttachmentDrafts(conversationId: string | undefined) {
     [conversationId, items, update]
   );
 
-  // Hands over the uploaded files to send, and empties the composer's list.
-  const take = useCallback((): AttachmentChip[] => {
-    update(conversationId, () => ({ conversationId, items: [], notice: null }));
-    return readyAttachments(items);
-  }, [conversationId, items, update]);
+  // Hands over the uploaded files to send, and empties the composer's list. A new chat's
+  // files name the conversation they're in, so its first message goes there too, even if
+  // another tab has since taken the user's empty conversation.
+  const take = useCallback((): TakenAttachments => {
+    update(conversationId, () => emptyDrafts(conversationId));
+    const attachments = readyAttachments(items);
+    return { attachments, conversation: attachments.length > 0 ? (current?.created ?? null) : null };
+  }, [conversationId, current, items, update]);
 
   return {
     drafts: items,

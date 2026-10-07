@@ -8,7 +8,7 @@ import {
   useConversationCache,
 } from '@/features/conversations';
 import { errorMessage } from '@/shared/api/errors';
-import type { StreamEventResponse } from '@/shared/types';
+import type { ConversationResponse, StreamEventResponse } from '@/shared/types';
 import { routes } from '@/shared/routes';
 import { streamChat } from '../api/chat';
 import { chatKeys } from '../api/queryKeys';
@@ -35,7 +35,8 @@ type Stream = { conversationId: string | undefined; controller: AbortController 
  * Sends the user's message, with the attachments already uploaded to the conversation,
  * and streams the answer into the conversation's transcript.
  * `conversationId` is the one on screen (undefined for a new chat, which is created on
- * its first message and then followed by the URL). Leaving the conversation stops it.
+ * its first message and then followed by the URL). A new chat whose files were uploaded
+ * first passes `newChat`, the conversation they went to. Leaving the conversation stops it.
  */
 export function useSendMessage(conversationId: string | undefined) {
   const queryClient = useQueryClient();
@@ -65,7 +66,7 @@ export function useSendMessage(conversationId: string | undefined) {
   );
 
   return useCallback(
-    async (val: string, attachments: AttachmentChip[] = []) => {
+    async (val: string, attachments: AttachmentChip[] = [], newChat: ConversationResponse | null = null) => {
       const text = val.trim();
       if (!text && attachments.length === 0) return;
 
@@ -96,7 +97,7 @@ export function useSendMessage(conversationId: string | undefined) {
           // The server lists it first too, as it takes the message.
           bump(conversationId);
         } else {
-          const conversation = await createConversation(controller.signal);
+          const conversation = newChat ?? (await createConversation(controller.signal));
           upsert(conversation);
           void nameConversation(conversation.id, titleSource(text, attachments));
           // Move what's on screen to the new chat's own entry, then let the URL follow.
