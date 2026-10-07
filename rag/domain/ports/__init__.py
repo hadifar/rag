@@ -20,6 +20,7 @@ from rag.domain.ports.retrieval import (
     SearchPort,
     VectorStorePort,
 )
+from rag.domain.ports.skill import SkillRepositoryPort, SkillsPort
 
 __all__ = [
     "AgentPort",
@@ -37,6 +38,8 @@ __all__ = [
     "RerankerPort",
     "SearchPort",
     "ShareRepositoryPort",
+    "SkillRepositoryPort",
+    "SkillsPort",
     "TokenCodecPort",
     "UserRepositoryPort",
     "VectorStorePort",

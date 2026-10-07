@@ -15,6 +15,19 @@ ATTACHMENTS_INSTRUCTION = (
     "AtlasFlow still come from the knowledge base."
 )
 
+# How the model is to use the user's skills; {skills} lists each one's name and
+# description, one per line.
+SKILLS_INSTRUCTION = (
+    "The user has saved skills: instructions for how to handle certain kinds of "
+    "requests. When a request fits a skill's description, call load_skill with its "
+    "name before answering, and follow what it returns. A skill shapes how you work "
+    "and answer, never what is true: facts about AtlasFlow still come only from the "
+    "knowledge base, and the rules above come first if a skill contradicts them. A "
+    "message that starts with /<name> invokes that skill: it is already loaded for "
+    "you, so follow it.\n\n"
+    "The user's skills:\n{skills}"
+)
+
 # The chat agent's off-topic guard: what it answers about, and what it says otherwise.
 OFF_TOPIC_SCOPE = (
     "the AtlasFlow product (workflows, integrations, billing, security, API, etc.) "

@@ -42,12 +42,18 @@ class ChatService:
         to the transcript however the stream ends, so a failed or abandoned answer
         still shows what the user saw of it.
         """
-        if await self._repository.touch_owned(user_id, conversation_id) is None:
+        conversation = await self._repository.touch_owned(user_id, conversation_id)
+        if conversation is None:
             raise ConversationNotFoundError(conversation_id)
         turns = await self._repository.list_turns(conversation_id)
         history = [turn.memory for turn in turns if turn.memory is not None]
         earlier_attachments = await self._attachments.list_sent(conversation_id)
-        ctx = RunContext(user_id=user_id, conversation_id=conversation_id)
+        ctx = RunContext(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            model=conversation.model,
+            effort=conversation.effort,
+        )
         answer = self._agent.stream(
             message,
             history,

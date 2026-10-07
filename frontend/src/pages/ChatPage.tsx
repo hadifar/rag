@@ -1,12 +1,15 @@
 import { useParams } from 'react-router-dom';
 import { Composer, MessageList, WelcomePlaceholder, useChat } from '@/features/chat';
 import { useOpenKbSource } from '@/features/knowledge-base';
+import { SKILL_ACCEPT, useSkillList, useSkillUpload } from '@/features/skills';
 
 export function ChatPage() {
   const { conversationId } = useParams();
-  const { bubbles, isWaiting, showWelcome, sendMessage, attachments, retryBubbleId, retry } =
+  const { bubbles, isWaiting, showWelcome, sendMessage, attachments, run, retryBubbleId, retry } =
     useChat(conversationId);
   const openSource = useOpenKbSource();
+  const skillUpload = useSkillUpload();
+  const { skills } = useSkillList();
 
   return (
     <div className="flex h-full flex-col">
@@ -22,7 +25,18 @@ export function ChatPage() {
           onRetry={retry}
         />
       )}
-      <Composer onSend={sendMessage} attachments={attachments} />
+      <Composer
+        onSend={sendMessage}
+        attachments={attachments}
+        run={run}
+        skills={{
+          available: skills,
+          accept: SKILL_ACCEPT,
+          onUpload: skillUpload.upload,
+          uploading: skillUpload.uploading,
+          notice: skillUpload.notice,
+        }}
+      />
     </div>
   );
 }

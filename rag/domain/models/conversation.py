@@ -3,7 +3,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-from rag.domain.models.agent.agent import AgentMemory
+from rag.domain.models.agent.agent import (
+    DEFAULT_EFFORT,
+    DEFAULT_MODEL,
+    AgentMemory,
+    Effort,
+    ModelName,
+)
 from rag.domain.models.agent.stream import StreamEvent
 from rag.domain.models.attachment import Attachment
 
@@ -18,6 +24,19 @@ class Conversation:
     updated_at: datetime
     # When the user pinned it; None while it isn't pinned.
     pinned_at: datetime | None = None
+    # What its turns run on, as the user set it.
+    model: ModelName = DEFAULT_MODEL
+    effort: Effort = DEFAULT_EFFORT
+
+
+@dataclass(frozen=True)
+class ConversationUpdate:
+    """What to change about a conversation; a field left None stays as is."""
+
+    title: str | None = None
+    pinned: bool | None = None
+    model: ModelName | None = None
+    effort: Effort | None = None
 
 
 @dataclass(frozen=True)

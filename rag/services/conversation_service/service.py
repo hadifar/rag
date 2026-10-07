@@ -12,6 +12,7 @@ from rag.domain.errors import (
 from rag.domain.models import (
     Conversation,
     ConversationPage,
+    ConversationUpdate,
     HistoryMessage,
     RunContext,
     history_of,
@@ -90,15 +91,14 @@ class ConversationService:
         self,
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
-        *,
-        title: str | None = None,
-        pinned: bool | None = None,
+        change: ConversationUpdate,
     ) -> Conversation:
-        """Renames it, pins or unpins it; a field left None stays as is. Neither
-        counts as using it, so it keeps its place among the recent ones.
+        """Renames it, pins or unpins it, or sets the model and effort its turns run
+        on; a field `change` leaves None stays as is. No change counts as using it,
+        so it keeps its place among the recent ones.
         """
         conversation = await self._repository.update_owned(
-            user_id, conversation_id, title, pinned
+            user_id, conversation_id, change
         )
         if conversation is None:
             raise ConversationNotFoundError(conversation_id)

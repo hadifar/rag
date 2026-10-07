@@ -190,5 +190,43 @@ class AttachmentTooLargeError(AppError):
         super().__init__(f"The file is larger than {_size(max_bytes)}")
 
 
+class SkillNotFoundError(AppError):
+    """Raised when a skill doesn't exist or belongs to another user."""
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, skill_id: object):
+        super().__init__(f"No skill found for id={skill_id!r}")
+
+
+class InvalidSkillError(AppError):
+    """Raised when an uploaded skill file can't be read as a skill."""
+
+    status_code: ClassVar[int] = 422
+
+    def __init__(self, reason: str):
+        super().__init__(f"Not a valid skill file: {reason}")
+
+
+class SkillTooLargeError(AppError):
+    """Raised when an uploaded skill file is over the size limit."""
+
+    status_code: ClassVar[int] = 413
+
+    def __init__(self, max_bytes: int):
+        super().__init__(f"The skill file is larger than {_size(max_bytes)}")
+
+
+class TooManySkillsError(AppError):
+    """Raised when saving a new skill would take a user over the limit."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, max_skills: int):
+        super().__init__(
+            f"You can save up to {max_skills} skills. Delete one to add another."
+        )
+
+
 def _size(n: int) -> str:
     return f"{n // (1024 * 1024)} MB" if n >= 1024 * 1024 else f"{n // 1024} KB"

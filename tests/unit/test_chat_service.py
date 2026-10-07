@@ -5,6 +5,7 @@ import pytest
 
 from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
+    ConversationUpdate,
     AgentMemory,
     ArtifactsReady,
     AttachmentFile,
@@ -163,3 +164,20 @@ async def test_attachments_go_to_the_agent_and_are_saved_with_their_turn() -> No
     assert agent.earlier_attachments == [[], [file]]
     turns = await repository.list_turns(conversation_id)
     assert [t.attachments for t in turns] == [[file.attachment], []]
+
+
+async def test_a_turn_runs_on_the_model_and_effort_its_conversation_is_set_to() -> None:
+    agent = StubAgent()
+    service, repository = _service(agent)
+    conversation_id = (await repository.get_or_create_empty(ALICE)).id
+
+    await _chat(service, conversation_id, "hi")
+    await repository.update_owned(
+        ALICE, conversation_id, ConversationUpdate(model="gpt-6-sol", effort="max")
+    )
+    await _chat(service, conversation_id, "again")
+
+    assert [(c.model, c.effort) for c in agent.contexts] == [
+        ("gpt-6-luna", "low"),
+        ("gpt-6-sol", "max"),
+    ]

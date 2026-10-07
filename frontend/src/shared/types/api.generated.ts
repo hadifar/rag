@@ -154,7 +154,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Conversation */
+        get: operations["get_conversation_api_conversations__conversation_id__get"];
         put?: never;
         post?: never;
         /** Delete Conversation */
@@ -163,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Update Conversation
-         * @description Renames, pins or unpins it.
+         * @description Renames, pins or unpins it, or sets the model and effort its turns run on.
          */
         patch: operations["update_conversation_api_conversations__conversation_id__patch"];
         trace?: never;
@@ -408,6 +409,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Skills
+         * @description The caller's skills, by name.
+         */
+        get: operations["list_skills_api_skills_get"];
+        put?: never;
+        /**
+         * Upload Skill
+         * @description Saves a SKILL.md file (frontmatter with `name` and `description`, then the
+         *     instructions), replacing the caller's skill of that name if they have one.
+         */
+        post: operations["upload_skill_api_skills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Skill */
+        delete: operations["delete_skill_api_skills__skill_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -467,6 +510,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_skill_api_skills_post */
+        Body_upload_skill_api_skills_post: {
+            /** File */
+            file: string;
+        };
         /**
          * ChatMessageRequest
          * @description A message to the chat: its text, its attachments (uploaded to the conversation
@@ -512,6 +560,16 @@ export interface components {
             updated_at: string;
             /** Pinned At */
             pinned_at: string | null;
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
+            /**
+             * Effort
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "max";
         };
         /**
          * ConversationUpdateRequest
@@ -522,6 +580,10 @@ export interface components {
             title?: string | null;
             /** Pinned */
             pinned?: boolean | null;
+            /** Model */
+            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "max") | null;
         };
         /**
          * ErrorEvent
@@ -647,6 +709,32 @@ export interface components {
             shared_at: string;
             /** Messages */
             messages: components["schemas"]["HistoryMessageResponse"][];
+        };
+        /**
+         * SkillResponse
+         * @description A skill the user saved; the agent loads its instructions when a request fits its
+         *     description.
+         */
+        SkillResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * SourceArtifactItem
@@ -1013,6 +1101,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResponse"][];
+                };
+            };
+        };
+    };
+    get_conversation_api_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1524,6 +1643,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SharedConversationResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skills_api_skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillResponse"][];
+                };
+            };
+        };
+    };
+    upload_skill_api_skills_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_skill_api_skills_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_skill_api_skills__skill_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

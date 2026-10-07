@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Composer, type ComposerAttachments } from '@/features/chat/components/Composer';
+import {
+  Composer,
+  type ComposerAttachments,
+  type ComposerSkills,
+} from '@/features/chat/components/Composer';
 import type { AttachmentDraft } from '@/features/chat/types';
 
 function renderComposer() {
@@ -80,7 +84,10 @@ describe('Composer attachments', () => {
     render(<Composer onSend={vi.fn()} attachments={files} />);
     const user = userEvent.setup();
 
-    expect(screen.getByRole('button', { name: 'Attach files' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add files or skills' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add files or photos' }));
+    // Without skills, the menu offers files only.
+    expect(screen.queryByRole('menuitem', { name: 'Skills' })).not.toBeInTheDocument();
     await user.upload(screen.getByTestId('attachment-input'), notes);
 
     expect(files.onAttach).toHaveBeenCalledExactlyOnceWith([notes]);
@@ -131,5 +138,100 @@ describe('Composer attachments', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Remove notes.md' }));
 
     expect(files.onRemove).toHaveBeenCalledExactlyOnceWith('k1');
+  });
+});
+
+describe('Composer skills', () => {
+  const skillFile = new File(['---\nname: notes\n---'], 'SKILL.md', { type: 'text/markdown' });
+
+  function skills(overrides: Partial<ComposerSkills> = {}): ComposerSkills {
+    return {
+      available: [
+        { name: 'release-notes', description: 'Write release notes.' },
+        { name: 'review', description: 'Review a diff.' },
+      ],
+      accept: '.md',
+      onUpload: vi.fn(),
+      uploading: false,
+      notice: null,
+      ...overrides,
+    };
+  }
+
+  it('uploads the skill file picked from the + menu', async () => {
+    const skill = skills();
+    render(<Composer onSend={vi.fn()} skills={skill} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Add files or skills' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Skills']);
+    await user.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    await user.upload(screen.getByTestId('skill-input'), skillFile);
+
+    expect(skill.onUpload).toHaveBeenCalledExactlyOnceWith(skillFile);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('shows how the upload went', () => {
+    render(
+      <Composer
+        onSend={vi.fn()}
+        skills={skills({ notice: { text: 'Saved skill “notes”.', tone: 'success' } })}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Saved skill “notes”.');
+  });
+
+  it('suggests the skills matching the / command being typed, and picks one with Enter', async () => {
+    const onSend = vi.fn();
+    render(<Composer onSend={onSend} skills={skills()} />);
+    const user = userEvent.setup();
+    const box = screen.getByRole('combobox', { name: 'Message' });
+
+    await user.type(box, '/re');
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '/release-notesWrite release notes.',
+      '/reviewReview a diff.',
+    ]);
+
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(box).toHaveValue('/review ');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+
+    await user.type(box, 'this diff{Enter}');
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/review this diff');
+  });
+
+  it('picks a suggestion with the mouse, and hides them on Escape', async () => {
+    render(<Composer onSend={vi.fn()} skills={skills()} />);
+    const user = userEvent.setup();
+    const box = screen.getByRole('combobox', { name: 'Message' });
+
+    await user.type(box, '/');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+
+    await user.type(box, 'rel');
+    await user.click(screen.getByRole('option', { name: /release-notes/ }));
+    expect(box).toHaveValue('/release-notes ');
+  });
+});
+
+describe('Composer model and effort', () => {
+  it('shows them, and picks another from their menus', async () => {
+    const run = { model: 'gpt-6-luna', effort: 'low', onModel: vi.fn(), onEffort: vi.fn() } as const;
+    render(<Composer onSend={vi.fn()} run={run} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Model: gpt-6-luna' }));
+    expect(screen.getByRole('menuitemradio', { name: 'gpt-6-luna' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('menuitemradio', { name: 'gpt-6-astra' }));
+    await user.click(screen.getByRole('button', { name: 'Effort: Low' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Max' }));
+
+    expect(run.onModel).toHaveBeenCalledExactlyOnceWith('gpt-6-astra');
+    expect(run.onEffort).toHaveBeenCalledExactlyOnceWith('max');
   });
 });

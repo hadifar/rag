@@ -37,6 +37,7 @@ from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeAttachmentRepository,
@@ -45,6 +46,7 @@ from tests.unit.fakes import (
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakeSkillRepository,
     FakeUserRepository,
     StubAgent,
     StubGeneration,
@@ -136,6 +138,7 @@ def client() -> Generator[TestClient]:
             attachments=attachment_repository,
             conversations=conversation_repository,
         ),
+        skill_service=SkillService(skills=FakeSkillRepository()),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -323,8 +326,11 @@ def test_create_conversation_starts_it_untitled_and_empty(
         "created_at",
         "updated_at",
         "pinned_at",
+        "model",
+        "effort",
     }
     assert conversation["title"] is None
+    assert (conversation["model"], conversation["effort"]) == ("gpt-6-luna", "low")
     assert conversation["pinned_at"] is None
     messages_url = f"/api/conversations/{conversation['id']}/messages"
     assert client.get(messages_url, headers=auth_headers).json() == []
@@ -484,6 +490,47 @@ def test_rename_stores_the_title_on_one_line(
     assert response.json()["title"] == "Billing questions"
     listed = client.get("/api/conversations", headers=auth_headers).json()
     assert listed["items"][0]["title"] == "Billing questions"
+
+
+def test_the_model_and_effort_are_set_per_conversation(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+    other_id = _create_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"model": "gpt-6-sol", "effort": "max"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert (response.json()["model"], response.json()["effort"]) == ("gpt-6-sol", "max")
+    # Setting one leaves the other as it was.
+    effort_only = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"effort": "low"},
+        headers=auth_headers,
+    ).json()
+    assert (effort_only["model"], effort_only["effort"]) == ("gpt-6-sol", "low")
+    fetched = client.get(f"/api/conversations/{conversation_id}", headers=auth_headers)
+    assert (fetched.json()["model"], fetched.json()["effort"]) == ("gpt-6-sol", "low")
+    other = client.post("/api/conversations", headers=auth_headers).json()
+    assert other["id"] == other_id
+    assert (other["model"], other["effort"]) == ("gpt-6-luna", "low")
+
+
+@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "high"}])
+def test_an_unknown_model_or_effort_is_rejected(
+    client: TestClient, auth_headers: dict[str, str], body: dict[str, str]
+) -> None:
+    conversation_id = _start_conversation(client, auth_headers)
+
+    response = client.patch(
+        f"/api/conversations/{conversation_id}", json=body, headers=auth_headers
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize("title", ["", "   ", "x" * 201])
@@ -681,6 +728,10 @@ def test_conversations_of_another_user_are_invisible(
     others = _start_conversation(client, _login(client, _OTHER_EMAIL))
 
     assert (
+        client.get(f"/api/conversations/{others}", headers=auth_headers).status_code
+        == 404
+    )
+    assert (
         client.get(
             f"/api/conversations/{others}/messages", headers=auth_headers
         ).status_code
@@ -697,6 +748,7 @@ def test_conversations_of_another_user_are_invisible(
     [
         ("GET", "/api/conversations"),
         ("POST", "/api/conversations"),
+        ("GET", f"/api/conversations/{uuid.uuid4()}"),
         ("GET", f"/api/conversations/{uuid.uuid4()}/messages"),
         ("POST", f"/api/chat/{uuid.uuid4()}"),
         ("POST", f"/api/conversations/{uuid.uuid4()}/title"),
@@ -836,6 +888,54 @@ def test_an_unsent_attachment_can_be_discarded(
 
     assert client.delete(url, headers=auth_headers).status_code == 204
     assert client.get(url, headers=auth_headers).status_code == 404
+
+
+_SKILL = b"---\nname: release-notes\ndescription: Write release notes.\n---\nGroup by area.\n"
+
+
+def _upload_skill(client: TestClient, headers: dict[str, str], data: bytes = _SKILL):
+    return client.post(
+        "/api/skills",
+        files={"file": ("SKILL.md", data, "text/markdown")},
+        headers=headers,
+    )
+
+
+def test_a_skill_is_uploaded_listed_and_deleted(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    uploaded = _upload_skill(client, auth_headers)
+    assert uploaded.status_code == 201
+    skill = uploaded.json()
+    assert skill["name"] == "release-notes"
+    assert skill["description"] == "Write release notes."
+
+    listed = client.get("/api/skills", headers=auth_headers)
+    assert listed.json() == [skill]
+
+    deleted = client.delete(f"/api/skills/{skill['id']}", headers=auth_headers)
+    assert deleted.status_code == 204
+    assert client.get("/api/skills", headers=auth_headers).json() == []
+
+
+def test_an_invalid_skill_file_is_rejected_saying_why(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = _upload_skill(client, auth_headers, b"# No frontmatter")
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Not a valid skill file: ")
+
+
+def test_skills_of_another_user_are_invisible(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    skill_id = _upload_skill(client, auth_headers).json()["id"]
+    other = _login(client, _OTHER_EMAIL)
+
+    assert client.get("/api/skills", headers=other).json() == []
+    assert client.delete(f"/api/skills/{skill_id}", headers=other).status_code == 404
+    assert len(client.get("/api/skills", headers=auth_headers).json()) == 1
 
 
 # Routes anyone may call. Every other route must require a signed-in user.

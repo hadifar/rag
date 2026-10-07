@@ -7,7 +7,7 @@
 A ready to use RAG implementation! built on FastAPI + LangGraph + Postgress(pgvector), with a React frontend.
 
 
-![Chat UI](docs/images/screenshot.png)
+![Demo: asking a question, watching the agent plan and search the knowledge base, then the answer and the Settings page](docs/images/demo.gif)
 
 ## Quick start
 ```bash

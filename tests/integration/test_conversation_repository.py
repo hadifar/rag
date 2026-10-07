@@ -12,6 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from rag.config import Settings
 from rag.domain.models import (
+    ConversationUpdate,
     ArtifactsReady,
     ReasoningDelta,
     SourceArtifact,
@@ -119,7 +120,7 @@ async def test_update_renames_and_pins_without_bumping_and_moves_it_between_list
     conversation = await repository.get_or_create_empty(user_id)
 
     pinned = await repository.update_owned(
-        user_id, conversation.id, title="renamed", pinned=True
+        user_id, conversation.id, ConversationUpdate(title="renamed", pinned=True)
     )
     assert pinned is not None
     assert pinned.title == "renamed"
@@ -129,10 +130,12 @@ async def test_update_renames_and_pins_without_bumping_and_moves_it_between_list
     assert await repository.list_for_user(user_id, limit=10, before=None) == []
 
     # Neither field given: both kept, including when it was pinned.
-    kept = await repository.update_owned(user_id, conversation.id, None, None)
+    kept = await repository.update_owned(user_id, conversation.id, ConversationUpdate())
     assert kept == pinned
 
-    unpinned = await repository.update_owned(user_id, conversation.id, None, False)
+    unpinned = await repository.update_owned(
+        user_id, conversation.id, ConversationUpdate(pinned=False)
+    )
     assert unpinned is not None
     assert unpinned.title == "renamed"
     assert unpinned.pinned_at is None
@@ -140,8 +143,30 @@ async def test_update_renames_and_pins_without_bumping_and_moves_it_between_list
     assert await repository.list_for_user(user_id, limit=10, before=None) == [unpinned]
 
     assert (
-        await repository.update_owned(uuid.uuid4(), conversation.id, "x", True) is None
+        await repository.update_owned(
+            uuid.uuid4(), conversation.id, ConversationUpdate(title="x", pinned=True)
+        )
+        is None
     )
+
+
+async def test_update_sets_the_model_and_effort_and_keeps_them_otherwise(
+    pool: AsyncConnectionPool[AsyncConnection], user_id: uuid.UUID
+) -> None:
+    repository = ConversationRepository(pool)
+    conversation = await repository.get_or_create_empty(user_id)
+    assert (conversation.model, conversation.effort) == ("gpt-6-luna", "low")
+
+    updated = await repository.update_owned(
+        user_id, conversation.id, ConversationUpdate(model="gpt-6-sol", effort="max")
+    )
+    assert updated is not None
+    assert (updated.model, updated.effort) == ("gpt-6-sol", "max")
+    renamed = await repository.update_owned(
+        user_id, conversation.id, ConversationUpdate(title="t")
+    )
+    assert renamed is not None
+    assert (renamed.model, renamed.effort) == ("gpt-6-sol", "max")
 
 
 async def test_deleting_a_user_deletes_their_conversations(

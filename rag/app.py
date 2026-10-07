@@ -13,6 +13,7 @@ from rag.api.routers.ingestion import router as ingestion_router
 from rag.api.routers.retrieval import router as retrieval_router
 from rag.api.routers.setting import router as setting_router
 from rag.api.routers.share import router as share_router
+from rag.api.routers.skill import router as skill_router
 from rag.config import Settings, get_settings
 from rag.container import Container, build_container
 from rag.domain.errors import AppError
@@ -69,6 +70,7 @@ def create_app(
     app.include_router(ingestion_router)
     app.include_router(setting_router)
     app.include_router(share_router)
+    app.include_router(skill_router)
 
     register_error_handlers(app)
 

@@ -14,11 +14,13 @@ from rag.domain.models import (
     Attachment,
     AttachmentFile,
     Conversation,
+    ConversationUpdate,
     IndexedDocument,
     IngestionReport,
     IngestionRun,
     RunContext,
     Share,
+    Skill,
     StreamEvent,
     TextDelta,
     Turn,
@@ -273,16 +275,19 @@ class FakeConversationRepository:
         self,
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
-        title: str | None,
-        pinned: bool | None,
+        change: ConversationUpdate,
     ) -> Conversation | None:
         conversation = await self.get_owned(user_id, conversation_id)
         if conversation is None:
             return None
-        if title is not None:
-            conversation = replace(conversation, title=title)
-        if pinned is not None:
-            pinned_at = (conversation.pinned_at or self._now()) if pinned else None
+        fields = {
+            k: v for k, v in asdict(change).items() if v is not None and k != "pinned"
+        }
+        conversation = replace(conversation, **fields)
+        if change.pinned is not None:
+            pinned_at = (
+                (conversation.pinned_at or self._now()) if change.pinned else None
+            )
             conversation = replace(conversation, pinned_at=pinned_at)
         self.rows[conversation_id] = conversation
         return conversation
@@ -412,6 +417,53 @@ class FakeAttachmentRepository:
         }
 
 
+class FakeSkillRepository:
+    """In-memory SkillRepositoryPort."""
+
+    def __init__(self):
+        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str]] = {}  # by owner, name
+        self._clock = datetime(2026, 3, 1, tzinfo=UTC)
+
+    async def save(
+        self, user_id: uuid.UUID, name: str, description: str, instructions: str
+    ) -> Skill:
+        self._clock += timedelta(seconds=1)
+        existing = self.rows.get((user_id, name))
+        skill = Skill(
+            id=existing[0].id if existing else uuid.uuid4(),
+            name=name,
+            description=description,
+            created_at=existing[0].created_at if existing else self._clock,
+            updated_at=self._clock,
+        )
+        self.rows[user_id, name] = (skill, instructions)
+        return skill
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
+        return sorted(
+            (skill for (owner, _), (skill, _) in self.rows.items() if owner == user_id),
+            key=lambda s: s.name,
+        )
+
+    async def get_instructions(self, user_id: uuid.UUID, name: str) -> str | None:
+        row = self.rows.get((user_id, name))
+        return row[1] if row else None
+
+    async def delete_owned(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> bool:
+        key = next(
+            (
+                k
+                for k, (skill, _) in self.rows.items()
+                if k[0] == user_id and skill.id == skill_id
+            ),
+            None,
+        )
+        if key is None:
+            return False
+        del self.rows[key]
+        return True
+
+
 class FakeShareRepository:
     """In-memory ShareRepositoryPort, reading turn counts from `conversations`."""
 
@@ -496,7 +548,7 @@ class StubTurn:
 class StubAgent:
     """AgentPort without a model: echoes the message, then `extra_events`, then
     `artifacts` if given, and remembers the turn as `[{"said": message}]`; records the
-    history and the attachments each turn was given.
+    history, the context and the attachments each turn was given.
     """
 
     def __init__(
@@ -507,6 +559,7 @@ class StubAgent:
         self.extra_events = extra_events or []
         self.artifacts = artifacts
         self.histories: list[list[AgentMemory]] = []
+        self.contexts: list[RunContext] = []
         self.attachments: list[list[AttachmentFile]] = []
         self.earlier_attachments: list[list[AttachmentFile]] = []
 
@@ -520,6 +573,7 @@ class StubAgent:
         earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> StubTurn:
         self.histories.append(list(history))
+        self.contexts.append(ctx)
         self.attachments.append(list(attachments))
         self.earlier_attachments.append(list(earlier_attachments))
         events: list[StreamEvent] = [
