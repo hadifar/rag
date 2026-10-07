@@ -19,7 +19,8 @@ Diagram: [Backend layers](../diagrams/architecture.md#backend-layers).
 * Services never import each other. A service that needs another service takes a port.
 * Only `rag/services/agent_service/` and `rag/adapters/` import LangChain.
 * Only `rag/container.py` constructs adapters, repositories and services.
-* Routers never import `rag.domain` or `rag.config`.
+* Routers never import `rag.domain`.
+* Nothing in `rag/api` imports `rag.config`: the container hands it an `AppSettings`.
 * `rag.shared` imports nothing else in `rag`.
 
 ## Services
