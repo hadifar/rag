@@ -46,6 +46,7 @@ Known gaps. None of these is addressed yet.
 * No password reset and no email verification.
 * No token rotation or revocation.
 * Login rate limiting is per IP only (nginx).
+* Share links (`GET /api/shares/{share_id}`) are public, never expire, and have no rate limit. Shared answers can quote the knowledge base.
 * The backend image runs as root on a floating base image.
 
 ## Reliability

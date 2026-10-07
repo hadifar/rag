@@ -8,6 +8,7 @@ from rag.container import Container
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
 
@@ -52,6 +53,10 @@ def get_chat_service(container: ContainerDep) -> ChatService:
     return container.chat_service
 
 
+def get_share_service(container: ContainerDep) -> ShareService:
+    return container.share_service
+
+
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
@@ -67,6 +72,9 @@ ConversationServiceDep = Annotated[
 
 
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
+
+
+ShareServiceDep = Annotated[ShareService, Depends(get_share_service)]
 
 
 async def get_current_user(

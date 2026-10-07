@@ -146,6 +146,57 @@ async def test_list_rejects_a_malformed_cursor(cursor: str) -> None:
         await service.list_for_user(ALICE, limit=2, cursor=cursor)
 
 
+async def test_pinned_conversations_leave_the_recent_list_last_pinned_first() -> None:
+    service, repository, _ = _service()
+    first, second, rest = [
+        await _titled(repository, ALICE, f"chat {i}") for i in range(3)
+    ]
+
+    await service.update(ALICE, first.id, pinned=True)
+    await service.update(ALICE, second.id, pinned=True)
+
+    pinned = await service.list_pinned(ALICE)
+    recent = await service.list_for_user(ALICE, limit=10, cursor=None)
+    assert [c.id for c in pinned] == [second.id, first.id]
+    assert [c.id for c in recent.items] == [rest.id]
+
+
+async def test_pinning_again_keeps_when_it_was_pinned_and_unpinning_clears_it() -> None:
+    service, repository, _ = _service()
+    conversation = await _titled(repository, ALICE, "chat")
+
+    pinned = await service.update(ALICE, conversation.id, pinned=True)
+    again = await service.update(ALICE, conversation.id, pinned=True)
+    unpinned = await service.update(ALICE, conversation.id, pinned=False)
+
+    assert pinned.pinned_at is not None
+    assert again.pinned_at == pinned.pinned_at
+    assert unpinned.pinned_at is None
+
+
+async def test_rename_sets_the_title_and_keeps_its_place_and_pin() -> None:
+    service, repository, _ = _service()
+    conversation = await _titled(repository, ALICE, "chat")
+    await service.update(ALICE, conversation.id, pinned=True)
+    before = repository.rows[conversation.id]
+
+    renamed = await service.update(ALICE, conversation.id, title="Billing")
+
+    assert renamed.title == "Billing"
+    assert renamed.updated_at == before.updated_at
+    assert renamed.pinned_at == before.pinned_at
+
+
+async def test_cannot_update_a_conversation_someone_else_owns() -> None:
+    service, repository, _ = _service()
+    conversation = await _titled(repository, BOB, "bob's")
+
+    with pytest.raises(ConversationNotFoundError):
+        await service.update(ALICE, conversation.id, title="mine now", pinned=True)
+    assert repository.rows[conversation.id].title == "bob's"
+    assert repository.rows[conversation.id].pinned_at is None
+
+
 async def test_delete_removes_the_row_and_its_turns() -> None:
     service, repository, _ = _service()
     conversation_id = (await service.create(ALICE)).id

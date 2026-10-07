@@ -18,7 +18,8 @@ const featureThroughIndex = {
 };
 const chatOnlyFromChatPage = {
   group: ['**/features/chat'],
-  message: 'Only the lazily loaded pages/ChatPage imports the chat feature: it pulls in the markdown renderer.',
+  message:
+    'Only the lazily loaded pages/ChatPage and pages/SharedChatPage import the chat feature: it pulls in the markdown renderer.',
 };
 const leaveFeatureByAlias = (relative) => ({
   group: [relative],
@@ -124,7 +125,7 @@ const config = {
     { files: ['src/app/App.tsx'], rules: restrict(app) },
     { files: ['src/pages/**'], rules: restrict([...app, presentNoApi, presentNoQuery]) },
     {
-      files: ['src/pages/ChatPage.tsx'],
+      files: ['src/pages/ChatPage.tsx', 'src/pages/SharedChatPage.tsx'],
       rules: restrict([
         ...app.filter((pattern) => pattern !== chatOnlyFromChatPage),
         presentNoApi,

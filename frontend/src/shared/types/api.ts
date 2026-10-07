@@ -28,12 +28,17 @@ export type UserMessageResponse = Schemas['UserMessageResponse'];
 export type AssistantMessageResponse = Schemas['AssistantMessageResponse'];
 export type HistoryMessageResponse = Schemas['HistoryMessageResponse'];
 export type MessageRequest = Schemas['MessageRequest'];
+export type ConversationUpdateRequest = Schemas['ConversationUpdateRequest'];
 
 // health.py
 export type HealthResponse = Schemas['HealthResponse'];
 
 // ingestion.py
 export type IngestionRunResponse = Schemas['IngestionRunResponse'];
+
+// share.py
+export type ShareResponse = Schemas['ShareResponse'];
+export type SharedConversationResponse = Schemas['SharedConversationResponse'];
 
 // setting.py
 export type SettingsResponse = Schemas['SettingsResponse'];

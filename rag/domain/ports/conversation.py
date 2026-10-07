@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from rag.domain.models import AgentMemory, Conversation, StreamEvent, Turn
+from rag.domain.models import AgentMemory, Conversation, Share, StreamEvent, Turn
 
 
 class ConversationRepositoryPort(Protocol):
@@ -26,7 +26,26 @@ class ConversationRepositoryPort(Protocol):
         limit: int,
         before: tuple[datetime, uuid.UUID] | None,
     ) -> list[Conversation]:
-        """Newest first by (updated_at, id); `before` is exclusive (keyset pagination)."""
+        """The unpinned ones, newest first by (updated_at, id); `before` is exclusive
+        (keyset pagination).
+        """
+        ...
+
+    async def list_pinned(self, user_id: uuid.UUID) -> list[Conversation]:
+        """The pinned ones, last pinned first."""
+        ...
+
+    async def update_owned(
+        self,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        title: str | None,
+        pinned: bool | None,
+    ) -> Conversation | None:
+        """Sets each field given (None leaves it as is), without bumping it to most
+        recently used; pinning a pinned one keeps when it was pinned. None, as
+        `get_owned`, if it isn't the user's.
+        """
         ...
 
     async def touch_owned(
@@ -49,6 +68,28 @@ class ConversationRepositoryPort(Protocol):
         answer: list[StreamEvent],
         memory: AgentMemory | None = None,
     ) -> None: ...
-    async def list_turns(self, conversation_id: uuid.UUID) -> list[Turn]:
-        """Oldest first; empty for a conversation without any."""
+    async def list_turns(
+        self, conversation_id: uuid.UUID, limit: int | None = None
+    ) -> list[Turn]:
+        """Oldest first, the first `limit` of them if given; empty for a conversation
+        without any.
+        """
+        ...
+
+
+class ShareRepositoryPort(Protocol):
+    """Each conversation's public read-only link, if it has one."""
+
+    async def save(self, conversation_id: uuid.UUID, title: str) -> Share | None:
+        """Shares the conversation as it is now: `title`, and the turns it has. Sharing
+        it again takes a new snapshot behind the same link. None if it has no turns.
+        """
+        ...
+
+    async def get_for_conversation(
+        self, conversation_id: uuid.UUID
+    ) -> Share | None: ...
+    async def get(self, share_id: uuid.UUID) -> Share | None: ...
+    async def delete_for_conversation(self, conversation_id: uuid.UUID) -> None:
+        """Takes its link down; sharing it again makes a new one."""
         ...

@@ -22,6 +22,7 @@ from rag.repository.cache_repository import (
     SearchCacheRepository,
 )
 from rag.repository.conversation_repository import ConversationRepository
+from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.repository.user_repository import UserRepository
@@ -35,6 +36,7 @@ from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.share_service.service import ShareService
 
 
 @dataclass
@@ -44,6 +46,7 @@ class Container:
     auth_service: AuthService
     conversation_service: ConversationService
     chat_service: ChatService
+    share_service: ShareService
 
 
 @dataclass
@@ -160,4 +163,8 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             auth_service=auth_service,
             conversation_service=conversation_service,
             chat_service=chat_service,
+            share_service=ShareService(
+                shares=ShareRepository(db_pool),
+                conversations=conversation_repo,
+            ),
         )

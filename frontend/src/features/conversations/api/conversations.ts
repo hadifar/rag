@@ -2,7 +2,9 @@ import { api, unwrap } from '@/shared/api/client';
 import type {
   ConversationPageResponse,
   ConversationResponse,
+  ConversationUpdateRequest,
   HistoryMessageResponse,
+  ShareResponse,
 } from '@/shared/types';
 
 const byId = (id: string) => ({ path: { conversation_id: id } });
@@ -26,6 +28,19 @@ export function listConversations(
   return unwrap(api.GET('/api/conversations', { params: { query: cursor ? { cursor } : {} }, signal }));
 }
 
+/** The pinned conversations, last pinned first; `listConversations` lists the rest. */
+export function listPinnedConversations(signal?: AbortSignal): Promise<ConversationResponse[]> {
+  return unwrap(api.GET('/api/conversations/pinned', { signal }));
+}
+
+/** Renames, pins or unpins it; a field left out stays as is. */
+export function updateConversation(
+  id: string,
+  body: ConversationUpdateRequest
+): Promise<ConversationResponse> {
+  return unwrap(api.PATCH('/api/conversations/{conversation_id}', { params: byId(id), body }));
+}
+
 export function fetchConversationMessages(
   id: string,
   signal?: AbortSignal
@@ -35,4 +50,18 @@ export function fetchConversationMessages(
 
 export async function deleteConversation(id: string): Promise<void> {
   await unwrap(api.DELETE('/api/conversations/{conversation_id}', { params: byId(id) }));
+}
+
+/** Its public link, or null if it isn't shared. */
+export function fetchShare(id: string, signal?: AbortSignal): Promise<ShareResponse | null> {
+  return unwrap(api.GET('/api/conversations/{conversation_id}/share', { params: byId(id), signal }));
+}
+
+/** Shares it as it is now; sharing again updates what the same link shows. */
+export function shareConversation(id: string): Promise<ShareResponse> {
+  return unwrap(api.PUT('/api/conversations/{conversation_id}/share', { params: byId(id) }));
+}
+
+export async function unshareConversation(id: string): Promise<void> {
+  await unwrap(api.DELETE('/api/conversations/{conversation_id}/share', { params: byId(id) }));
 }

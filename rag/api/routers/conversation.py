@@ -5,17 +5,20 @@ from fastapi import APIRouter, Depends
 from rag.api.deps import (
     AuthenticatedUserDep,
     ConversationServiceDep,
+    ShareServiceDep,
     get_current_user,
 )
 from rag.api.schema.conversation import (
     DEFAULT_PAGE_LIMIT,
     ConversationPageResponse,
     ConversationResponse,
+    ConversationUpdateRequest,
     HistoryMessageResponse,
     MessageRequest,
     PageLimit,
     to_history_message,
 )
+from rag.api.schema.share import ShareResponse
 
 router = APIRouter(
     prefix="/api/conversations",
@@ -44,6 +47,32 @@ async def list_conversations(
     return ConversationPageResponse.model_validate(page)
 
 
+@router.get("/pinned")
+async def list_pinned_conversations(
+    current_user: AuthenticatedUserDep, conversation_service: ConversationServiceDep
+) -> list[ConversationResponse]:
+    """The caller's pinned conversations, last pinned first; `GET ""` lists the rest."""
+    conversations = await conversation_service.list_pinned(current_user.id)
+    return [ConversationResponse.model_validate(c) for c in conversations]
+
+
+@router.patch("/{conversation_id}")
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    update_request: ConversationUpdateRequest,
+    current_user: AuthenticatedUserDep,
+    conversation_service: ConversationServiceDep,
+) -> ConversationResponse:
+    """Renames, pins or unpins it."""
+    conversation = await conversation_service.update(
+        current_user.id,
+        conversation_id,
+        title=update_request.title,
+        pinned=update_request.pinned,
+    )
+    return ConversationResponse.model_validate(conversation)
+
+
 @router.get("/{conversation_id}/messages")
 async def get_messages(
     conversation_id: uuid.UUID,
@@ -69,6 +98,37 @@ async def generate_title(
         current_user.id, conversation_id, message_request.message
     )
     return ConversationResponse.model_validate(conversation)
+
+
+@router.get("/{conversation_id}/share")
+async def get_share(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> ShareResponse | None:
+    """Its public link, or null if it isn't shared."""
+    share = await share_service.get(current_user.id, conversation_id)
+    return ShareResponse.model_validate(share) if share is not None else None
+
+
+@router.put("/{conversation_id}/share")
+async def share_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> ShareResponse:
+    """Shares it as it is now, behind its link (made on first share, kept after)."""
+    share = await share_service.share(current_user.id, conversation_id)
+    return ShareResponse.model_validate(share)
+
+
+@router.delete("/{conversation_id}/share", status_code=204)
+async def unshare_conversation(
+    conversation_id: uuid.UUID,
+    current_user: AuthenticatedUserDep,
+    share_service: ShareServiceDep,
+) -> None:
+    await share_service.unshare(current_user.id, conversation_id)
 
 
 @router.delete("/{conversation_id}", status_code=204)

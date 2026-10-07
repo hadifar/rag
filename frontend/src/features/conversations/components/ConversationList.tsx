@@ -1,71 +1,83 @@
-import { memo } from 'react';
-import { NavLink } from 'react-router-dom';
-import { TrashIcon } from '@heroicons/react/24/outline';
+import type { ReactNode } from 'react';
 
 import { ConfirmDeleteModal } from '@/shared/ui/ConfirmDeleteModal';
-import { IconButton } from '@/shared/ui/IconButton';
 import { StatusLine } from '@/shared/ui/StatusLine';
 import type { ConversationResponse } from '@/shared/types';
-import { routes } from '@/shared/routes';
 import { useConversationList } from '../hooks/useConversationList';
+import { usePinnedConversations } from '../hooks/usePinnedConversations';
 import { useConfirmDeleteConversation } from '../hooks/useConfirmDeleteConversation';
+import { useEditConversation } from '../hooks/useEditConversation';
+import { useShareConversation } from '../hooks/useShareConversation';
+import { ConversationRow, NEW_CHAT_TITLE } from './ConversationRow';
+import { ShareDialog } from './ShareDialog';
 
-// Shown until the conversation's first answer names it.
-const NEW_CHAT_TITLE = 'New chat';
-
-const ConversationLink = memo(function ConversationLink({
-  conversation,
-  vanishing,
-  onDelete,
-  onVanished,
-}: {
-  conversation: ConversationResponse;
-  vanishing: boolean;
-  onDelete: (conversation: ConversationResponse) => void;
-  onVanished: (id: string) => void;
-}) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div
-      className={`group flex items-center gap-1 ${vanishing ? 'pointer-events-none animate-vaporize' : ''}`}
-      // Already deleted: hidden from assistive tech while it plays its exit.
-      aria-hidden={vanishing || undefined}
-      onAnimationEnd={vanishing ? () => onVanished(conversation.id) : undefined}
-    >
-      <NavLink
-        to={routes.chat(conversation.id)}
-        title={conversation.title ?? NEW_CHAT_TITLE}
-        className={({ isActive }) =>
-          `min-w-0 flex-1 truncate rounded-lg px-3 py-2.5 text-left text-[13px] transition-colors ${
-            isActive
-              ? 'bg-slate-100 font-medium text-slate-900'
-              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-          }`
-        }
-      >
-        {conversation.title ?? NEW_CHAT_TITLE}
-      </NavLink>
-      <IconButton
-        label="Delete chat"
-        tone="danger"
-        onClick={() => onDelete(conversation)}
-        // Shown on hovering its row, or on reaching it by keyboard.
-        className="opacity-0 focus:opacity-100 group-hover:opacity-100"
-      >
-        <TrashIcon className="size-3.5" />
-      </IconButton>
-    </div>
+    <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+      {children}
+    </p>
   );
-});
+}
 
-/** The sidebar's recent chats: paged in on demand, each deletable after a confirmation. */
+/**
+ * The sidebar's chats: the pinned ones, then the recent ones paged in on demand. Each
+ * can be pinned, renamed, shared, or deleted after a confirmation, from its menu.
+ */
 export function ConversationList() {
   const { conversations, status, hasMore, isLoadingMore, loadMore } = useConversationList();
+  const { pinned } = usePinnedConversations();
   const { requestDelete, pending, isDeleting, error, confirm, cancel, vanishing, finishVanish } =
     useConfirmDeleteConversation();
+  const {
+    togglePin,
+    pinError,
+    renamingId,
+    startRename,
+    saveRename,
+    cancelRename,
+    isSavingRename,
+    renameError,
+  } = useEditConversation();
+  const share = useShareConversation();
+
+  const row = (conversation: ConversationResponse) => {
+    const isRenaming = renamingId === conversation.id;
+    return (
+      <ConversationRow
+        key={conversation.id}
+        conversation={conversation}
+        vanishing={vanishing.has(conversation.id)}
+        onVanished={finishVanish}
+        isRenaming={isRenaming}
+        isSavingRename={isRenaming && isSavingRename}
+        renameError={isRenaming ? renameError : null}
+        onTogglePin={togglePin}
+        onStartRename={startRename}
+        onSaveRename={saveRename}
+        onCancelRename={cancelRename}
+        onShare={share.open}
+        onDelete={requestDelete}
+      />
+    );
+  };
 
   return (
     <>
-      <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Recent</p>
+      {pinError && (
+        <StatusLine role="alert" tone="error" size="sm" className="px-3 pb-2">
+          {pinError}
+        </StatusLine>
+      )}
+      {pinned.length > 0 && (
+        <div className="pb-3">
+          <SectionLabel>Pinned</SectionLabel>
+          {pinned.map(row)}
+        </div>
+      )}
+      {/* With every chat pinned, an empty "Recent" says nothing. */}
+      {!(status === 'ready' && conversations.length === 0 && pinned.length > 0) && (
+        <SectionLabel>Recent</SectionLabel>
+      )}
       {status === 'loading' && (
         <StatusLine size="sm" className="px-3 py-2">
           Loading…
@@ -76,20 +88,12 @@ export function ConversationList() {
           Couldn't load your chats.
         </StatusLine>
       )}
-      {status === 'ready' && conversations.length === 0 && (
+      {status === 'ready' && conversations.length === 0 && pinned.length === 0 && (
         <StatusLine size="sm" className="px-3 py-2">
           No chats yet.
         </StatusLine>
       )}
-      {conversations.map((conversation) => (
-        <ConversationLink
-          key={conversation.id}
-          conversation={conversation}
-          vanishing={vanishing.has(conversation.id)}
-          onDelete={requestDelete}
-          onVanished={finishVanish}
-        />
-      ))}
+      {conversations.map(row)}
       {hasMore && (
         <button
           type="button"
@@ -115,6 +119,21 @@ export function ConversationList() {
         error={error}
         onConfirm={confirm}
         onCancel={cancel}
+      />
+      <ShareDialog
+        isOpen={share.sharing !== null}
+        title={share.sharing?.title ?? NEW_CHAT_TITLE}
+        status={share.status}
+        link={share.link}
+        sharedOn={share.sharedOn}
+        isSaving={share.isSaving}
+        isStopping={share.isStopping}
+        copied={share.copied}
+        error={share.error}
+        onSave={share.saveShare}
+        onStop={share.stopSharing}
+        onCopy={share.copy}
+        onClose={share.close}
       />
     </>
   );

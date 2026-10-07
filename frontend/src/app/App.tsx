@@ -15,6 +15,11 @@ const queryClient = createQueryClient();
 
 const router = createBrowserRouter([
   { path: routes.login, element: <LoginPage /> },
+  // Public: a share link is read without signing in. Lazy, as ChatPage, for its markdown.
+  {
+    path: routePatterns.share,
+    lazy: async () => ({ Component: (await import('@/pages/SharedChatPage')).SharedChatPage }),
+  },
   {
     element: <RequireAuth />,
     children: [

@@ -132,6 +132,26 @@ class ConversationNotFoundError(AppError):
         super().__init__(f"No conversation found for id={conversation_id!r}")
 
 
+class NothingToShareError(AppError):
+    """Raised when sharing a conversation that has no messages yet."""
+
+    status_code: ClassVar[int] = 409
+
+    def __init__(self, conversation_id: object):
+        super().__init__(f"Conversation {conversation_id!r} has no messages to share")
+
+
+class ShareNotFoundError(AppError):
+    """Raised when a share link doesn't exist, was taken down, or its conversation
+    was deleted.
+    """
+
+    status_code: ClassVar[int] = 404
+
+    def __init__(self, share_id: object):
+        super().__init__(f"No shared conversation found for id={share_id!r}")
+
+
 class InvalidCursorError(AppError):
     """Raised when a pagination cursor wasn't produced by this API."""
 

@@ -21,8 +21,11 @@ from rag.domain.models.conversation import (
     Conversation,
     ConversationPage,
     HistoryMessage,
+    Share,
+    SharedConversation,
     Turn,
     UserMessage,
+    history_of,
 )
 from rag.domain.models.ingestion import (
     IndexedDocument,
@@ -53,6 +56,8 @@ __all__ = [
     "RawDocument",
     "ReasoningDelta",
     "RunContext",
+    "Share",
+    "SharedConversation",
     "SourceArtifact",
     "StreamEvent",
     "TaggedStreamEvent",
@@ -64,4 +69,5 @@ __all__ = [
     "TurnFailed",
     "User",
     "UserMessage",
+    "history_of",
 ]
