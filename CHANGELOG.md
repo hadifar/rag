@@ -1,3 +1,28 @@
+## v0.15.0 (2026-10-07)
+
+### Feat
+
+- **chat**: pick each conversation's model and effort in the composer
+- **skills**: invoke a saved skill with /<name>
+- **skills**: save SKILL.md files the agent loads by description
+- **chat**: attach .md and image files to chat messages
+- **conversations**: share a chat as a read-only public snapshot link
+- **conversations**: pin and rename chats from a menu on each sidebar row
+
+### Fix
+
+- **skills**: show each skill's description on one line in settings
+- **conversations**: reduce right padding on sidebar chat titles
+- **chat**: keep long attachment names inside their chip
+- **chat**: send a new chat's first message to its files' conversation
+- **chat**: render search tool output as markdown
+- focus on menu rather than pin
+- use vertical dots instead of horizontal
+
+### Refactor
+
+- **settings**: drop the model, temperature, top-k fields and Save button
+
 ## v0.14.0 (2026-10-06)
 
 ### Feat
