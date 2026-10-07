@@ -454,11 +454,11 @@ class FakeSkillRepository:
             key=lambda s: s.name,
         )
 
-    async def get_content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
+    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         row = self.rows.get((user_id, name))
         return SkillContent(row[1], tuple(sorted(row[2]))) if row else None
 
-    async def get_file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
         row = self.rows.get((user_id, name))
         return row[2].get(path) if row else None
 

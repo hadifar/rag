@@ -133,12 +133,13 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             cache=caches.search,
         )
 
-        skill_service = SkillService(skills=SkillRepository(db_pool))
+        skill_repo = SkillRepository(db_pool)
+        skill_service = SkillService(skills=skill_repo)
 
         rag_agent = RagAgent(
             llm=llm,
             search=retrieval_service,
-            skills=skill_service,
+            skills=skill_repo,
             verdicts=caches.verdicts,
             history_limits=HistoryLimits(
                 max_tokens=settings.LLM.HISTORY_MAX_TOKENS,

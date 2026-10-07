@@ -38,6 +38,7 @@ from rag.domain.models import (
     ToolCall,
     TurnFailed,
 )
+from rag.domain.ports import SkillsPort
 from rag.services.agent_service.guards.groundedness import GroundednessVerdict
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
@@ -206,13 +207,13 @@ class _Chat:
         model: _ScriptedChatModel,
         retry_attempts: int = 3,
         verdicts: FakeCache[InputVerdict] | None = None,
-        skills: SkillService | None = None,
+        skills: SkillsPort | None = None,
         history_limits: HistoryLimits | None = None,
     ):
         self.agent = RagAgent(
             Llm(model, _no_tracing, attempts=retry_attempts),
             _StubRetrievalService(),
-            skills if skills is not None else SkillService(FakeSkillRepository()),
+            skills if skills is not None else FakeSkillRepository(),
             verdicts=verdicts if verdicts is not None else FakeCache(),
             history_limits=history_limits,
         )
@@ -767,10 +768,11 @@ def _load_skill(name: str) -> AIMessage:
     )
 
 
-async def _skills_of_the_user() -> SkillService:
-    skills = SkillService(FakeSkillRepository())
-    await skills.upload(_USER, _SKILL_FILE)
-    await skills.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
+async def _skills_of_the_user() -> FakeSkillRepository:
+    skills = FakeSkillRepository()
+    service = SkillService(skills)
+    await service.upload(_USER, _SKILL_FILE)
+    await service.upload(uuid.uuid4(), _SKILL_FILE.replace(b"release", b"other"))
     return skills
 
 
@@ -825,7 +827,7 @@ def _read_skill_file(skill: str, path: str) -> AIMessage:
     )
 
 
-async def _skills_with_files() -> SkillService:
+async def _skills_with_files() -> FakeSkillRepository:
     """The user's release-notes skill, with two reference files."""
     repository = FakeSkillRepository()
     await repository.save(
@@ -838,7 +840,7 @@ async def _skills_with_files() -> SkillService:
     await repository.save(
         uuid.uuid4(), "other-notes", "Other.", "Other.", {"secret.md": "Theirs."}
     )
-    return SkillService(repository)
+    return repository
 
 
 _LOADED_WITH_FILES = "Group the changes by area.\n\n" + SKILL_FILES_NOTE.format(
@@ -1039,7 +1041,7 @@ async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
     agent = RagAgent(
         llm,
         _StubRetrievalService(),
-        SkillService(FakeSkillRepository()),
+        FakeSkillRepository(),
         verdicts=FakeCache(),
     )
     ctx = RunContext(

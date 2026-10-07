@@ -5,7 +5,7 @@ from rag.domain.errors import (
     SkillTooLargeError,
     TooManySkillsError,
 )
-from rag.domain.models import Skill, SkillContent
+from rag.domain.models import Skill
 from rag.domain.ports import SkillRepositoryPort
 from rag.services.skill_service.archive import is_archive, read_archive
 from rag.services.skill_service.parsing import parse_skill
@@ -57,12 +57,6 @@ class SkillService:
     async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
         """The user's skills, by name."""
         return await self._skills.list_for_user(user_id)
-
-    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
-        return await self._skills.get_content(user_id, name)
-
-    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
-        return await self._skills.get_file(user_id, name, path)
 
     async def delete(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> None:
         if not await self._skills.delete_owned(user_id, skill_id):

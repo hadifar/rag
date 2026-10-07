@@ -25,11 +25,11 @@ class SkillRepositoryPort(Protocol):
         """The user's skills, by name."""
         ...
 
-    async def get_content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
+    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         """None if the user has no skill of that name."""
         ...
 
-    async def get_file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
         """The content of a reference file of the user's skill of that name; None if
         they have no such skill, or it no such file.
         """
@@ -41,7 +41,7 @@ class SkillRepositoryPort(Protocol):
 
 
 class SkillsPort(Protocol):
-    """The skills the agent may use for a user (see `SkillService`)."""
+    """The skills the agent may use for a user (see `SkillRepositoryPort`)."""
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]: ...
 

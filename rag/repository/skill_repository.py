@@ -63,7 +63,7 @@ class SkillRepository(BaseRepository[Skill]):
             (user_id,),
         )
 
-    async def get_content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
+    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 """
@@ -78,7 +78,7 @@ class SkillRepository(BaseRepository[Skill]):
             row = await cur.fetchone()
         return SkillContent(instructions=row[0], files=tuple(row[1])) if row else None
 
-    async def get_file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
         async with self._pool.connection() as conn:
             cur = await conn.execute(
                 """
