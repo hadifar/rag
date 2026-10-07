@@ -3,8 +3,9 @@ from pydantic import BaseModel, Field
 
 class UploadsConfig(BaseModel):
     """The largest file each upload takes, in bytes: the API reads no further, and the
-    service rejects anything over it. nginx caps the request body before that: keep
-    its `client_max_body_size` (infra/docker/nginx.conf.template) a little above.
+    service rejects anything over it. nginx caps each request body from the same env
+    vars (infra/docker/upload-limits.envsh), so docker-compose.yml and main.bicep set
+    them all, to these defaults (tests/unit/test_upload_limits.py).
     """
 
     # A knowledge-base .zip of .md files.

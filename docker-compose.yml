@@ -1,5 +1,13 @@
 name: rag
 
+# The largest file each upload takes, in bytes: the backend enforces them, and nginx
+# (frontend) caps the request bodies from them. One set, so the two agree.
+x-upload-limits: &upload-limits
+  UPLOADS__KB_MAX_BYTES: 20971520
+  UPLOADS__SKILL_MAX_BYTES: 51200
+  UPLOADS__SKILL_ARCHIVE_MAX_BYTES: 524288
+  UPLOADS__ATTACHMENT_MAX_BYTES: 5242880
+
 services:
   postgres:
     # Postgres with the pgvector extension
@@ -40,6 +48,7 @@ services:
     env_file: .env
     # .env targets the host (localhost); inside the compose network it's `postgres`.
     environment:
+      <<: *upload-limits
       DATABASE_URL: postgresql://rag:rag@postgres:5432/rag
       # Uploaded knowledge-base zips, kept on a volume so they survive rebuilds.
       KB_STORAGE__BACKEND: local
@@ -57,6 +66,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.frontend
     environment:
+      <<: *upload-limits
       BACKEND_URL: http://backend:8000
     depends_on:
       - backend
