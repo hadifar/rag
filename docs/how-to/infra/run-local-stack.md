@@ -18,4 +18,4 @@ Run Postgres, the backend and the frontend in Docker Compose.
 * `backend` is not published to the host. Use the frontend URL for the UI and the API.
 * `backend` starts only after `migrate` succeeds. If `backend` does not start, run `docker compose logs migrate`.
 * `docker-compose.yml` overrides `DATABASE_URL` with the `postgres` host. Keep `localhost` in `.env`.
-* `infra/docker/nginx.conf.template` reads the proxy target from `BACKEND_URL`.
+* `infra/docker/nginx.conf.template` reads the proxy target from `BACKEND_URL`, and each upload's body limit from the `UPLOADS__*` variables (`infra/docker/upload-limits.envsh`). The frontend container stops at start if one is missing; `docker-compose.yml` sets them once for both services (`x-upload-limits`).

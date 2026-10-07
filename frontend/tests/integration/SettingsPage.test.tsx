@@ -4,10 +4,11 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthContext } from '@/features/auth/hooks/useAuth';
+import { uploadKnowledgeBase } from '@/features/knowledge-base/api/ingestions';
 import { uploadSkill } from '@/features/skills/api/skills';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ApiError } from '@/shared/api/client';
-import type { IngestionRunResponse, SettingsResponse, SkillResponse } from '@/shared/types';
+import type { IngestionRunResponse, SkillResponse } from '@/shared/types';
 import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
@@ -34,39 +35,21 @@ const succeeded: IngestionRunResponse = {
 };
 
 // jsdom's FormData can't carry a File into a fetch Request here (the browser's can), so
-// the skill upload is faked above the network.
+// the uploads are faked above the network.
 vi.mock('@/features/skills/api/skills', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/skills/api/skills')>()),
   uploadSkill: vi.fn(),
 }));
+vi.mock('@/features/knowledge-base/api/ingestions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/knowledge-base/api/ingestions')>()),
+  uploadKnowledgeBase: vi.fn(),
+}));
 
-afterEach(() => vi.restoreAllMocks());
-
-/**
- * Answers the upload POST itself; every other request still goes to MSW. vitest 5's
- * jsdom shim can't turn a jsdom File inside FormData into a Node request (it reads
- * Blob internals that jsdom 30 renamed), so an upload never reaches MSW. Real browsers
- * are unaffected. Returns the form data each upload sent.
- */
-function answerUploads(respond: () => Response): FormData[] {
-  const sent: FormData[] = [];
-  const realFetch = globalThis.fetch;
-  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-    if (init?.method === 'POST' && init.body instanceof FormData) {
-      sent.push(init.body);
-      return Promise.resolve(respond());
-    }
-    return realFetch(input, init);
-  });
-  return sent;
-}
+afterEach(() => vi.clearAllMocks());
 
 // The real page, hooks and API client; only the backend is faked (see ../server.ts).
 function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse | null } = {}) {
   server.use(
-    http.get('/api/settings', () =>
-      HttpResponse.json<SettingsResponse>({ model: 'm', top_k: 4 }),
-    ),
     http.get('/api/ingestions/latest', () => HttpResponse.json(latest)),
   );
   render(
@@ -103,7 +86,7 @@ describe('SettingsPage knowledge base', () => {
 
   it('uploads a zip and waits for the ingestion to finish', async () => {
     let polls = 0;
-    const sent = answerUploads(() => HttpResponse.json(running, { status: 202 }));
+    vi.mocked(uploadKnowledgeBase).mockResolvedValue(running);
     server.use(
       http.get('/api/ingestions/run-1', () => {
         polls += 1;
@@ -115,10 +98,8 @@ describe('SettingsPage knowledge base', () => {
     await uploadZip(user);
 
     expect(await screen.findByRole('status')).toHaveTextContent('Indexing…');
-    expect(sent).toHaveLength(1);
-    const file = sent[0]?.get('file');
-    expect(file).toBeInstanceOf(File);
-    expect((file as File).name).toBe('kb.zip');
+    expect(uploadKnowledgeBase).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(uploadKnowledgeBase).mock.calls[0]?.[0].name).toBe('kb.zip');
     // The second status check, one poll interval later, sees it finished.
     expect(
       await screen.findByText('Done: 2 added (2 documents)', {}, { timeout: 3000 }),
@@ -129,11 +110,8 @@ describe('SettingsPage knowledge base', () => {
   });
 
   it("shows the backend's reason when an upload is rejected", async () => {
-    answerUploads(() =>
-      HttpResponse.json(
-        { detail: 'Invalid knowledge-base archive: not a zip file' },
-        { status: 400 },
-      ),
+    vi.mocked(uploadKnowledgeBase).mockRejectedValue(
+      new ApiError(400, 'Bad Request', 'Invalid knowledge-base archive: not a zip file'),
     );
     const user = renderSettings();
 
@@ -149,7 +127,8 @@ describe('SettingsPage knowledge base', () => {
   });
 
   it('explains a file too large for the proxy', async () => {
-    answerUploads(() => new HttpResponse('<html>413</html>', { status: 413 }));
+    // nginx's own HTML page: no `detail`.
+    vi.mocked(uploadKnowledgeBase).mockRejectedValue(new ApiError(413, 'Payload Too Large'));
     const user = renderSettings();
 
     await uploadZip(user);
@@ -180,6 +159,12 @@ describe('SettingsPage skills', () => {
   it('lists the user’s skills, or says there are none', async () => {
     renderSettings({ isAdmin: false });
     expect(await screen.findByText('No skills yet.')).toBeInTheDocument();
+  });
+
+  it('says how large each kind of skill upload may be, as the backend is set', async () => {
+    renderSettings({ isAdmin: false });
+
+    expect(await screen.findByText(/\(up to 50 KB\).*\(up to 512 KB\)/s)).toBeInTheDocument();
   });
 
   it('uploads a skill and adds it to the list', async () => {

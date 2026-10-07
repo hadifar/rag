@@ -1,27 +1,38 @@
-import type { SkillResponse } from '@/shared/types';
+import { sizeLabel } from '@/shared/sizes';
+import type { SkillResponse, UploadLimitsResponse } from '@/shared/types';
 
 /** What the skill picker offers; the backend checks the content (rag/services/skill_service/). */
 export const SKILL_ACCEPT = '.md,.markdown,.zip,.skill';
 
-// Keep in sync with MAX_SKILL_BYTES and MAX_ARCHIVE_BYTES in rag/services/skill_service/service.py.
-export const MAX_SKILL_FILE_BYTES = 50 * 1024;
-export const MAX_SKILL_ARCHIVE_BYTES = 512 * 1024;
+/** The largest skill files the backend takes, in bytes. */
+export type SkillLimits = Pick<UploadLimitsResponse, 'skill_max_bytes' | 'skill_archive_max_bytes'>;
 
 export const UPLOAD_FAILED = "Couldn't upload this skill. Please try again.";
 
 const MARKDOWN = /\.(md|markdown)$/i;
 const ARCHIVE = /\.(zip|skill)$/i;
 
-/** Why `file` can't be uploaded as a skill, before it's sent; null if it can be. */
-export function skillUploadProblem(file: { name: string; size: number }): string | null {
-  const limit = MARKDOWN.test(file.name)
-    ? MAX_SKILL_FILE_BYTES
-    : ARCHIVE.test(file.name)
-      ? MAX_SKILL_ARCHIVE_BYTES
-      : null;
-  if (limit === null) return 'Upload a SKILL.md file, or a .zip or .skill archive holding one.';
-  if (file.size > limit) return `This file is larger than ${limit / 1024} KB.`;
-  return null;
+/**
+ * Why `file` can't be uploaded as a skill, before it's sent; null if it can be. Its size
+ * is checked once the `limits` are known; until then the backend checks it alone.
+ */
+export function skillUploadProblem(
+  file: { name: string; size: number },
+  limits: SkillLimits | null
+): string | null {
+  const isMarkdown = MARKDOWN.test(file.name);
+  if (!isMarkdown && !ARCHIVE.test(file.name)) {
+    return 'Upload a SKILL.md file, or a .zip or .skill archive holding one.';
+  }
+  if (limits === null) return null;
+  const limit = isMarkdown ? limits.skill_max_bytes : limits.skill_archive_max_bytes;
+  return file.size > limit ? `This file is larger than ${sizeLabel(limit)}.` : null;
+}
+
+/** How large each kind of skill upload may be, to tell the user; null until known. */
+export function skillSizes(limits: SkillLimits | null): { file: string; archive: string } | null {
+  if (limits === null) return null;
+  return { file: sizeLabel(limits.skill_max_bytes), archive: sizeLabel(limits.skill_archive_max_bytes) };
 }
 
 export function savedNotice(skill: SkillResponse): string {

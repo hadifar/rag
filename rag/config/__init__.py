@@ -21,6 +21,7 @@ from rag.config.observability import (
 )
 from rag.config.retrieval import RetrievalConfig
 from rag.config.settings import Settings, get_settings
+from rag.config.uploads import UploadsConfig
 
 __all__ = [
     "AuthConfig",
@@ -36,5 +37,6 @@ __all__ = [
     "OpenAILLMConfig",
     "RetrievalConfig",
     "Settings",
+    "UploadsConfig",
     "get_settings",
 ]

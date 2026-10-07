@@ -16,6 +16,7 @@ from pydantic import (
 from rag.api.schema.chat import StreamEventResponse
 from rag.api.schema.common import UserText
 from rag.domain.models import ConversationUpdate, Effort, HistoryMessage, ModelName
+from rag.shared.text_normalizer import one_line
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 MAX_ATTACHMENTS = 3  # files sent with one message
@@ -109,14 +110,10 @@ class ChatMessageRequest(BaseModel):
         return self
 
 
-def _one_line(title: str) -> str:
-    return " ".join(title.split())
-
-
 # A title the user writes: one line, never blank (a null title marks the empty draft).
 UserTitle = Annotated[
     UserText,
-    AfterValidator(_one_line),
+    AfterValidator(one_line),
     Field(min_length=1, max_length=MAX_TITLE_LENGTH),
 ]
 

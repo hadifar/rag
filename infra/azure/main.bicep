@@ -90,6 +90,15 @@ var secretsToStore = [
   { name: 'jwt-secret', value: jwtSecret }
 ]
 
+// The largest file each upload takes, in bytes: the backend enforces them, and the
+// frontend's nginx caps the request bodies from them. One set, so the two agree.
+var uploadLimitAppSettings = {
+  UPLOADS__KB_MAX_BYTES: '20971520'
+  UPLOADS__SKILL_MAX_BYTES: '51200'
+  UPLOADS__SKILL_ARCHIVE_MAX_BYTES: '524288'
+  UPLOADS__ATTACHMENT_MAX_BYTES: '5242880'
+}
+
 var llmAppSettings = llmProvider == 'azure_openai'
   ? {
       LLM__BACKEND: 'azure_openai'
@@ -435,7 +444,8 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
       KB_STORAGE__ACCOUNT_URL: kbStorage.properties.primaryEndpoints.blob
       KB_STORAGE__CONTAINER: kbArchiveContainerName
     },
-    llmAppSettings
+    llmAppSettings,
+    uploadLimitAppSettings
   )
   dependsOn: [
     keyVaultSecretsUserRoleAssignment
@@ -443,15 +453,19 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   ]
 }
 
-// Tells nginx.conf.template where to proxy /api/* — no Key Vault access needed,
+// Tells nginx.conf.template where to proxy /api/*, and how large an upload's body may
+// be (upload-limits.envsh) — no Key Vault access needed,
 // the frontend has no secrets of its own. WEBSITES_PORT is omitted: nginx already
 // listens on 80, App Service's default assumption for Linux containers.
 resource frontendAppSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: frontendWebApp
   name: 'appsettings'
-  properties: {
-    BACKEND_URL: 'https://${backendWebApp.properties.defaultHostName}'
-  }
+  properties: union(
+    {
+      BACKEND_URL: 'https://${backendWebApp.properties.defaultHostName}'
+    },
+    uploadLimitAppSettings
+  )
 }
 
 output backendWebAppName string = backendWebApp.name

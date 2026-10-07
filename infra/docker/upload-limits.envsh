@@ -1,0 +1,16 @@
+#!/bin/sh
+# Sourced by nginx:alpine's entrypoint before it env-substitutes the templates (it
+# sources every executable /docker-entrypoint.d/*.envsh). Each upload's request body
+# may be its file's limit, the same UPLOADS__* setting the backend reads, plus room
+# for the multipart framing around the file. A missing setting stops the container
+# here, rather than leaving nginx a literal ${...} to choke on.
+
+margin=65536
+
+skill_max=${UPLOADS__SKILL_MAX_BYTES:?is not set}
+skill_archive_max=${UPLOADS__SKILL_ARCHIVE_MAX_BYTES:?is not set}
+if [ "$skill_archive_max" -gt "$skill_max" ]; then skill_max=$skill_archive_max; fi
+
+export KB_BODY_MAX_BYTES=$((${UPLOADS__KB_MAX_BYTES:?is not set} + margin))
+export SKILL_BODY_MAX_BYTES=$((skill_max + margin))
+export ATTACHMENT_BODY_MAX_BYTES=$((${UPLOADS__ATTACHMENT_MAX_BYTES:?is not set} + margin))

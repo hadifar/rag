@@ -10,6 +10,7 @@ from rag.domain.errors import (
     SkillTooLargeError,
     TooManySkillsError,
 )
+from rag.config import UploadsConfig
 from rag.domain.models import SkillContent
 from rag.services.skill_service.service import MAX_SKILLS, SkillService
 from tests.unit.fakes import FakeSkillRepository
@@ -35,32 +36,43 @@ def _archive(files: dict[str, bytes | str]) -> bytes:
     return buffer.getvalue()
 
 
-def _service() -> SkillService:
-    return SkillService(skills=FakeSkillRepository())
+def _service(skills: FakeSkillRepository | None = None) -> SkillService:
+    uploads = UploadsConfig()
+    return SkillService(
+        skills=skills or FakeSkillRepository(),
+        max_skill_bytes=uploads.SKILL_MAX_BYTES,
+        max_archive_bytes=uploads.SKILL_ARCHIVE_MAX_BYTES,
+    )
 
 
-async def _instructions(service: SkillService, user: uuid.UUID, name: str) -> str:
-    content = await service.content(user, name)
+def _saved() -> tuple[SkillService, FakeSkillRepository]:
+    """The service, and the repository it saves to, to read back what it saved."""
+    skills = FakeSkillRepository()
+    return _service(skills), skills
+
+
+async def _instructions(skills: FakeSkillRepository, user: uuid.UUID, name: str) -> str:
+    content = await skills.content(user, name)
     assert content is not None
     return content.instructions
 
 
 async def test_an_upload_is_saved_as_a_skill_with_its_instructions() -> None:
-    service = _service()
+    service, skills = _saved()
 
     skill = await service.upload(ALICE, _skill_file())
 
     assert skill.name == "release-notes"
     assert skill.description == "Write release notes from a list of changes."
     assert await service.list_for_user(ALICE) == [skill]
-    assert await service.content(ALICE, "release-notes") == SkillContent(
+    assert await skills.content(ALICE, "release-notes") == SkillContent(
         "# Release notes\n\nGroup the changes by area.", files=()
     )
     assert skill.file_count == 0
 
 
 async def test_frontmatter_is_read_as_yaml() -> None:
-    service = _service()
+    service, skills = _saved()
     data = (
         "﻿---\r\n"
         'name: "tone-guide"\r\n'
@@ -76,18 +88,18 @@ async def test_frontmatter_is_read_as_yaml() -> None:
 
     assert skill.name == "tone-guide"
     assert skill.description == "Answer formally, in short paragraphs."
-    assert await _instructions(service, ALICE, "tone-guide") == "Be formal."
+    assert await _instructions(skills, ALICE, "tone-guide") == "Be formal."
 
 
 async def test_uploading_a_skill_of_the_same_name_replaces_it() -> None:
-    service = _service()
+    service, skills = _saved()
     first = await service.upload(ALICE, _skill_file(body="old"))
 
     second = await service.upload(ALICE, _skill_file(body="new"))
 
     assert second.id == first.id
     assert await service.list_for_user(ALICE) == [second]
-    assert await _instructions(service, ALICE, "release-notes") == "new"
+    assert await _instructions(skills, ALICE, "release-notes") == "new"
 
 
 @pytest.mark.parametrize(
@@ -129,11 +141,11 @@ async def test_a_user_can_save_only_so_many_skills_but_still_replace_one() -> No
 
 
 async def test_a_users_skills_are_theirs_alone() -> None:
-    service = _service()
+    service, skills = _saved()
     skill = await service.upload(ALICE, _skill_file())
 
     assert await service.list_for_user(BOB) == []
-    assert await service.content(BOB, "release-notes") is None
+    assert await skills.content(BOB, "release-notes") is None
     with pytest.raises(SkillNotFoundError):
         await service.delete(BOB, skill.id)
 
@@ -156,22 +168,22 @@ async def test_a_users_skills_are_theirs_alone() -> None:
 async def test_an_archive_is_saved_with_its_reference_files(
     files: dict[str, bytes | str],
 ) -> None:
-    service = _service()
+    service, skills = _saved()
 
     skill = await service.upload(ALICE, _archive(files))
 
     assert skill.name == "release-notes"
     assert skill.file_count == 2
-    assert await service.content(ALICE, "release-notes") == SkillContent(
+    assert await skills.content(ALICE, "release-notes") == SkillContent(
         "# Release notes\n\nGroup the changes by area.",
         files=("a.py", "references/api.md"),
     )
-    assert await service.file(ALICE, "release-notes", "references/api.md") == "# API"
-    assert await service.file(BOB, "release-notes", "references/api.md") is None
+    assert await skills.file(ALICE, "release-notes", "references/api.md") == "# API"
+    assert await skills.file(BOB, "release-notes", "references/api.md") is None
 
 
 async def test_an_archive_leaves_out_folders_dotfiles_and_mac_metadata() -> None:
-    service = _service()
+    service, skills = _saved()
     data = _archive(
         {
             "SKILL.md": _skill_file(),
@@ -187,25 +199,25 @@ async def test_an_archive_leaves_out_folders_dotfiles_and_mac_metadata() -> None
     skill = await service.upload(ALICE, data)
 
     assert skill.file_count == 1
-    assert await service.file(ALICE, "release-notes", "notes/keep.md") == "kept"
+    assert await skills.file(ALICE, "release-notes", "notes/keep.md") == "kept"
 
 
 async def test_uploading_a_skill_again_replaces_its_files() -> None:
-    service = _service()
+    service, skills = _saved()
     await service.upload(ALICE, _archive({"SKILL.md": _skill_file(), "old.md": "o"}))
 
     skill = await service.upload(ALICE, _skill_file())
 
     assert skill.file_count == 0
-    assert await service.file(ALICE, "release-notes", "old.md") is None
+    assert await skills.file(ALICE, "release-notes", "old.md") is None
 
 
 async def test_a_reference_file_is_normalized_as_free_text_is() -> None:
-    service = _service()
+    service, skills = _saved()
     hidden = "Be\u200b brief.\U000e0041"
     await service.upload(ALICE, _archive({"SKILL.md": _skill_file(), "s.md": hidden}))
 
-    assert await service.file(ALICE, "release-notes", "s.md") == "Be brief."
+    assert await skills.file(ALICE, "release-notes", "s.md") == "Be brief."
 
 
 @pytest.mark.parametrize(
@@ -264,5 +276,5 @@ async def test_an_archive_that_lies_about_its_sizes_is_read_no_further() -> None
     assert data.count(size) == 2
     data = bytearray(bytes(data).replace(size, (10).to_bytes(4, "little")))
 
-    with pytest.raises(InvalidSkillError, match="readable zip"):
+    with pytest.raises(InvalidSkillError, match="can't read bomb.md"):
         await _service().upload(ALICE, bytes(data))

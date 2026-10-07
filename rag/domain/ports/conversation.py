@@ -22,9 +22,9 @@ class ConversationRepositoryPort(Protocol):
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        """None if it doesn't exist or is another user's: the same for both, so ids
-        can't be probed.
+    ) -> Conversation:
+        """Raises `ConversationNotFoundError` if it doesn't exist or is another
+        user's: the same for both, so ids can't be probed.
         """
         ...
 
@@ -48,17 +48,17 @@ class ConversationRepositoryPort(Protocol):
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
         change: ConversationUpdate,
-    ) -> Conversation | None:
+    ) -> Conversation:
         """Sets each field `change` gives (None leaves it as is), without bumping it to most
-        recently used; pinning a pinned one keeps when it was pinned. None, as
+        recently used; pinning a pinned one keeps when it was pinned. Raises, as
         `get_owned`, if it isn't the user's.
         """
         ...
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        """Bumps it to most recently used; None, as `get_owned`, if it isn't the user's."""
+    ) -> Conversation:
+        """Bumps it to most recently used; raises, as `get_owned`, if it isn't the user's."""
         ...
 
     async def set_title(self, conversation_id: uuid.UUID, title: str) -> None: ...

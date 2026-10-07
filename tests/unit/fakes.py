@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
-from rag.domain.errors import IngestionInProgressError
+from rag.domain.errors import ConversationNotFoundError, IngestionInProgressError
 from rag.domain.models import (
     AgentMemory,
     Artifact,
@@ -227,9 +227,7 @@ class FakeConversationRepository:
             None,
         )
         if empty is not None:
-            touched = await self.touch_owned(user_id, empty.id)
-            assert touched is not None
-            return touched
+            return await self.touch_owned(user_id, empty.id)
         now = self._now()
         conversation = Conversation(
             id=uuid.uuid4(), user_id=user_id, title=None, created_at=now, updated_at=now
@@ -239,11 +237,11 @@ class FakeConversationRepository:
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
+    ) -> Conversation:
         conversation = self.rows.get(conversation_id)
-        return (
-            conversation if conversation and conversation.user_id == user_id else None
-        )
+        if conversation is None or conversation.user_id != user_id:
+            raise ConversationNotFoundError(conversation_id)
+        return conversation
 
     async def list_for_user(
         self,
@@ -277,10 +275,8 @@ class FakeConversationRepository:
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
         change: ConversationUpdate,
-    ) -> Conversation | None:
+    ) -> Conversation:
         conversation = await self.get_owned(user_id, conversation_id)
-        if conversation is None:
-            return None
         fields = {
             k: v for k, v in asdict(change).items() if v is not None and k != "pinned"
         }
@@ -295,9 +291,8 @@ class FakeConversationRepository:
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        if await self.get_owned(user_id, conversation_id) is None:
-            return None
+    ) -> Conversation:
+        await self.get_owned(user_id, conversation_id)
         self.rows[conversation_id] = replace(
             self.rows[conversation_id], updated_at=self._now()
         )
@@ -364,7 +359,9 @@ class FakeAttachmentRepository:
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, attachment_id: uuid.UUID
     ) -> AttachmentFile | None:
-        if await self.conversations.get_owned(user_id, conversation_id) is None:
+        try:
+            await self.conversations.get_owned(user_id, conversation_id)
+        except ConversationNotFoundError:
             return None
         files = await self.list_in(conversation_id, [attachment_id])
         return files[0] if files else None
@@ -457,11 +454,11 @@ class FakeSkillRepository:
             key=lambda s: s.name,
         )
 
-    async def get_content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
+    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         row = self.rows.get((user_id, name))
         return SkillContent(row[1], tuple(sorted(row[2]))) if row else None
 
-    async def get_file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
         row = self.rows.get((user_id, name))
         return row[2].get(path) if row else None
 

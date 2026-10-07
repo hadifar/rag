@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
+from rag.shared.text_normalizer import one_line
+
 TITLE_PROMPT = (
     "Write a title for a support conversation that starts with the message below.\n\n"
     "USER:\n{message}"
@@ -33,7 +35,7 @@ def title_prompt(message: str) -> str:
 
 
 def fallback_title(message: str) -> str:
-    title = " ".join(message.split())
+    title = one_line(message)
     if len(title) <= FALLBACK_TITLE_LENGTH:
         return title
     return title[: FALLBACK_TITLE_LENGTH - 1].rstrip() + "…"

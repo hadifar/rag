@@ -13,7 +13,7 @@ import { SKILL_ACCEPT } from '../model/skills';
 export function SkillsSection() {
   const { skills, status, pending, isDeleting, deleteError, requestDelete, confirm, cancel } =
     useSkills();
-  const { upload, uploading, notice } = useSkillUpload();
+  const { upload, uploading, notice, sizes } = useSkillUpload();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handlePick = (e: ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +29,8 @@ export function SkillsSection() {
       <p className="m-0 text-sm text-slate-600">
         Instructions the assistant loads when a question fits their description. Upload a
         SKILL.md file with a <code>name</code> and <code>description</code> in its frontmatter
-        (up to 50 KB), or a .zip or .skill archive of one with its reference files (up to 512 KB).
+        {sizes && ` (up to ${sizes.file})`}, or a .zip or .skill archive of one with its reference
+        files{sizes && ` (up to ${sizes.archive})`}.
       </p>
       <StatusLine tone="warning" size="sm">
         A skill steers what the assistant does with your conversations. Only upload skills you

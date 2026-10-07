@@ -1,21 +1,14 @@
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends
 
 from rag.api.deps import AuthenticatedUserDep, SkillServiceDep, get_current_user
 from rag.api.schema.skill import SkillResponse
+from rag.api.uploads import SkillUpload
 
 router = APIRouter(
     prefix="/api/skills", tags=["skills"], dependencies=[Depends(get_current_user)]
 )
-
-
-async def _read_skill_file(file: UploadFile, skill_service: SkillServiceDep) -> bytes:
-    """The upload's content. One byte over the limit is enough for the service to
-    reject it, without ever holding an oversized one in memory.
-    """
-    return await file.read(skill_service.max_bytes + 1)
 
 
 @router.get("")
@@ -29,7 +22,7 @@ async def list_skills(
 
 @router.post("", status_code=201)
 async def upload_skill(
-    data: Annotated[bytes, Depends(_read_skill_file)],
+    upload: SkillUpload,
     current_user: AuthenticatedUserDep,
     skill_service: SkillServiceDep,
 ) -> SkillResponse:
@@ -37,7 +30,7 @@ async def upload_skill(
     instructions), or a .zip or .skill archive of one with its reference files,
     replacing the caller's skill of that name if they have one.
     """
-    skill = await skill_service.upload(current_user.id, data)
+    skill = await skill_service.upload(current_user.id, upload.data)
     return SkillResponse.model_validate(skill)
 
 

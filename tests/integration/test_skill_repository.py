@@ -54,11 +54,11 @@ async def test_saving_a_skill_of_the_same_name_replaces_it(
     assert second.updated_at > first.updated_at
     assert second.file_count == 1
     assert await skills.list_for_user(alice) == [second]
-    assert await skills.get_content(alice, "notes") == SkillContent(
+    assert await skills.content(alice, "notes") == SkillContent(
         "new instructions", files=("kept.md",)
     )
-    assert await skills.get_file(alice, "notes", "old.md") is None
-    assert await skills.get_file(alice, "notes", "kept.md") == "k2"
+    assert await skills.file(alice, "notes", "old.md") is None
+    assert await skills.file(alice, "notes", "kept.md") == "k2"
 
 
 async def test_a_users_skills_are_theirs_alone(
@@ -70,14 +70,14 @@ async def test_a_users_skills_are_theirs_alone(
     await skills.save(bob, "notes", "Bob's.", "bob's instructions", {"b.md": "B"})
 
     assert [s.description for s in await skills.list_for_user(alice)] == ["Notes."]
-    assert await skills.get_content(bob, "notes") == SkillContent(
+    assert await skills.content(bob, "notes") == SkillContent(
         "bob's instructions", files=("b.md",)
     )
-    assert await skills.get_file(bob, "notes", "a.md") is None
+    assert await skills.file(bob, "notes", "a.md") is None
     assert not await skills.delete_owned(bob, skill.id)
     assert await skills.delete_owned(alice, skill.id)
     assert await skills.list_for_user(alice) == []
-    assert await skills.get_content(alice, "notes") is None
+    assert await skills.content(alice, "notes") is None
     # Deleting a skill deletes its files.
     async with db_pool.connection() as conn:
         cur = await conn.execute(

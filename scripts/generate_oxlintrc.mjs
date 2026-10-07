@@ -78,7 +78,7 @@ const config = {
       {
         name: 'fetch',
         message:
-          'Call the backend through shared/api/client.ts (request, requestJson, authFetch): it adds the token and refreshes it.',
+          'Call the backend through shared/api/client.ts (api, authFetch): it adds the token and refreshes it.',
       },
     ],
     ...restrict(app),
@@ -106,18 +106,14 @@ const config = {
             name: '@/shared/api/client',
             importNames: ['authFetch', 'apiUrl', 'jsonPostInit'],
             message:
-              'Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream, the multipart upload and login need the untyped calls.',
+              'Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream and login need the untyped calls.',
           },
         ]
       ),
     },
     {
-      // The untyped calls: the SSE stream, the multipart upload and login.
-      files: [
-        'src/features/chat/api/chat.ts',
-        'src/features/knowledge-base/api/ingestions.ts',
-        'src/features/auth/api/auth.ts',
-      ],
+      // The untyped calls: the SSE stream and login.
+      files: ['src/features/chat/api/chat.ts', 'src/features/auth/api/auth.ts'],
       rules: restrict([...insideFeature, apiOnlyBackend]),
     },
     { files: ['src/features/*/model/**'], rules: restrict([...insideFeature, modelIsPure]) },

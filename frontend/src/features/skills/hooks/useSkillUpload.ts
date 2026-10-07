@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useUploadLimits } from '@/features/settings';
 import { errorDetail } from '@/shared/api/errors';
 import type { SkillResponse } from '@/shared/types';
 import { skillKeys } from '../api/queryKeys';
 import { uploadSkill } from '../api/skills';
-import { UPLOAD_FAILED, savedNotice, skillUploadProblem, withSkill } from '../model/skills';
+import {
+  UPLOAD_FAILED,
+  savedNotice,
+  skillSizes,
+  skillUploadProblem,
+  withSkill,
+} from '../model/skills';
 import type { SkillNotice } from '../types';
 
 const NOTICE_MS = 5000;
@@ -15,6 +22,8 @@ export type SkillUpload = {
   uploading: boolean;
   /** How the last upload went, for a few seconds; null otherwise. */
   notice: SkillNotice | null;
+  /** How large a SKILL.md file and an archive may be, e.g. "50 KB"; null until known. */
+  sizes: { file: string; archive: string } | null;
 };
 
 /**
@@ -23,6 +32,7 @@ export type SkillUpload = {
  */
 export function useSkillUpload(): SkillUpload {
   const queryClient = useQueryClient();
+  const limits = useUploadLimits();
   const [refused, setRefused] = useState<string | null>(null);
   const { mutate, reset, isPending, data, error } = useMutation({
     mutationFn: (file: File) => uploadSkill(file),
@@ -53,13 +63,13 @@ export function useSkillUpload(): SkillUpload {
 
   const upload = useCallback(
     (file: File) => {
-      const problem = skillUploadProblem(file);
+      const problem = skillUploadProblem(file, limits);
       reset();
       setRefused(problem);
       if (!problem) mutate(file);
     },
-    [mutate, reset]
+    [limits, mutate, reset]
   );
 
-  return { upload, uploading: isPending, notice };
+  return { upload, uploading: isPending, notice, sizes: skillSizes(limits) };
 }

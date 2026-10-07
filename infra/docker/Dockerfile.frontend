@@ -10,5 +10,7 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY infra/docker/nginx.conf.template /etc/nginx/templates/default.conf.template
+# Before 20-envsubst-on-templates.sh, which fills the template in.
+COPY --chmod=755 infra/docker/upload-limits.envsh /docker-entrypoint.d/19-upload-limits.envsh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

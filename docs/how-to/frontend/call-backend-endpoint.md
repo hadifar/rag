@@ -18,7 +18,7 @@ Call a backend route from the frontend. Use after you add or change a route.
 * Do not edit `frontend/src/shared/types/api.generated.ts`.
 * Do not write an interface for a backend shape by hand.
 * Do not call `fetch`. oxlint rejects a bare `fetch`.
-* Three calls use the untyped `authFetch`: the chat SSE stream, the knowledge-base upload, and login/logout in `features/auth/api/auth.ts`. Do not add another. For a new multipart upload, use the typed client with a `bodySerializer` that builds the `FormData`. Example: `uploadAttachment` in `features/chat/api/attachments.ts`.
+* Two calls use the untyped `authFetch`: the chat SSE stream, and login/logout in `features/auth/api/auth.ts`. Do not add another. For a file upload, spread `fileBody(file)` (`shared/api/client.ts`) into the typed call. Example: `uploadSkill` in `features/skills/api/skills.ts`.
 
 ## Example
 

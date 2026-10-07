@@ -42,13 +42,19 @@ server {
     location /api/ingestions {
         limit_req zone=ingestions burst=10 nodelay;
         limit_req_status 429;
-        client_max_body_size 20m;
+        client_max_body_size ${KB_BODY_MAX_BYTES};
         proxy_pass ${BACKEND_URL};
     }
 
-    # Chat attachments: the largest kind (an image) is 5 MB.
+    # Upload body limits: the backend's UPLOADS__* settings, plus multipart framing
+    # (see upload-limits.envsh).
+    location = /api/skills {
+        client_max_body_size ${SKILL_BODY_MAX_BYTES};
+        proxy_pass ${BACKEND_URL};
+    }
+
     location ~ ^/api/conversations/[^/]+/attachments$ {
-        client_max_body_size 6m;
+        client_max_body_size ${ATTACHMENT_BODY_MAX_BYTES};
         proxy_pass ${BACKEND_URL};
     }
 
