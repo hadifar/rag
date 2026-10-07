@@ -675,6 +675,7 @@ export interface components {
             model: string;
             /** Top K */
             top_k: number;
+            uploads: components["schemas"]["UploadLimitsResponse"];
         };
         /**
          * ShareResponse
@@ -823,6 +824,20 @@ export interface components {
             query?: string | null;
             /** Output */
             output?: string | null;
+        };
+        /**
+         * UploadLimitsResponse
+         * @description The largest file each upload takes, in bytes (the `UPLOADS__*` settings).
+         */
+        UploadLimitsResponse: {
+            /** Kb Max Bytes */
+            kb_max_bytes: number;
+            /** Skill Max Bytes */
+            skill_max_bytes: number;
+            /** Skill Archive Max Bytes */
+            skill_archive_max_bytes: number;
+            /** Attachment Max Bytes */
+            attachment_max_bytes: number;
         };
         /** UserMessageResponse */
         UserMessageResponse: {

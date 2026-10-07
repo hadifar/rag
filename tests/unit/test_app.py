@@ -183,6 +183,20 @@ def test_settings_endpoint_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_settings_endpoint_returns_the_upload_limits(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/settings", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["uploads"] == {
+        "kb_max_bytes": UploadsConfig().KB_MAX_BYTES,
+        "skill_max_bytes": UploadsConfig().SKILL_MAX_BYTES,
+        "skill_archive_max_bytes": UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        "attachment_max_bytes": UploadsConfig().ATTACHMENT_MAX_BYTES,
+    }
+
+
 def test_retrieval_endpoint_returns_document(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:

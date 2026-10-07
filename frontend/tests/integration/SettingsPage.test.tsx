@@ -8,7 +8,7 @@ import { uploadKnowledgeBase } from '@/features/knowledge-base/api/ingestions';
 import { uploadSkill } from '@/features/skills/api/skills';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ApiError } from '@/shared/api/client';
-import type { IngestionRunResponse, SettingsResponse, SkillResponse } from '@/shared/types';
+import type { IngestionRunResponse, SkillResponse } from '@/shared/types';
 import { withQueryClient } from '../queryClient';
 import { server } from '../server';
 
@@ -50,9 +50,6 @@ afterEach(() => vi.clearAllMocks());
 // The real page, hooks and API client; only the backend is faked (see ../server.ts).
 function renderSettings({ isAdmin = true, latest = null as IngestionRunResponse | null } = {}) {
   server.use(
-    http.get('/api/settings', () =>
-      HttpResponse.json<SettingsResponse>({ model: 'm', top_k: 4 }),
-    ),
     http.get('/api/ingestions/latest', () => HttpResponse.json(latest)),
   );
   render(

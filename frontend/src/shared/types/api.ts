@@ -47,6 +47,7 @@ export type SharedConversationResponse = Schemas['SharedConversationResponse'];
 
 // setting.py
 export type SettingsResponse = Schemas['SettingsResponse'];
+export type UploadLimitsResponse = Schemas['UploadLimitsResponse'];
 
 // Every route, with its parameters, body and responses: what the typed `api` client checks
 // each call against (shared/api/client.ts).
