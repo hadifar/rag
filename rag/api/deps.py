@@ -1,6 +1,7 @@
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -39,62 +40,31 @@ def get_app_settings(request: Request) -> Settings:
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
-def get_retrieval_service(container: ContainerDep) -> RetrievalService:
-    return container.retrieval_service
+def _from_container[T](service: Callable[[Container], T]) -> Any:
+    """A dependency on the Container's `service`."""
+
+    def get(container: ContainerDep) -> T:
+        return service(container)
+
+    return Depends(get)
 
 
-def get_auth_service(container: ContainerDep) -> AuthService:
-    return container.auth_service
-
-
-def get_ingestion_service(container: ContainerDep) -> IngestionService:
-    return container.ingestion_service
-
-
-def get_conversation_service(container: ContainerDep) -> ConversationService:
-    return container.conversation_service
-
-
-def get_chat_service(container: ContainerDep) -> ChatService:
-    return container.chat_service
-
-
-def get_share_service(container: ContainerDep) -> ShareService:
-    return container.share_service
-
-
-def get_attachment_service(container: ContainerDep) -> AttachmentService:
-    return container.attachment_service
-
-
-def get_skill_service(container: ContainerDep) -> SkillService:
-    return container.skill_service
-
-
-IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
-
-
-RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
-
-
-AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
-
-
-ConversationServiceDep = Annotated[
-    ConversationService, Depends(get_conversation_service)
+RetrievalServiceDep = Annotated[
+    RetrievalService, _from_container(lambda c: c.retrieval_service)
 ]
-
-
-ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
-
-
-ShareServiceDep = Annotated[ShareService, Depends(get_share_service)]
-
-
-AttachmentServiceDep = Annotated[AttachmentService, Depends(get_attachment_service)]
-
-
-SkillServiceDep = Annotated[SkillService, Depends(get_skill_service)]
+IngestionServiceDep = Annotated[
+    IngestionService, _from_container(lambda c: c.ingestion_service)
+]
+AuthServiceDep = Annotated[AuthService, _from_container(lambda c: c.auth_service)]
+ConversationServiceDep = Annotated[
+    ConversationService, _from_container(lambda c: c.conversation_service)
+]
+ChatServiceDep = Annotated[ChatService, _from_container(lambda c: c.chat_service)]
+ShareServiceDep = Annotated[ShareService, _from_container(lambda c: c.share_service)]
+AttachmentServiceDep = Annotated[
+    AttachmentService, _from_container(lambda c: c.attachment_service)
+]
+SkillServiceDep = Annotated[SkillService, _from_container(lambda c: c.skill_service)]
 
 
 async def get_current_user(
