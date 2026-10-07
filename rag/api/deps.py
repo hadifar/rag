@@ -30,11 +30,13 @@ def get_container(request: Request) -> Container:
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-def _from_container[T](service: Callable[[Container], T]) -> Any:
-    """A dependency on the Container's `service`."""
+def _from_container[T](pick: Callable[[Container], T]) -> Any:
+    """A dependency on what `pick` takes from the Container: a service, or the app's
+    settings.
+    """
 
     def get(container: ContainerDep) -> T:
-        return service(container)
+        return pick(container)
 
     return Depends(get)
 

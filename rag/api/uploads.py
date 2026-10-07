@@ -1,7 +1,3 @@
-"""The files routers take: each upload read from the request as a domain `Upload`, no
-further than its limit in the app's `UploadLimits` allows.
-"""
-
 from collections.abc import Callable
 from typing import Annotated, Any
 
