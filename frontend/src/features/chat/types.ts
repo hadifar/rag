@@ -73,3 +73,6 @@ export type Transcript = {
   /** The id the next bubble gets. */
   nextId: number;
 };
+
+/** A skill the user can invoke with "/<name>" at the start of a message. */
+export type SkillOption = { name: string; description: string };

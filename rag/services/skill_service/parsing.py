@@ -4,13 +4,13 @@ from dataclasses import dataclass
 import yaml
 
 from rag.domain.errors import InvalidSkillError
+from rag.domain.models import SKILL_NAME_PATTERN
 from rag.shared.text_normalizer import normalize_text
 
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
 
-# Matches the user_skills.name check (migration 0021).
-_NAME = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
+_NAME = re.compile(SKILL_NAME_PATTERN)
 
 # The frontmatter: a block of YAML between two `---` lines, at the very start.
 _FRONTMATTER = re.compile(r"---\n(.*?)\n---[ \t]*(?:\n|$)", re.DOTALL)

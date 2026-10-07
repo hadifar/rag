@@ -2,6 +2,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+# What a skill's name may be: lowercase letters and digits, in hyphen-joined words.
+# The user_skills.name check (migration 0021) spells it too.
+SKILL_NAME_PATTERN = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+
 
 @dataclass(frozen=True)
 class Skill:

@@ -35,7 +35,8 @@ Known gaps. None of these is addressed yet.
 ## Skills
 
 * A user can save up to 20 skills of up to 50 KB each. The limit is checked before the insert, so two uploads at once can go past it.
-* The model decides when to load a skill. Nothing makes it load one, and the user can't pick one for a message.
+* Without a `/<name>` command, the model decides when to load a skill. A message invokes at most one skill.
+* An off-topic (`restrict`) message loads nothing, even the skill it invokes. The guard classifies the message with its `/<name>` command, so a style skill (`/tone ...`) can be classified as off-topic.
 * The off-topic guard doesn't know about skills, so a request a skill covers can still be classified `restrict` and get no tools.
 * Nothing checks what a skill asks for. The prompt only tells the model that its own rules come first. A skill is the user's own text, so it can do no more than a message could.
 * The chat shows a `load_skill` call as a generic tool bubble.

@@ -36,7 +36,7 @@ from rag.domain.models.ingestion import (
     RawDocument,
 )
 from rag.domain.models.retrieval import Chunk
-from rag.domain.models.skill import Skill
+from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill
 
 __all__ = [
     "ARTIFACTS",
@@ -59,6 +59,7 @@ __all__ = [
     "InputVerdict",
     "RawDocument",
     "ReasoningDelta",
+    "SKILL_NAME_PATTERN",
     "RunContext",
     "Share",
     "SharedConversation",

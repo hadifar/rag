@@ -16,6 +16,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolMessage,
     messages_from_dict,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
@@ -34,6 +35,7 @@ from rag.domain.models import (
     SourceArtifact,
     StreamEvent,
     TextDelta,
+    ToolCall,
     TurnFailed,
 )
 from rag.services.agent_service.guards.groundedness import GroundednessVerdict
@@ -806,3 +808,61 @@ async def test_a_turn_that_only_loads_a_skill_is_not_checked() -> None:
     events = await _Chat(model, skills=await _skills_of_the_user()).send("notes")
 
     assert not any(isinstance(e, AnswerVerified) for e in events)
+
+
+def _loaded_skills(messages: Sequence[BaseMessage]) -> list[str]:
+    return [
+        str(m.content)
+        for m in messages
+        if isinstance(m, ToolMessage) and m.name == "load_skill"
+    ]
+
+
+async def test_a_message_invoking_a_skill_starts_its_turn_with_it_loaded() -> None:
+    model = _ScriptedChatModel(answers=[_answer("Notes."), _answer("More.")])
+    chat = _Chat(model, skills=await _skills_of_the_user())
+
+    events = await chat.send("/release-notes for v2.3")
+    await chat.send("and v2.4?")
+
+    first_call = model.agent_calls[0]["messages"]
+    assert first_call[-3].text == "/release-notes for v2.3"
+    assert _loaded_skills(first_call[-2:]) == ["Group the changes by area."]
+    # The agent remembers the skill was loaded, so a follow-up still has it.
+    assert _loaded_skills(model.agent_calls[1]["messages"]) == [
+        "Group the changes by area."
+    ]
+    assert _text(events) == "Notes."
+    assert not any(isinstance(e, ToolCall) for e in events)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "/other-notes please",  # another user's skill
+        "/no-such-skill please",
+        "/release-notesx please",
+        "write /release-notes please",  # not at the start
+    ],
+)
+async def test_a_message_that_invokes_none_of_the_users_skills_loads_nothing(
+    message: str,
+) -> None:
+    model = _ScriptedChatModel(answers=[_answer("A")])
+
+    await _Chat(model, skills=await _skills_of_the_user()).send(message)
+
+    assert _loaded_skills(model.agent_calls[0]["messages"]) == []
+
+
+async def test_an_off_topic_message_does_not_load_the_skill_it_invokes() -> None:
+    model = _ScriptedChatModel(
+        answers=[_answer("I only help with AtlasFlow.")],
+        off_topic_messages={"/release-notes weather?"},
+    )
+
+    await _Chat(model, skills=await _skills_of_the_user()).send(
+        "/release-notes weather?"
+    )
+
+    assert _loaded_skills(model.agent_calls[0]["messages"]) == []

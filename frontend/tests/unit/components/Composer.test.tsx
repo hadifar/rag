@@ -145,7 +145,17 @@ describe('Composer skills', () => {
   const skillFile = new File(['---\nname: notes\n---'], 'SKILL.md', { type: 'text/markdown' });
 
   function skills(overrides: Partial<ComposerSkills> = {}): ComposerSkills {
-    return { accept: '.md', onUpload: vi.fn(), uploading: false, notice: null, ...overrides };
+    return {
+      available: [
+        { name: 'release-notes', description: 'Write release notes.' },
+        { name: 'review', description: 'Review a diff.' },
+      ],
+      accept: '.md',
+      onUpload: vi.fn(),
+      uploading: false,
+      notice: null,
+      ...overrides,
+    };
   }
 
   it('uploads the skill file picked from the + menu', async () => {
@@ -171,5 +181,40 @@ describe('Composer skills', () => {
     );
 
     expect(screen.getByRole('status')).toHaveTextContent('Saved skill “notes”.');
+  });
+
+  it('suggests the skills matching the / command being typed, and picks one with Enter', async () => {
+    const onSend = vi.fn();
+    render(<Composer onSend={onSend} skills={skills()} />);
+    const user = userEvent.setup();
+    const box = screen.getByRole('combobox', { name: 'Message' });
+
+    await user.type(box, '/re');
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '/release-notesWrite release notes.',
+      '/reviewReview a diff.',
+    ]);
+
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(box).toHaveValue('/review ');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+
+    await user.type(box, 'this diff{Enter}');
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('/review this diff');
+  });
+
+  it('picks a suggestion with the mouse, and hides them on Escape', async () => {
+    render(<Composer onSend={vi.fn()} skills={skills()} />);
+    const user = userEvent.setup();
+    const box = screen.getByRole('combobox', { name: 'Message' });
+
+    await user.type(box, '/');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+
+    await user.type(box, 'rel');
+    await user.click(screen.getByRole('option', { name: /release-notes/ }));
+    expect(box).toHaveValue('/release-notes ');
   });
 });

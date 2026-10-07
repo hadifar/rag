@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useId,
   useRef,
   useState,
   type ChangeEvent,
@@ -18,8 +19,10 @@ import {
 import { Button } from '@/shared/ui/Button';
 import { Dropdown, DropdownItem } from '@/shared/ui/Dropdown';
 import { ATTACHMENT_ACCEPT } from '../model/attachments';
-import type { AttachmentDraft } from '../types';
+import { useSkillCommand } from '../hooks/useSkillCommand';
+import type { AttachmentDraft, SkillOption } from '../types';
 import { DraftAttachments } from './AttachmentChips';
+import { SkillSuggestions } from './SkillSuggestions';
 
 /** The files picked for the next message, from `useChat`. */
 export type ComposerAttachments = {
@@ -31,8 +34,10 @@ export type ComposerAttachments = {
   onRemove: (key: string) => void;
 };
 
-/** Uploading a skill to the user's skills, from the + menu. */
+/** The user's skills: invoked with "/<name>", and uploaded from the + menu. */
 export type ComposerSkills = {
+  /** Suggested while a "/" command is typed. */
+  available: SkillOption[];
   /** What the skill picker offers. */
   accept: string;
   onUpload: (file: File) => void;
@@ -49,6 +54,8 @@ type ComposerProps = {
   skills?: ComposerSkills;
 };
 
+const NO_SKILLS: SkillOption[] = [];
+
 const noticeTones = {
   success: 'text-success-600',
   warning: 'text-warning-700',
@@ -61,6 +68,10 @@ export function Composer({ onSend, attachments, skills }: ComposerProps) {
   const menuButton = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const skillInput = useRef<HTMLInputElement>(null);
+  const command = useSkillCommand(value, skills?.available ?? NO_SKILLS);
+  const suggesting = command.suggestions.length > 0;
+  const suggestionsId = useId();
+  const optionId = (index: number) => `${suggestionsId}-${index}`;
   // A message needs text or a file, and waits for its files to finish uploading.
   const canSend = !attachments?.uploading && (value.trim() !== '' || !!attachments?.hasReady);
 
@@ -75,10 +86,22 @@ export function Composer({ onSend, attachments, skills }: ComposerProps) {
     submit();
   };
 
+  // While skills are suggested, the arrows, Enter, Tab and Escape work the list.
+  const handleSuggestionKey = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') command.move(e.key === 'ArrowDown' ? 1 : -1);
+    else if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') setValue(command.pick());
+    else if (e.key === 'Escape') command.dismiss();
+    else return false;
+    e.preventDefault();
+    return true;
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // isComposing: an IME candidate is still being picked (e.g. typing Japanese/Chinese/
     // Korean) — that Enter confirms the candidate, it doesn't mean "send".
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.nativeEvent.isComposing) return;
+    if (suggesting && handleSuggestionKey(e)) return;
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
@@ -122,7 +145,16 @@ export function Composer({ onSend, attachments, skills }: ComposerProps) {
       onDrop={handleDrop}
       className="shrink-0 border-t border-slate-200 p-4"
     >
-      <div className="mx-auto max-w-[720px] rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      <div className="relative mx-auto max-w-[720px] rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        {suggesting && (
+          <SkillSuggestions
+            id={suggestionsId}
+            optionId={optionId}
+            suggestions={command.suggestions}
+            activeIndex={command.activeIndex}
+            onPick={(index) => setValue(command.pick(index))}
+          />
+        )}
         {attachments && attachments.drafts.length > 0 && (
           <DraftAttachments drafts={attachments.drafts} onRemove={attachments.onRemove} />
         )}
@@ -196,6 +228,12 @@ export function Composer({ onSend, attachments, skills }: ComposerProps) {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            role="combobox"
+            aria-label="Message"
+            aria-autocomplete="list"
+            aria-expanded={suggesting}
+            aria-controls={suggesting ? suggestionsId : undefined}
+            aria-activedescendant={suggesting ? optionId(command.activeIndex) : undefined}
             rows={1}
             placeholder="Type a message..."
             className="h-11 max-h-40 flex-1 resize-none border-none bg-transparent p-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"

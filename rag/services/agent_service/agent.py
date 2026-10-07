@@ -61,6 +61,7 @@ from rag.services.agent_service.streaming import (
     AnswerGate,
     parse_event,
 )
+from rag.services.agent_service.skills import invoked_skill, skill_loaded
 from rag.services.agent_service.tools import search_tool, skill_tool
 from rag.services.agent_service.turn import current_turn, is_final_answer, remember
 
@@ -76,6 +77,7 @@ RECURSION_LIMIT = 75
 # Where classify and verify go next. LangGraph's END is typed as a plain str, so the
 # routes name it by its value.
 _Next = Literal["model", "__end__"]
+_Classified = Literal["invoke_skill", "__end__"]
 
 
 class ChatState(MessagesState):
@@ -93,11 +95,12 @@ class ChatState(MessagesState):
 class RagAgent:
     """The RAG agent (an AgentPort), grounded in the knowledge base, on this graph:
 
-        START -> classify -> model <-> tools
-                    |          |
-                   END      verify -> END, or back to model to revise
+        START -> classify -> invoke_skill -> model <-> tools
+                    |                          |
+                   END                      verify -> END, or back to model to revise
 
-    `classify` ends a blocked question's turn before the model runs; `verify` checks a
+    `classify` ends a blocked question's turn before the model runs; `invoke_skill`
+    loads the skill a question invokes ("/<name> ..."); `verify` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times. Every LLM call, the model's and the guards', is tried up to
     `llm.attempts` times; then a model call's error ends the turn (see `AgentTurn`).
@@ -131,6 +134,7 @@ class RagAgent:
         # The turn's RunContext: whose skills the model sees and load_skill reads.
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("classify", self._classify)
+        graph.add_node("invoke_skill", self._invoke_skill)
         # "model" is the node whose output the user sees (see streaming.parse_event).
         graph.add_node(
             "model",
@@ -140,6 +144,7 @@ class RagAgent:
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("verify", self._verify)
         graph.add_edge(START, "classify")
+        graph.add_edge("invoke_skill", "model")
         graph.add_conditional_edges("model", _after_model)
         graph.add_edge("tools", "model")
         self.graph = graph.compile()
@@ -173,7 +178,7 @@ class RagAgent:
         )
         return AgentTurn(run, question)
 
-    async def _classify(self, state: ChatState) -> Command[_Next]:
+    async def _classify(self, state: ChatState) -> Command[_Classified]:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
@@ -185,7 +190,7 @@ class RagAgent:
             attachments_of(question, state.get("attachments", {})),
         )
         if decision != "block":
-            return Command(goto="model", update={"decision": decision})
+            return Command(goto="invoke_skill", update={"decision": decision})
 
         await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
         # The thread's reducer gives every message an id.
@@ -193,6 +198,21 @@ class RagAgent:
         return Command(
             goto="__end__", update={"messages": [RemoveMessage(id=question.id)]}
         )
+
+    async def _invoke_skill(
+        self, state: ChatState, runtime: Runtime[RunContext]
+    ) -> dict[str, Any]:
+        """A question that starts with "/<name>" of one of the user's skills starts its
+        turn with that skill loaded. Off-topic, the model is only to decline, so it
+        loads nothing; nor for a name the user has no skill of.
+        """
+        name = invoked_skill(state["messages"][-1].text)
+        if name is None or state.get("decision") == "restrict":
+            return {}
+        instructions = await self._skills.instructions(runtime.context.user_id, name)
+        if instructions is None:
+            return {}
+        return {"messages": skill_loaded(name, instructions)}
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]

@@ -1,22 +1,18 @@
 import { useCallback, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ignoreNotFound } from '@/shared/api/errors';
-import { loadStatus } from '@/shared/api/queryClient';
 import type { SkillResponse } from '@/shared/types';
 import { skillKeys } from '../api/queryKeys';
-import { deleteSkill, fetchSkills } from '../api/skills';
+import { deleteSkill } from '../api/skills';
+import { useSkillList } from './useSkillList';
 
 const DELETE_FAILED = "Couldn't delete the skill. Please try again.";
-const NO_SKILLS: SkillResponse[] = [];
 
 /** The user's skills, and a delete that waits for the user to confirm it. */
 export function useSkills() {
   const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: skillKeys.list,
-    queryFn: ({ signal }) => fetchSkills(signal),
-  });
+  const { skills, status } = useSkillList();
   const [pending, setPending] = useState<SkillResponse | null>(null);
 
   const { mutate, reset, isPending, isError } = useMutation({
@@ -48,8 +44,8 @@ export function useSkills() {
   }, [pending, isPending, mutate]);
 
   return {
-    skills: query.data ?? NO_SKILLS,
-    status: loadStatus(query),
+    skills,
+    status,
     pending,
     isDeleting: isPending,
     deleteError: isError ? DELETE_FAILED : null,

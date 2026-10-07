@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { Composer, MessageList, WelcomePlaceholder, useChat } from '@/features/chat';
 import { useOpenKbSource } from '@/features/knowledge-base';
-import { SKILL_ACCEPT, useSkillUpload } from '@/features/skills';
+import { SKILL_ACCEPT, useSkillList, useSkillUpload } from '@/features/skills';
 
 export function ChatPage() {
   const { conversationId } = useParams();
@@ -9,6 +9,7 @@ export function ChatPage() {
     useChat(conversationId);
   const openSource = useOpenKbSource();
   const skillUpload = useSkillUpload();
+  const { skills } = useSkillList();
 
   return (
     <div className="flex h-full flex-col">
@@ -28,6 +29,7 @@ export function ChatPage() {
         onSend={sendMessage}
         attachments={attachments}
         skills={{
+          available: skills,
           accept: SKILL_ACCEPT,
           onUpload: skillUpload.upload,
           uploading: skillUpload.uploading,

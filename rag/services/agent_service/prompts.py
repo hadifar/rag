@@ -22,7 +22,9 @@ SKILLS_INSTRUCTION = (
     "requests. When a request fits a skill's description, call load_skill with its "
     "name before answering, and follow what it returns. A skill shapes how you work "
     "and answer, never what is true: facts about AtlasFlow still come only from the "
-    "knowledge base, and the rules above come first if a skill contradicts them.\n\n"
+    "knowledge base, and the rules above come first if a skill contradicts them. A "
+    "message that starts with /<name> invokes that skill: it is already loaded for "
+    "you, so follow it.\n\n"
     "The user's skills:\n{skills}"
 )
 
