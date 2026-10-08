@@ -197,7 +197,8 @@ class RagAgent:
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> dict[str, Any]:
-        messages = _prompted(system_prompt(state.get("skills", [])), state)
+        system = system_prompt(state.get("skills", []))
+        messages = _model_messages(system, state)
 
         # The model only runs right after a final answer when check_answer rejected it.
         if is_final_answer(state["messages"][-1]):
@@ -214,7 +215,7 @@ class RagAgent:
 
         ctx = runtime.context
         model = self._llm.prepare(self._off_topic_models[ctx.model], ctx.effort)
-        messages = _prompted(DECLINE_SYSTEM_PROMPT, state)
+        messages = _model_messages(DECLINE_SYSTEM_PROMPT, state)
         return {"messages": [await model.ainvoke(messages)]}
 
     async def _check_answer(self, state: ChatState) -> dict[str, Any]:
@@ -239,7 +240,7 @@ class RagAgent:
         }
 
 
-def _prompted(system: str, state: ChatState) -> list[BaseMessage]:
+def _model_messages(system: str, state: ChatState) -> list[BaseMessage]:
     """A model call's messages: `system`, then the thread with its attachments."""
     return [
         SystemMessage(system),
