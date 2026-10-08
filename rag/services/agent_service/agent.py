@@ -13,7 +13,7 @@ from langchain_core.messages import (
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
-from langgraph.types import Command, RetryPolicy
+from langgraph.types import Command
 
 from rag.domain.models import (
     AgentMemory,
@@ -91,7 +91,7 @@ class RagAgent:
     loads the skill a question invokes ("/<name> ..."); `verify` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times, after which the model's answer ends the turn unchecked. Every LLM call, the
-    model's and the guards', is tried up to `llm.attempts` times; then a model call's
+    model's and the guards', is retried by `llm`; once those run out, a model call's
     error ends the turn (see `AgentTurn`).
     The model sees the name and description of each of the user's `skills`, and loads
     one's instructions with a tool when a question fits it.
@@ -136,13 +136,7 @@ class RagAgent:
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("classify", self._classify)
         graph.add_node("invoke_skill", self._invoke_skill)
-        graph.add_node(
-            "model",
-            self._model,
-            retry_policy=RetryPolicy(
-                max_attempts=self._llm.attempts, retry_on=Exception
-            ),
-        )
+        graph.add_node("model", self._model)
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("verify", self._verify)
 
@@ -235,7 +229,7 @@ class RagAgent:
 
         ctx = runtime.context
         models = self._off_topic_models if off_topic else self._on_topic_models
-        model = self._llm.with_effort(models[ctx.model], ctx.effort)
+        model = self._llm.prepare(models[ctx.model], ctx.effort)
         return {"messages": [await model.ainvoke(messages)], "skills": skills}
 
     async def _verify(self, state: ChatState) -> Command[_Next]:

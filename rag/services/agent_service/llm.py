@@ -37,16 +37,16 @@ class Llm:
         self.models = dict(models)
         self.model = self.models[DEFAULT_MODEL]
         self.trace_config = trace_config
-        self.attempts = attempts  # tries per call
+        self._attempts = attempts  # tries per call
         self._reasoning = reasoning  # the models think (LLM__REASONING_EFFORT is set)
 
-    def with_effort(
-        self, model: Runnable[Any, Any], effort: Effort
-    ) -> Runnable[Any, Any]:
-        """`model`, set to think as hard as `effort` says; as is if it doesn't reason."""
-        if not self._reasoning:
-            return model
-        return model.bind(reasoning={"effort": effort, "summary": "auto"})
+    def prepare(self, model: Runnable[Any, Any], effort: Effort) -> Runnable[Any, Any]:
+        """`model`, retried like every other call and set to think as hard as `effort`
+        says (if it reasons).
+        """
+        if self._reasoning:
+            model = model.bind(reasoning={"effort": effort, "summary": "auto"})
+        return model.with_retry(stop_after_attempt=self._attempts)
 
     async def generate_structured[T: BaseModel](
         self,
@@ -61,7 +61,7 @@ class Llm:
         `prompt` and then its `attachments`.
         """
         llm = self.model.with_structured_output(schema).with_retry(
-            stop_after_attempt=self.attempts
+            stop_after_attempt=self._attempts
         )
         # Its own trace only if named: inside an agent's run, a config of its own would
         # cut the call from the run's trace.
