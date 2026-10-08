@@ -19,7 +19,7 @@ SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
 _INVOCATION = re.compile(rf"/({SKILL_NAME_PATTERN})(?=\s|$)")
 
 
-def loaded_skill(content: SkillContent) -> str:
+def render_skill(content: SkillContent) -> str:
     """What loading a skill hands the model: its instructions, then the paths of its
     reference files, if it has any.
     """
@@ -45,7 +45,7 @@ def skill_tool(skills: SkillsPort) -> BaseTool:
         content = await skills.content(runtime.context.user_id, name)
         if content is None:
             return f"The user has no skill named {name!r}."
-        return loaded_skill(content)
+        return render_skill(content)
 
     return load_skill
 
@@ -82,10 +82,10 @@ def invoked_skill(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def skill_loaded(name: str, instructions: str) -> list[BaseMessage]:
-    """The load_skill call and its result (`instructions`, as `loaded_skill` words
-    them), as if the model had made it: what a turn that invokes the skill starts
-    with, so the model follows it, and later turns remember it was loaded.
+def skill_load_messages(name: str, content: SkillContent) -> list[BaseMessage]:
+    """The load_skill call and its result (`content`, as `render_skill` words it), as
+    if the model had made it: what a turn that invokes the skill starts with, so the
+    model follows it, and later turns remember it was loaded.
     """
     call_id = f"call_{uuid.uuid4().hex}"  # shaped like the ids OpenAI gives calls
     return [
@@ -93,5 +93,7 @@ def skill_loaded(name: str, instructions: str) -> list[BaseMessage]:
             content="",
             tool_calls=[{"name": SKILL_TOOL, "args": {"name": name}, "id": call_id}],
         ),
-        ToolMessage(content=instructions, name=SKILL_TOOL, tool_call_id=call_id),
+        ToolMessage(
+            content=render_skill(content), name=SKILL_TOOL, tool_call_id=call_id
+        ),
     ]

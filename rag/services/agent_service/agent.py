@@ -41,9 +41,8 @@ from rag.services.agent_service.prompts import (
 )
 from rag.services.agent_service.skills import (
     invoked_skill,
-    loaded_skill,
     skill_file_tool,
-    skill_loaded,
+    skill_load_messages,
     skill_tool,
 )
 from rag.services.agent_service.streaming import (
@@ -210,7 +209,7 @@ class RagAgent:
         content = await self._skills.content(runtime.context.user_id, name)
         if content is None:
             return {}
-        return {"messages": skill_loaded(name, loaded_skill(content))}
+        return {"messages": skill_load_messages(name, content)}
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]
