@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
+from fastapi import FastAPI
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
@@ -12,6 +13,7 @@ from rag.adapters.kb_archive_store import open_archive_store
 from rag.adapters.langchain.llm_client import build_embeddings, build_llms
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
+from rag.adapters.telemetry import instrument_app as instrument_telemetry
 from rag.config import Settings
 from rag.domain.models import (
     DEFAULT_MODEL,
@@ -104,6 +106,11 @@ def _caches(
             ttl=timedelta(days=cache.VERDICT_TTL_DAYS),
         ),
     )
+
+
+def instrument_app(app: FastAPI, settings: Settings) -> None:
+    """Export the app's telemetry: once per process, before it serves."""
+    instrument_telemetry(app, settings.TELEMETRY)
 
 
 @asynccontextmanager

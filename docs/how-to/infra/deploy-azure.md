@@ -44,3 +44,5 @@ Provision or update the Azure environment with `infra/azure/main.bicep`. Diagram
 * Pass the five secure parameters on the command line. Do not commit them.
 * Generate `jwtSecret` with `openssl rand -hex 32`.
 * The App Service Plan must be Standard (`S1`) or higher. Private Endpoints need it.
+* Application Insights stays on the free allowance (5 GB a month per billing account): keep `logDailyCapGb` at `0.16` or less and `telemetrySamplingRatio` at `0.25` or less. Lower both if other workspaces on the billing account also ingest data.
+* Raise `backendWorkers` above 1 only on a plan with more than one vCPU. Keep `backendWorkers` × instances × `databasePoolSize` under the Postgres server's `max_connections`.

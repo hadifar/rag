@@ -11,10 +11,15 @@
     "frontendContainerImageName": { "value": "rag-frontend:<tag>" },
     "ciServicePrincipalObjectId": { "value": "<ci-service-principal-object-id>" },
     "appServicePlanSku": { "value": "S1" },
+    "backendWorkers": { "value": 1 },
+    "databasePoolSize": { "value": 4 },
 
     "llmProvider": { "value": "openai" },
 
     "langfuseEnabled": { "value": true },
-    "langfuseHost": { "value": "https://cloud.langfuse.com" }
+    "langfuseHost": { "value": "https://cloud.langfuse.com" },
+
+    "logDailyCapGb": { "value": "0.16" },
+    "telemetrySamplingRatio": { "value": "0.25" }
   }
 }

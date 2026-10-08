@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from typing import Protocol
 
 from rag.domain.models import (
@@ -49,10 +50,22 @@ class IngestionRunRepositoryPort(Protocol):
     async def get(self, run_id: uuid.UUID) -> IngestionRun | None: ...
     async def latest(self) -> IngestionRun | None: ...
     async def running(self) -> IngestionRun | None: ...
-    async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None: ...
-    async def fail(self, run_id: uuid.UUID, error: str) -> None: ...
-    async def fail_running(self, error: str) -> int:
-        """Marks every still-running run failed; returns how many there were."""
+    async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None:
+        """Records the report, unless the run already ended (e.g. failed as stale)."""
+        ...
+
+    async def fail(self, run_id: uuid.UUID, error: str) -> None:
+        """Records the error, unless the run already ended."""
+        ...
+
+    async def heartbeat(self, run_id: uuid.UUID) -> None:
+        """Renews a running run's lease."""
+        ...
+
+    async def fail_stale(self, error: str, stale_after: timedelta) -> int:
+        """Fails every running run whose lease wasn't renewed within `stale_after`;
+        returns how many there were.
+        """
         ...
 
 

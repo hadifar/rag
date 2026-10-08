@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from rag.config.auth import AuthConfig
@@ -10,6 +10,7 @@ from rag.config.kb_storage import KbStorageConfig, LocalKbStorageConfig
 from rag.config.llm import LLMConfig
 from rag.config.observability import LoggingObservabilityConfig, ObservabilityConfig
 from rag.config.retrieval import RetrievalConfig
+from rag.config.telemetry import NoneTelemetryConfig, TelemetryConfig
 from rag.config.uploads import UploadsConfig
 
 
@@ -33,10 +34,16 @@ class Settings(BaseSettings):
     RETRIEVAL: RetrievalConfig = RetrievalConfig()
     CACHE: CacheConfig = CacheConfig()
     OBSERVABILITY: ObservabilityConfig = LoggingObservabilityConfig()
+    TELEMETRY: TelemetryConfig = NoneTelemetryConfig()
     UPLOADS: UploadsConfig = UploadsConfig()
+
+    # Connections each process keeps open: the pool's fixed size. Postgres must allow
+    # WORKERS x instances x DATABASE_POOL_SIZE connections.
+    DATABASE_POOL_SIZE: int = Field(default=4, ge=1)
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    WORKERS: int = Field(default=1, ge=1)
 
 
 @lru_cache

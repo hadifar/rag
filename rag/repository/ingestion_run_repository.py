@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from psycopg.errors import UniqueViolation
 
@@ -50,7 +51,7 @@ class IngestionRunRepository(BaseRepository[IngestionRun]):
             UPDATE ingestion_runs
             SET status = 'succeeded', finished_at = now(), added = %s,
                 updated = %s, unchanged = %s, removed = %s, chunks = %s
-            WHERE id = %s
+            WHERE id = %s AND status = 'running'
             """,
             (
                 report.added,
@@ -65,14 +66,22 @@ class IngestionRunRepository(BaseRepository[IngestionRun]):
     async def fail(self, run_id: uuid.UUID, error: str) -> None:
         await self._execute(
             "UPDATE ingestion_runs "
-            "SET status = 'failed', finished_at = now(), error = %s WHERE id = %s",
+            "SET status = 'failed', finished_at = now(), error = %s "
+            "WHERE id = %s AND status = 'running'",
             (error, run_id),
         )
 
-    async def fail_running(self, error: str) -> int:
+    async def heartbeat(self, run_id: uuid.UUID) -> None:
+        await self._execute(
+            "UPDATE ingestion_runs SET heartbeat_at = now() "
+            "WHERE id = %s AND status = 'running'",
+            (run_id,),
+        )
+
+    async def fail_stale(self, error: str, stale_after: timedelta) -> int:
         return await self._execute(
             "UPDATE ingestion_runs "
             "SET status = 'failed', finished_at = now(), error = %s "
-            "WHERE status = 'running'",
-            (error,),
+            "WHERE status = 'running' AND heartbeat_at < now() - %s",
+            (error, stale_after),
         )

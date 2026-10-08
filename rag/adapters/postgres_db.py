@@ -16,6 +16,7 @@ async def open_db_pool(
     """
     pool = AsyncConnectionPool[AsyncConnection](
         settings.DATABASE_URL.get_secret_value(),
+        min_size=settings.DATABASE_POOL_SIZE,
         check=AsyncConnectionPool.check_connection,
         open=False,
     )

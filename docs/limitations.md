@@ -4,8 +4,8 @@ Known gaps. None of these is addressed yet.
 
 ## Ingestion
 
-* Uploads run as an in-process background task. A restart kills the run. Startup marks it failed.
-* The startup sweep assumes a single backend instance.
+* Uploads run as an in-process background task. A restart kills the run. It shows as failed up to a minute later, once its lease lapses.
+* A run whose process stalls for over a minute without dying is failed, but its ingestion can still commit afterwards. The index then matches the archive while the run reads `failed`.
 * `rag ingest` ignores the one-run-at-a-time rule.
 * `rag ingest --latest` uses the newest valid zip, not the newest successful one.
 * `WholeDocumentChunker` stores a whole file as one chunk.
@@ -82,12 +82,13 @@ Known gaps. None of these is addressed yet.
 
 ## Observability
 
-* Only `AppError` has a handler. Other exceptions become a bare 500.
-* No error tracking or alerting.
+* An unexpected exception answers a generic 500 with no error ID, so a user cannot point to its log entry.
+* No alerting.
+* Application Insights samples 25% of request traces, and stops taking data for the rest of the day past 0.16 GB. Postgres queries are not traced.
+* A 4xx `AppError` (such as 401 or 404) is logged at INFO and not exported, so Application Insights sees it only on a sampled request trace.
 
 ## Scalability
 
-* `rag serve` runs one uvicorn worker.
 * The App Service Plan has no autoscale rule.
 * nginx rate limits are per replica.
 

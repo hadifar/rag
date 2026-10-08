@@ -35,6 +35,14 @@ param ciServicePrincipalObjectId string
 @description('Linux App Service Plan SKU. Private Endpoints (see backendPrivateEndpoint below) require Standard or higher — Basic/Free/Shared don\'t support them.')
 param appServicePlanSku string = 'S1'
 
+@description('uvicorn worker processes per backend instance (rag.config.Settings.WORKERS). More than one only helps on a plan with more than one vCPU.')
+@minValue(1)
+param backendWorkers int = 1
+
+@description('DB connections each backend worker keeps open (rag.config.Settings.DATABASE_POOL_SIZE). Postgres must allow backendWorkers x instances x this.')
+@minValue(1)
+param databasePoolSize int = 4
+
 @description('Address space for the VNet that isolates the backend Web App from the public internet.')
 param vnetAddressPrefix string = '10.20.0.0/16'
 
@@ -75,10 +83,17 @@ param azureOpenAiApiVersion string = '2024-05-01-preview'
 param langfuseEnabled bool = true
 param langfuseHost string = 'https://cloud.langfuse.com'
 
+@description('Log Analytics daily ingestion cap in GB, as a string (Bicep has no decimals). 0.16 x 31 days stays under the free 5 GB a month; past it, telemetry is dropped until the cap resets the next day.')
+param logDailyCapGb string = '0.16'
+
+@description('Share of backend request traces sent to Application Insights (rag.config.AzureMonitorTelemetryConfig.SAMPLING_RATIO), as a string. Logged warnings and exceptions are always sent.')
+param telemetrySamplingRatio string = '0.25'
+
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var monitoringMetricsPublisherRoleId = '3913510d-42f4-4e42-8a64-420c390055eb'
 
 var secretsToStore = [
   { name: 'database-url', value: databaseUrl }
@@ -181,6 +196,40 @@ resource kbStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
         publicAccess: 'None'
       }
     }
+  }
+}
+
+// Kept within Azure Monitor's free allowance: there is no Free SKU for new workspaces,
+// but on PerGB2018 the first 5 GB a month (per billing account, shared with any other
+// workspace on it) and 31 days of retention cost nothing. The daily cap is the hard
+// stop; sampling (telemetrySamplingRatio) keeps a normal day well under it.
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${appName}-logs'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+    workspaceCapping: {
+      dailyQuotaGb: json(logDailyCapGb)
+    }
+  }
+}
+
+// The backend's requests, outbound calls (Postgres excluded, LLM and Blob included),
+// warnings and exceptions, sent by rag/adapters/telemetry.py.
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${appName}-appinsights'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+    IngestionMode: 'LogAnalytics'
+    // Entra ID only: the backend sends with its Managed Identity (role below), so the
+    // connection string alone can't send telemetry and spend the free quota.
+    DisableLocalAuth: true
   }
 }
 
@@ -398,6 +447,21 @@ resource kbArchivesContributorRoleAssignment 'Microsoft.Authorization/roleAssign
   }
 }
 
+// "Monitoring Metrics Publisher" — lets the backend send telemetry to Application
+// Insights with its own identity, which DisableLocalAuth above requires.
+resource appInsightsPublisherRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(appInsights.id, backendWebApp.id, monitoringMetricsPublisherRoleId)
+  scope: appInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      monitoringMetricsPublisherRoleId
+    )
+    principalId: backendWebApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // "AcrPush" — lets the CI service principal (GitHub OIDC identity) push images it
 // builds, without a registry admin password.
 resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -423,6 +487,8 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     {
       // Must match the port rag.config.Settings.PORT defaults to / the app binds.
       WEBSITES_PORT: '8000'
+      WORKERS: string(backendWorkers)
+      DATABASE_POOL_SIZE: string(databasePoolSize)
 
       DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
@@ -439,6 +505,11 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
       KB_STORAGE__BACKEND: 'azure_blob'
       KB_STORAGE__ACCOUNT_URL: kbStorage.properties.primaryEndpoints.blob
       KB_STORAGE__CONTAINER: kbArchiveContainerName
+
+      // Not a secret: local auth is off, sending takes the Managed Identity.
+      TELEMETRY__BACKEND: 'azure_monitor'
+      TELEMETRY__CONNECTION_STRING: appInsights.properties.ConnectionString
+      TELEMETRY__SAMPLING_RATIO: telemetrySamplingRatio
     },
     llmAppSettings,
     uploadLimitAppSettings
@@ -446,6 +517,7 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   dependsOn: [
     keyVaultSecretsUserRoleAssignment
     keyVaultSecrets
+    appInsightsPublisherRoleAssignment
   ]
 }
 
@@ -471,3 +543,4 @@ output frontendWebAppHostName string = frontendWebApp.properties.defaultHostName
 output keyVaultUri string = keyVault.properties.vaultUri
 output acrLoginServer string = containerRegistry.properties.loginServer
 output kbStorageAccountName string = kbStorage.name
+output appInsightsName string = appInsights.name
