@@ -71,12 +71,13 @@ A turn whose tool or model fails (after `Llm.prepare`'s retries of the model cal
 ## Errors
 
 * Services raise an `AppError` subclass from `rag/domain/errors.py` with a `status_code`.
-* One handler in `rag/app.py` turns every `AppError` into `{"detail": ...}`.
+* One handler in `rag/app.py` turns every `AppError` into `{"detail": ...}`. Another logs any other exception and answers a bare 500.
 * `fastapi.HTTPException` is banned.
 
 ## Configuration
 
 * Nested values use `__`: `LLM__API_KEY`, `RETRIEVAL__RERANK_CANDIDATES`.
-* `LLM`, `OBSERVABILITY` and `KB_STORAGE` are discriminated unions on `BACKEND`.
+* `LLM`, `OBSERVABILITY`, `TELEMETRY` and `KB_STORAGE` are discriminated unions on `BACKEND`.
+* `OBSERVABILITY` traces the LLM runs (Langfuse). `TELEMETRY` exports requests, outbound calls, warnings and exceptions (Application Insights, `rag/adapters/telemetry.py`). It samples request traces (`TELEMETRY__SAMPLING_RATIO`) and always sends logged warnings and exceptions.
 * Only `rag/container.py` reads `Settings`: it hands each service its values, and the API layer an `AppSettings` (`rag/domain/models/settings.py`), the configuration users may see, with no secrets (`AppSettingsDep`, `GET /api/settings`).
 * Upload limits are the `UPLOADS__*` settings (`rag/config/uploads.py`). The container passes each to its service, which rejects a larger file (413). A router takes its file as a domain `Upload` through `rag/api/uploads.py` (`ArchiveUpload`, `SkillUpload`, `AttachmentUpload`), which reads it no further than one byte past the same limit. nginx caps each upload's request body from the same env vars, plus room for the multipart framing (`infra/docker/upload-limits.envsh`), so `docker-compose.yml` and `infra/azure/main.bicep` set them for both the backend and the frontend, to the defaults (`tests/unit/test_upload_limits.py`). `GET /api/settings` returns them (`uploads`), for the frontend to check and word sizes by.

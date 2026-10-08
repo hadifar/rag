@@ -17,6 +17,9 @@
     "llmProvider": { "value": "openai" },
 
     "langfuseEnabled": { "value": true },
-    "langfuseHost": { "value": "https://cloud.langfuse.com" }
+    "langfuseHost": { "value": "https://cloud.langfuse.com" },
+
+    "logDailyCapGb": { "value": "0.16" },
+    "telemetrySamplingRatio": { "value": "0.25" }
   }
 }

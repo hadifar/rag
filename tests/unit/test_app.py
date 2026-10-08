@@ -1066,3 +1066,22 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
+
+
+def test_an_unexpected_error_is_logged_and_answered_with_a_bare_500(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/boom")
+    async def _boom() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise RuntimeError("boom")
+
+    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+    assert response.status_code == 500
+    assert response.text == "Internal Server Error"
+    assert any(
+        r.message == "Unexpected error on GET /boom" and r.exc_info
+        for r in caplog.records
+    )

@@ -83,7 +83,9 @@ Known gaps. None of these is addressed yet.
 ## Observability
 
 * Only `AppError` has a handler. Other exceptions become a bare 500.
-* No error tracking or alerting.
+* No alerting.
+* Application Insights samples 25% of request traces, and stops taking data for the rest of the day past 0.16 GB. Postgres queries are not traced (`psycopg` 3 has no instrumentation in the Azure Monitor distro).
+* Every `AppError` is sent to Application Insights as an exception, including 4xx such as 401 and 404.
 
 ## Scalability
 
