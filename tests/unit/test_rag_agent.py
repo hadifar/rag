@@ -423,6 +423,31 @@ async def test_revision_instruction_is_not_saved_to_the_thread() -> None:
     ] == ["first"]
 
 
+async def test_a_rejected_answer_is_revised_but_not_remembered() -> None:
+    model = _ScriptedChatModel(
+        answers=[
+            _search("pricing"),
+            _answer("wrong"),
+            _answer("revised"),
+            _answer("follow-up"),
+        ],
+        answer_verdicts=[False],
+    )
+    chat = _Chat(model)
+
+    await chat.send("first")
+    await chat.send("second")
+
+    revision_call = model.agent_calls[2]
+    assert [m.content for m in revision_call["messages"][-2:]] == [
+        "wrong",
+        REVISION_INSTRUCTION,
+    ]
+    assert "wrong" not in [m.content for m in chat.saved_messages()]
+    assert "revised" in [m.content for m in chat.saved_messages()]
+    assert "wrong" not in [m.content for m in model.agent_calls[3]["messages"]]
+
+
 async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     model = _ScriptedChatModel(
         answers=[

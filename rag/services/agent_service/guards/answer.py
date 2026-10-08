@@ -36,18 +36,25 @@ def _collect_context(messages: Sequence[BaseMessage]) -> str:
     )
 
 
+def has_context(messages: Sequence[BaseMessage]) -> bool:
+    """Whether the turn retrieved anything for its answer to be checked against."""
+    return bool(_collect_context(messages))
+
+
 def answer_to_check(
-    messages: Sequence[BaseMessage], files: Mapping[str, AttachmentFile]
+    answer: AIMessage,
+    messages: Sequence[BaseMessage],
+    files: Mapping[str, AttachmentFile],
 ) -> AnswerCheck | None:
-    """The turn's answer, against its retrieved context and the text the user attached
-    to their question (among `files`, by id); None if there's nothing to check.
+    """`answer`, against the turn's retrieved context (in `messages`) and the text the
+    user attached to their question (among `files`, by id); None if there's nothing
+    to check.
     """
     context = _collect_context(messages)
-    answer = messages[-1]
 
     # .text, not .content: under the Responses API content is a list of blocks,
     # reasoning included, and only the answer's text is to be checked.
-    if not context or not isinstance(answer, AIMessage) or not answer.text:
+    if not context or not answer.text:
         # Nothing was retrieved this turn (e.g. small talk) — nothing to check against.
         return None
     question = current_turn(messages)[0]

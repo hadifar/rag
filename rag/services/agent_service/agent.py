@@ -27,7 +27,7 @@ from rag.services.agent_service.attachments import (
     question_message,
     with_attachments,
 )
-from rag.services.agent_service.guards.answer import answer_to_check
+from rag.services.agent_service.guards.answer import answer_to_check, has_context
 from rag.services.agent_service.guards.input import check_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.memory import HistoryLimits, recall
@@ -63,6 +63,9 @@ class ChatState(MessagesState):
     todos: NotRequired[list[Todo]]
     answer_decision: NotRequired[AnswerDecision]
     revisions: NotRequired[int]
+    # An answer awaiting check_answer's verdict: it joins messages only once accepted,
+    # so a rejected one is never remembered.
+    draft: NotRequired[AIMessage | None]
     attachments: NotRequired[dict[str, AttachmentFile]]
     skills: NotRequired[list[Skill]]
 
@@ -74,6 +77,7 @@ class ChatUpdate(TypedDict, total=False):
     input_decision: InputDecision
     answer_decision: AnswerDecision
     revisions: int
+    draft: AIMessage | None
     skills: list[Skill]
 
 
@@ -203,13 +207,16 @@ class RagAgent:
         system = system_prompt(state.get("skills", []))
         messages = _model_messages(system, state)
 
-        # when check_answer rejected previous answer.
-        if is_final_answer(state["messages"][-1]):
-            messages.append(HumanMessage(REVISION_INSTRUCTION))
+        # check_answer rejected this draft: the model is to revise it.
+        if (draft := state.get("draft")) is not None:
+            messages += [draft, HumanMessage(REVISION_INSTRUCTION)]
 
         ctx = runtime.context
         model = self._llm.prepare(self._on_topic_models[ctx.model], ctx.effort)
-        return {"messages": [await model.ainvoke(messages)]}
+        reply = await model.ainvoke(messages)
+        if is_final_answer(reply) and _to_check(state):
+            return {"draft": reply}
+        return {"messages": [reply], "draft": None}
 
     async def _decline(
         self, state: ChatState, runtime: Runtime[RunContext]
@@ -225,16 +232,23 @@ class RagAgent:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
         a rejected answer never reaches the user.
         """
-        check = answer_to_check(state["messages"], state.get("attachments", {}))
+        draft = state.get("draft")
+        assert draft is not None  # model only routes here with one
+        accept: ChatUpdate = {
+            "answer_decision": "accept",
+            "messages": [draft],
+            "draft": None,
+        }
+        check = answer_to_check(draft, state["messages"], state.get("attachments", {}))
         if check is None:
-            return {"answer_decision": "accept"}
+            return accept
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
         await answer_check_started()
         grounded = await check.passes(self._llm)
         await answer_checked(grounded)
         if grounded:
-            return {"answer_decision": "accept"}
+            return accept
         return {
             "answer_decision": "revise",
             "revisions": state.get("revisions", 0) + 1,
@@ -263,9 +277,18 @@ def _after_answer(state: ChatState) -> AnswerDecision:
     return decision
 
 
+def _to_check(state: ChatState) -> bool:
+    """Whether the model's answer is to be checked: the turn retrieved something to
+    check it against, and may still revise it.
+    """
+    return has_context(state["messages"]) and state.get("revisions", 0) < MAX_REVISIONS
+
+
 def _after_model(state: ChatState) -> Literal["tools", "check_answer", "__end__"]:
-    """Tool calls run; an answer is checked while the turn may still revise it."""
+    """A draft is checked; tool calls run; any other answer ends the turn."""
+    if state.get("draft") is not None:
+        return "check_answer"
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
-    return "check_answer" if state.get("revisions", 0) < MAX_REVISIONS else "__end__"
+    return "__end__"
