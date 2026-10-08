@@ -63,7 +63,7 @@ RECURSION_LIMIT = 75
 # Where classify and verify go next. LangGraph's END is typed as a plain str, so the
 # routes name it by its value.
 _Next = Literal["model", "__end__"]
-_Classified = Literal["invoke_skill", "__end__"]
+_Classified = Literal["invoke_skill", "model", "__end__"]
 
 
 class ChatState(MessagesState):
@@ -82,10 +82,12 @@ class RagAgent:
     """The RAG agent (an AgentPort), grounded in the knowledge base, on this graph:
 
         START -> classify -> invoke_skill -> model <-> tools
-                    |                          |
-                   END                      verify -> END, or back to model to revise
+                  |    |                      ^  |
+                  |    +---- off-topic -------+  |
+                 END                          verify -> END, or back to model to revise
 
-    `classify` ends a blocked question's turn before the model runs; `invoke_skill`
+    `classify` ends a blocked question's turn before the model runs, and sends an
+    off-topic one straight to the model, which is only to decline; `invoke_skill`
     loads the skill a question invokes ("/<name> ..."); `verify` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times, after which the model's answer ends the turn unchecked. Every LLM call, the
@@ -188,11 +190,15 @@ class RagAgent:
             self._verdicts,
             attachments_of(question, state.get("attachments", {})),
         )
-        if decision != "block":
+
+        if decision == "restrict":
+            return Command(goto="model", update={"decision": decision})
+
+        if decision == "allow":
             return Command(goto="invoke_skill", update={"decision": decision})
 
         await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
-        # The thread's reducer gives every message an id.
+
         assert question.id is not None
         return Command(
             goto="__end__", update={"messages": [RemoveMessage(id=question.id)]}
@@ -201,12 +207,11 @@ class RagAgent:
     async def _invoke_skill(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> dict[str, Any]:
-        """A question that starts with "/<name>" of one of the user's skills starts its
-        turn with that skill loaded. Off-topic, the model is only to decline, so it
-        loads nothing; nor for a name the user has no skill of.
+        """Only trigger when a question that starts with "/<name>" of one of the user's skills starts its
+        turn with that skill loaded; a name the user has no skill of loads nothing.
         """
         name = invoked_skill(state["messages"][-1].text)
-        if name is None or state.get("decision") == "restrict":
+        if name is None:
             return {}
         content = await self._skills.content(runtime.context.user_id, name)
         if content is None:

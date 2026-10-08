@@ -19,7 +19,9 @@ graph TD;
 	__start__ --> classify;
 	classify -.-> __end__;
 	classify -.-> invoke_skill;
+	classify -.-> model;
 	invoke_skill --> model;
+	model -.-> __end__;
 	model -.-> tools;
 	model -.-> verify;
 	tools --> model;
@@ -27,5 +29,5 @@ graph TD;
 	verify -.-> model;
 ```
 
-* `classify` ends the turn for a blocked question; `invoke_skill` starts a turn whose question begins with `/<name>` with that skill loaded; `verify` ends it, or sends a rejected answer back to `model` to revise.
+* `classify` ends the turn for a blocked question and sends an off-topic one straight to `model`; `invoke_skill` starts a turn whose question begins with `/<name>` with that skill loaded; `verify` ends it, or sends a rejected answer back to `model` to revise.
 * `model` builds each call's system prompt (planning or the off-topic decline) and picks its tools; neither is saved to the thread.
