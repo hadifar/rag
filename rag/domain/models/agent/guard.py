@@ -17,9 +17,3 @@ class InputVerdict(BaseModel):
         description="One sentence on why the message gets the decision."
     )
     decision: InputDecision
-
-
-class AnswerVerdict(BaseModel):
-    """The answer guard's verdict on an answer: the schema its LLM call fills."""
-
-    grounded: bool

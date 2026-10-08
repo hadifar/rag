@@ -5,7 +5,6 @@ from langchain.agents.middleware.todo import Todo
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
-    HumanMessage,
     RemoveMessage,
     SystemMessage,
 )
@@ -27,45 +26,27 @@ from rag.services.agent_service.attachments import (
     question_message,
     with_attachments,
 )
-from rag.services.agent_service.guards.answer import answer_to_check, has_context
 from rag.services.agent_service.guards.input import check_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.memory import HistoryLimits, recall
-from rag.services.agent_service.messages import is_final_answer
 from rag.services.agent_service.prompts import (
+    ANSWER_SYSTEM_PROMPT,
     BLOCKED_MESSAGE,
     DECLINE_SYSTEM_PROMPT,
-    REVISION_INSTRUCTION,
-    system_prompt,
+    research_prompt,
 )
 from rag.services.agent_service.skills import invoked_skill, skill_to_messages
-from rag.services.agent_service.streaming import (
-    AgentTurn,
-    answer_check_started,
-    answer_checked,
-    input_blocked,
-)
+from rag.services.agent_service.streaming import AgentTurn, input_blocked
 from rag.services.agent_service.tools import agent_tools
 
-# Times check_answer sends an answer back to revise per turn; past it, the last answer ships.
-MAX_REVISIONS = 1
-
 # Graph steps a turn may take before LangGraph stops it (its default is 25). Each tool
-# round trip costs two (model, tools), each checked answer one more (check_answer).
+# round trip costs two (research, tools).
 RECURSION_LIMIT = 75
-
-# What check_answer does with the turn's answer: ship it, or send it back to the model.
-AnswerDecision = Literal["accept", "revise"]
 
 
 class ChatState(MessagesState):
     input_decision: NotRequired[InputDecision]
     todos: NotRequired[list[Todo]]
-    answer_decision: NotRequired[AnswerDecision]
-    revisions: NotRequired[int]
-    # An answer awaiting check_answer's verdict: it joins messages only once accepted,
-    # so a rejected one is never remembered.
-    draft: NotRequired[AIMessage | None]
     attachments: NotRequired[dict[str, AttachmentFile]]
     skills: NotRequired[list[Skill]]
 
@@ -75,19 +56,18 @@ class ChatUpdate(TypedDict, total=False):
 
     messages: list[BaseMessage]
     input_decision: InputDecision
-    answer_decision: AnswerDecision
-    revisions: int
-    draft: AIMessage | None
     skills: list[Skill]
 
 
 class RagAgent:
     """The RAG agent (an AgentPort):
 
-    START -> check_input -allow-----> load_skills -> model <-> tools
+    START -> check_input -allow-----> load_skills -> research <-> tools
                          -off_topic-> decline -> END     |
-                         -block-----> END                check_answer -> END, or model
+                         -block-----> END                answer -> END
 
+    research gathers the evidence and never speaks to the user; answer writes the
+    answer from it.
     """
 
     def __init__(
@@ -101,8 +81,14 @@ class RagAgent:
     ):
         tools = agent_tools(search, skills)
         # One of each per model a conversation can be set to.
-        self._on_topic_models = {
+        self._research_models = {
             name: model.bind_tools(tools) for name, model in llm.models.items()
+        }
+        # The tools stay bound, unusable, so the API accepts research's tool calls in
+        # the thread; the answer is written from what they returned.
+        self._answer_models = {
+            name: model.bind_tools(tools, tool_choice="none")
+            for name, model in llm.models.items()
         }
         # Off-topic, the model gets no tools: it is only to decline.
         self._off_topic_models = llm.models
@@ -121,9 +107,9 @@ class RagAgent:
         graph.add_node("check_input", self._check_input)
         graph.add_node("load_skills", self._load_skills)
         graph.add_node("decline", self._decline)
-        graph.add_node("model", self._model)
+        graph.add_node("research", self._research)
         graph.add_node("tools", ToolNode(tools))
-        graph.add_node("check_answer", self._check_answer)
+        graph.add_node("answer", self._answer)
 
         graph.add_edge(START, "check_input")
         graph.add_conditional_edges(
@@ -131,13 +117,11 @@ class RagAgent:
             _after_input,
             {"allow": "load_skills", "off_topic": "decline", "block": END},
         )
-        graph.add_edge("load_skills", "model")
+        graph.add_edge("load_skills", "research")
         graph.add_edge("decline", END)
-        graph.add_conditional_edges("model", _after_model)
-        graph.add_edge("tools", "model")
-        graph.add_conditional_edges(
-            "check_answer", _after_answer, {"accept": END, "revise": "model"}
-        )
+        graph.add_conditional_edges("research", _after_research)
+        graph.add_edge("tools", "research")
+        graph.add_edge("answer", END)
         return graph.compile()
 
     def stream(
@@ -201,22 +185,28 @@ class RagAgent:
             update["messages"] = skill_to_messages(name, content)
         return update
 
-    async def _model(
+    async def _research(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> ChatUpdate:
-        system = system_prompt(state.get("skills", []))
-        messages = _model_messages(system, state)
-
-        # check_answer rejected this draft: the model is to revise it.
-        if (draft := state.get("draft")) is not None:
-            messages += [draft, HumanMessage(REVISION_INSTRUCTION)]
-
+        """Plans and searches. Its reply without tool calls only says it's done: it's
+        left out of the thread, so the turn's only answer is the answer node's.
+        """
+        system = research_prompt(state.get("skills", []))
         ctx = runtime.context
-        model = self._llm.prepare(self._on_topic_models[ctx.model], ctx.effort)
-        reply = await model.ainvoke(messages)
-        if is_final_answer(reply) and _to_check(state):
-            return {"draft": reply}
-        return {"messages": [reply], "draft": None}
+        model = self._llm.prepare(self._research_models[ctx.model], ctx.effort)
+        reply = await model.ainvoke(_model_messages(system, state))
+        if not reply.tool_calls:
+            return {}
+        return {"messages": [reply]}
+
+    async def _answer(
+        self, state: ChatState, runtime: Runtime[RunContext]
+    ) -> ChatUpdate:
+        """The answer, from what research found."""
+        ctx = runtime.context
+        model = self._llm.prepare(self._answer_models[ctx.model], ctx.effort)
+        messages = _model_messages(ANSWER_SYSTEM_PROMPT, state)
+        return {"messages": [await model.ainvoke(messages)]}
 
     async def _decline(
         self, state: ChatState, runtime: Runtime[RunContext]
@@ -227,32 +217,6 @@ class RagAgent:
         model = self._llm.prepare(self._off_topic_models[ctx.model], ctx.effort)
         messages = _model_messages(DECLINE_SYSTEM_PROMPT, state)
         return {"messages": [await model.ainvoke(messages)]}
-
-    async def _check_answer(self, state: ChatState) -> ChatUpdate:
-        """The stream holds a checked answer back until its verdict (`AnswerGate`), so
-        a rejected answer never reaches the user.
-        """
-        draft = state.get("draft")
-        assert draft is not None  # model only routes here with one
-        accept: ChatUpdate = {
-            "answer_decision": "accept",
-            "messages": [draft],
-            "draft": None,
-        }
-        check = answer_to_check(draft, state["messages"], state.get("attachments", {}))
-        if check is None:
-            return accept
-
-        # The check is a whole LLM call the answer is held back for: the client shows it.
-        await answer_check_started()
-        grounded = await check.passes(self._llm)
-        await answer_checked(grounded)
-        if grounded:
-            return accept
-        return {
-            "answer_decision": "revise",
-            "revisions": state.get("revisions", 0) + 1,
-        }
 
 
 def _model_messages(system: str, state: ChatState) -> list[BaseMessage]:
@@ -270,25 +234,9 @@ def _after_input(state: ChatState) -> InputDecision:
     return decision
 
 
-def _after_answer(state: ChatState) -> AnswerDecision:
-    """The answer guard's decision picks the route (see the path map in `_init_graph`)."""
-    decision = state.get("answer_decision")
-    assert decision is not None  # check_answer always sets it
-    return decision
-
-
-def _to_check(state: ChatState) -> bool:
-    """Whether the model's answer is to be checked: the turn retrieved something to
-    check it against, and may still revise it.
-    """
-    return has_context(state["messages"]) and state.get("revisions", 0) < MAX_REVISIONS
-
-
-def _after_model(state: ChatState) -> Literal["tools", "check_answer", "__end__"]:
-    """A draft is checked; tool calls run; any other answer ends the turn."""
-    if state.get("draft") is not None:
-        return "check_answer"
+def _after_research(state: ChatState) -> Literal["tools", "answer"]:
+    """Tool calls run; once research stops calling them, the answer is written."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
-    return "__end__"
+    return "answer"

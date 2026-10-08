@@ -3,12 +3,28 @@ from collections.abc import Sequence
 from rag.domain.models import Skill
 
 RAG_SYSTEM_PROMPT = (
-    "You are a support assistant for AtlasFlow. Answer only from the knowledge base, "
-    "which you reach with the search_kb tool: search before answering, never answer "
-    "from memory, and say you don't know if the knowledge base doesn't cover it.\n\n"
-    "Cover every part of the question, using only what the searches returned. If "
-    "some parts aren't covered by the knowledge base, answer the rest and say which "
-    "parts you couldn't find."
+    "You are a support assistant for AtlasFlow. You answer only from its knowledge "
+    "base, never from memory."
+)
+
+# The research node's step: it gathers what the answer node writes the answer from.
+RESEARCH_INSTRUCTION = (
+    "In this step you gather what the latest message needs from the knowledge base, "
+    "which you reach with the search_kb tool. You don't write the answer: another "
+    "step writes it from what your searches returned, so search before concluding, "
+    "and if a search misses, try other terms. When you have what the message needs, "
+    "or the knowledge base doesn't cover it, stop calling tools and reply only "
+    '"Done."'
+)
+
+# The answer node's step: it writes the answer from what research found.
+ANSWER_INSTRUCTION = (
+    "Answer the latest message now, using only what the search_kb results above "
+    "returned; you can't search any more. Cover every part of the question. If some "
+    "parts aren't covered, answer the rest and say which parts you couldn't find; if "
+    "nothing relevant was found, say you don't know. If a skill was loaded above "
+    "(load_skill), follow its instructions for how to answer. The todo list above is "
+    "internal: never mention it."
 )
 
 # How the model is to read the files a user attaches to a message.
@@ -77,29 +93,13 @@ INPUT_GUARD_PROMPT = (
     "LATEST MESSAGE:\n<<<\n{message}\n>>>"
 )
 
-# The chat agent's Planning: when to plan with write_todos, which only it can see.
+# The research node's planning: when to plan with write_todos, which only it can see.
 PLANNING_INSTRUCTIONS = (
     "Always use write_todos first to list one todo per question or search. "
     "Then work through them in order: mark a todo in_progress, run search_kb with a "
     "query focused on just that part, and mark it "
     "completed before starting the next. If a search shows the plan needs changing, "
-    "update the list. Never call write_todos more than once at a time. Todos are your "
-    "private scratchpad: never mention them to the user.\n"
-    "Write the final answer as its own message after your last write_todos call, "
-    "starting with the answer itself."
-)
-
-# The answer guard: its prompt, and what the model is told when its answer is sent
-# back.
-ANSWER_GUARD_PROMPT = (
-    "You are a strict fact-checker. Given the CONTEXT and an ANSWER, decide whether every "
-    "factual claim in the ANSWER is supported by the CONTEXT: grounded only if all are."
-    "\n\nCONTEXT:\n{context}\n\nANSWER:\n{answer}"
-)
-
-REVISION_INSTRUCTION = (
-    "Your previous answer wasn't fully supported by the retrieved context. Revise it (e.g., by rephrasing query) to "
-    "state only what the context actually supports, or say you don't know."
+    "update the list. Never call write_todos more than once at a time."
 )
 
 # Shown to the user when a turn fails (see TurnFailed).
@@ -112,10 +112,15 @@ DECLINE_SYSTEM_PROMPT = "\n\n".join(
     [RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, OFF_TOPIC_INSTRUCTION]
 )
 
+# The answer node's system prompt: it reads the skills research loaded, but loads none.
+ANSWER_SYSTEM_PROMPT = "\n\n".join(
+    [RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, ANSWER_INSTRUCTION]
+)
 
-def system_prompt(skills: Sequence[Skill] = ()) -> str:
-    """The model node's system prompt, listing the user's `skills`."""
-    steps = [PLANNING_INSTRUCTIONS]
+
+def research_prompt(skills: Sequence[Skill] = ()) -> str:
+    """The research node's system prompt, listing the user's `skills`."""
+    steps = [RESEARCH_INSTRUCTION, PLANNING_INSTRUCTIONS]
     if skills:
         listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
         steps.append(SKILLS_INSTRUCTION.format(skills=listed))

@@ -49,7 +49,8 @@ class TodosUpdated:
 @dataclass
 class AnswerChecked:
     """The answer checked against what the turn's searches found: `pending` while the
-    check runs, then `done` with whether the answer is supported by them.
+    check runs, then `done` with whether the answer is supported by them. No longer
+    sent (the agent has no answer check); kept so stored transcripts still read.
     """
 
     status: Literal["pending", "done"]

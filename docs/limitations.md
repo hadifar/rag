@@ -28,7 +28,6 @@ Known gaps. None of these is addressed yet.
 * Files are stored in Postgres as `bytea`. Nothing streams them: every upload and download is held whole in memory.
 * Every turn reloads and resends all images sent earlier in the conversation, which costs tokens and makes long image-heavy chats more likely to exceed the context window.
 * The chat model must accept image input.
-* The answer guard checks an answer against attached markdown, but not against attached images.
 * A file that is uploaded but never sent stays stored until someone runs `rag prune-attachments`. Nothing schedules it. Removing a file while it is still uploading leaves it behind in the same way.
 * A share link's JSON includes each attachment's id, type and size. The shared page shows only the file name, and the content needs the owner's login.
 
@@ -54,10 +53,9 @@ Known gaps. None of these is addressed yet.
 ## Guardrails
 
 * The input guard only instructs the model to decline an `off_topic` message. Only `block` stops the request.
-* Both guards fail open: if their LLM call fails, the message or answer passes.
-* The answer guard passes an answer with no `search_kb` call.
-* Past `MAX_REVISIONS` (`rag/services/agent_service/agent.py`), an ungrounded answer ships.
-* An answer after any tool call doesn't stream: it shows in one piece after the check.
+* The input guard fails open: if its LLM call fails, the message passes.
+* Nothing checks an answer against the evidence: only the answer prompt keeps it grounded.
+* Every on-topic turn costs a research call that only says "Done." before the answer call.
 
 ## Conversations
 
@@ -73,7 +71,7 @@ Known gaps. None of these is addressed yet.
 * Login rate limiting is per IP only (nginx).
 * Share links (`GET /api/shares/{share_id}`) are public, never expire, and have no rate limit. Shared answers can quote the knowledge base.
 * The backend image runs as root on a floating base image.
-* Uploaded skills are untrusted instructions. A skill, or a reference file it loads, goes to the model as instructions, and nothing scans it. A skill downloaded from elsewhere can carry prompt injection the user never read: it can tell the model to ignore the knowledge base, misstate facts, or answer with links to an outside URL that carry conversation text (answers render as markdown; nginx's CSP, `img-src 'self' data:`, blocks outside images, but a link only needs a click). Its reach is the user's own conversations and tools (`search_kb`), as with a message they type. The only safeguards are the system prompt (its rules come first), the answer guard (which ignores skill content), and a warning in Settings to upload only skills the user has read. Skills are never run, shared or shown to other users.
+* Uploaded skills are untrusted instructions. A skill, or a reference file it loads, goes to the model as instructions, and nothing scans it. A skill downloaded from elsewhere can carry prompt injection the user never read: it can tell the model to ignore the knowledge base, misstate facts, or answer with links to an outside URL that carry conversation text (answers render as markdown; nginx's CSP, `img-src 'self' data:`, blocks outside images, but a link only needs a click). Its reach is the user's own conversations and tools (`search_kb`), as with a message they type. The only safeguards are the system prompt (its rules come first) and a warning in Settings to upload only skills the user has read. Skills are never run, shared or shown to other users.
 
 ## Reliability
 

@@ -11,7 +11,7 @@ from rag.domain.models.agent.agent import (
     RunContext,
 )
 from rag.domain.models.agent.artifact import ARTIFACTS, Artifact, SourceArtifact
-from rag.domain.models.agent.guard import AnswerVerdict, InputDecision, InputVerdict
+from rag.domain.models.agent.guard import InputDecision, InputVerdict
 from rag.domain.models.agent.stream import (
     AnswerChecked,
     ArtifactsReady,
@@ -58,7 +58,6 @@ __all__ = [
     "ARTIFACTS",
     "AgentMemory",
     "AnswerChecked",
-    "AnswerVerdict",
     "AppSettings",
     "Artifact",
     "ArtifactsReady",

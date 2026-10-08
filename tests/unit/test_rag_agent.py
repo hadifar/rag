@@ -26,8 +26,6 @@ from pydantic import BaseModel, Field
 from rag.domain.models import (
     MODEL_NAMES,
     AgentMemory,
-    AnswerChecked,
-    AnswerVerdict,
     ArtifactsReady,
     Attachment,
     AttachmentFile,
@@ -43,11 +41,12 @@ from rag.domain.models import (
 from rag.config import UploadsConfig
 from rag.domain.ports import SkillsPort
 from rag.services.agent_service.prompts import (
+    ANSWER_INSTRUCTION,
     BLOCKED_MESSAGE,
     OFF_TOPIC_INSTRUCTION,
     PLANNING_INSTRUCTIONS,
     PRODUCT_SCOPE,
-    REVISION_INSTRUCTION,
+    RESEARCH_INSTRUCTION,
     SKILL_FILES_NOTE,
     TURN_FAILED_MESSAGE,
 )
@@ -59,8 +58,11 @@ from tests.unit.fakes import FakeCache, FakeSkillRepository
 
 
 class _ScriptedChatModel(BaseChatModel):
-    """Answers the guards' structured calls from the verdict lists, and every other
-    call (the agent's) from `answers`, in order. Records what each agent call saw.
+    """Answers the input guard's structured calls from the message sets, and every
+    other call (the agent's) from `answers`, in order. A research call whose next
+    answer isn't a tool call replies "Done." without taking it, so that answer is the
+    answer node's: a script reads as the turn's tool calls, then its answer. Records
+    what each call that takes an answer saw, and each "Done." call apart.
     """
 
     answers: list[AIMessage]
@@ -68,13 +70,13 @@ class _ScriptedChatModel(BaseChatModel):
     failing_guards: bool = False  # the guards' LLM calls raise
     off_topic_messages: set[str] = Field(default_factory=set)
     blocked_messages: set[str] = Field(default_factory=set)
-    answer_verdicts: list[bool] = Field(default_factory=list)
     agent_calls: list[dict[str, Any]] = Field(default_factory=list)
+    done_calls: list[dict[str, Any]] = Field(default_factory=list)
     input_guard_calls: list[str] = Field(default_factory=list)
     # The content blocks sent after each input guard prompt: the message's attachments.
     input_guard_attachments: list[list[Any]] = Field(default_factory=list)
-    answer_guard_calls: list[str] = Field(default_factory=list)
     bound_tools: list[str] = Field(default_factory=list)
+    answering: bool = False  # bound for the answer node: its tools can't be called
     # The reasoning each agent call asked for (None: none).
     reasoning: list[Any] = Field(default_factory=list)
 
@@ -83,7 +85,12 @@ class _ScriptedChatModel(BaseChatModel):
         return "scripted"
 
     def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
-        return self.model_copy(update={"bound_tools": [tool.name for tool in tools]})
+        return self.model_copy(
+            update={
+                "bound_tools": [tool.name for tool in tools],
+                "answering": kwargs.get("tool_choice") == "none",
+            }
+        )
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
         return RunnableLambda(lambda request: self._verdict(request, schema))
@@ -108,16 +115,22 @@ class _ScriptedChatModel(BaseChatModel):
             if message in self.off_topic_messages:
                 return InputVerdict(reason="unrelated", decision="off_topic")
             return InputVerdict(reason="about AtlasFlow", decision="allow")
-        assert schema is AnswerVerdict
-        self.answer_guard_calls.append(prompt)
-        grounded = self.answer_verdicts.pop(0) if self.answer_verdicts else True
-        return AnswerVerdict(grounded=grounded)
+        raise AssertionError(f"no verdict for {schema}")
 
     def _reply(self, messages: list[BaseMessage]) -> AIMessage:
         if self.failing_calls:
             self.failing_calls -= 1
             raise RuntimeError("model down")
-        self.agent_calls.append({"messages": messages, "tools": self.bound_tools})
+        call = {
+            "messages": messages,
+            "tools": self.bound_tools,
+            "answering": self.answering,
+        }
+        researching = self.bound_tools and not self.answering
+        if researching and not self.answers[0].tool_calls:
+            self.done_calls.append(call)
+            return AIMessage(content="Done.")
+        self.agent_calls.append(call)
         return self.answers.pop(0)
 
     def _record(self, kwargs: dict[str, Any]) -> None:
@@ -257,10 +270,6 @@ def _text(events: list[StreamEvent]) -> str:
     return "".join(e.text for e in events if isinstance(e, TextDelta))
 
 
-def _is_revision_call(call: dict[str, Any]) -> bool:
-    return call["messages"][-1].content == REVISION_INSTRUCTION
-
-
 async def test_streams_only_the_agents_answer_not_the_guards_verdicts() -> None:
     model = _ScriptedChatModel(answers=[_search("pricing"), _answer("It costs 10.")])
 
@@ -278,8 +287,39 @@ async def test_guards_whose_llm_fails_let_the_answer_through() -> None:
 
     assert _text(events) == "It costs 10."
     assert "search_kb" in model.agent_calls[0]["tools"]  # not taken for off-topic
-    assert AnswerChecked(status="done", grounded=True) in events
-    assert not any(_is_revision_call(call) for call in model.agent_calls)
+
+
+async def test_research_hands_over_to_the_answer_which_alone_is_shown_and_kept() -> (
+    None
+):
+    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("It costs 10.")])
+    chat = _Chat(model)
+
+    events = await chat.send("How much?")
+
+    [done] = model.done_calls
+    assert RESEARCH_INSTRUCTION in done["messages"][0].text
+    answer = model.agent_calls[-1]
+    assert ANSWER_INSTRUCTION in answer["messages"][0].text
+    assert "facts about pricing" in answer["messages"][-1].text
+    # Research's "Done." is neither streamed nor remembered.
+    assert _text(events) == "It costs 10."
+    assert "Done." not in [m.text for m in chat.saved_messages()]
+
+
+async def test_the_answer_reads_the_skill_research_loaded_but_cannot_call_tools() -> (
+    None
+):
+    model = _ScriptedChatModel(answers=[_load_skill("release-notes"), _answer("A")])
+
+    await _Chat(model, skills=await _skills_of_the_user()).send("notes please")
+
+    answer = model.agent_calls[-1]
+    assert _loaded_skills(answer["messages"]) == ["Group the changes by area."]
+    assert "- release-notes:" not in answer["messages"][0].text  # loads none itself
+    # Bound, so the API accepts the thread's tool calls, but with tool_choice="none".
+    assert answer["tools"]
+    assert answer["answering"]
 
 
 async def test_artifacts_cover_only_the_current_turn() -> None:
@@ -331,123 +371,6 @@ async def test_a_turn_without_a_search_sends_no_artifacts() -> None:
     assert not any(isinstance(e, ArtifactsReady) for e in events)
 
 
-async def test_ungrounded_answer_is_revised_again_in_a_later_turn() -> None:
-    """The revision counter resets each turn; it used to stay at the cap forever,
-    which silently switched the answer guard off after the first revision.
-    """
-    model = _ScriptedChatModel(
-        answers=[
-            _search("pricing"),
-            _answer("wrong"),
-            _answer("revised"),
-            _search("security"),
-            _answer("wrong again"),
-            _answer("revised again"),
-        ],
-        answer_verdicts=[False, False],
-    )
-    chat = _Chat(model)
-
-    await chat.send("first")
-    await chat.send("second")
-
-    assert sum(_is_revision_call(call) for call in model.agent_calls) == 2
-
-
-async def test_revisions_stop_at_the_cap_and_the_last_answer_is_kept() -> None:
-    model = _ScriptedChatModel(
-        answers=[_search("pricing"), _answer("wrong"), _answer("still wrong")],
-        answer_verdicts=[False, False],
-    )
-
-    events = await _Chat(model).send("first")
-
-    # MAX_REVISIONS is 1: one revision, and the revised answer isn't re-checked.
-    assert sum(_is_revision_call(call) for call in model.agent_calls) == 1
-    assert len(model.answer_guard_calls) == 1
-    assert _text(events).endswith("still wrong")
-
-
-async def test_a_rejected_answer_never_streams_only_its_check_and_revision_do() -> None:
-    model = _ScriptedChatModel(
-        answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
-        answer_verdicts=[False],
-    )
-
-    events = await _Chat(model).send("first")
-
-    # MAX_REVISIONS is 1: the revision isn't checked again.
-    answer = [e for e in events if isinstance(e, TextDelta | AnswerChecked)]
-    assert answer == [
-        AnswerChecked(status="pending"),
-        AnswerChecked(status="done", grounded=False),
-        TextDelta("revised"),
-    ]
-
-
-async def test_a_grounded_answer_streams_once_it_passes_its_check() -> None:
-    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("right")])
-
-    events = await _Chat(model).send("first")
-
-    answer = [e for e in events if isinstance(e, TextDelta | AnswerChecked)]
-    assert answer == [
-        AnswerChecked(status="pending"),
-        AnswerChecked(status="done", grounded=True),
-        TextDelta("right"),
-    ]
-
-
-async def test_an_answer_with_nothing_searched_is_not_checked() -> None:
-    model = _ScriptedChatModel(answers=[_answer("hi!")])
-
-    events = await _Chat(model).send("hello")
-
-    assert not any(isinstance(e, AnswerChecked) for e in events)
-    assert _text(events) == "hi!"
-
-
-async def test_revision_instruction_is_not_saved_to_the_thread() -> None:
-    model = _ScriptedChatModel(
-        answers=[_search("pricing"), _answer("wrong"), _answer("revised")],
-        answer_verdicts=[False],
-    )
-    chat = _Chat(model)
-
-    await chat.send("first")
-
-    saved = [m.content for m in chat.saved_messages()]
-    assert REVISION_INSTRUCTION not in saved
-    assert [
-        m.content for m in chat.saved_messages() if isinstance(m, HumanMessage)
-    ] == ["first"]
-
-
-async def test_a_rejected_answer_is_revised_but_not_remembered() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _search("pricing"),
-            _answer("wrong"),
-            _answer("revised"),
-            _answer("follow-up"),
-        ],
-        answer_verdicts=[False],
-    )
-    chat = _Chat(model)
-
-    await chat.send("first")
-    await chat.send("second")
-
-    revision_call = model.agent_calls[2]
-    assert [m.content for m in revision_call["messages"][-2:]] == [
-        "wrong",
-        REVISION_INSTRUCTION,
-    ]
-    assert "wrong" not in [m.content for m in chat.saved_messages()]
-    assert "revised" in [m.content for m in chat.saved_messages()]
-    assert "wrong" not in [m.content for m in model.agent_calls[3]["messages"]]
-
-
 async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     model = _ScriptedChatModel(
         answers=[
@@ -478,7 +401,7 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert not any(isinstance(m, SystemMessage) for m in chat.saved_messages())
 
 
-async def test_an_off_topic_reply_streams_without_an_answer_check() -> None:
+async def test_an_off_topic_reply_streams_without_research() -> None:
     model = _ScriptedChatModel(
         answers=[_answer("I only help with AtlasFlow.")],
         off_topic_messages={"weather?"},
@@ -487,7 +410,7 @@ async def test_an_off_topic_reply_streams_without_an_answer_check() -> None:
     events = await _Chat(model).send("weather?")
 
     assert _text(events) == "I only help with AtlasFlow."
-    assert not any(isinstance(e, AnswerChecked) for e in events)
+    assert model.done_calls == []
 
 
 async def test_a_failed_search_ends_the_turn_with_an_error_and_is_forgotten() -> None:
@@ -567,29 +490,6 @@ async def test_a_model_call_that_fails_once_is_retried() -> None:
 
     assert events == [TextDelta("hi!")]
     assert [m.content for m in chat.saved_messages()] == ["hello", "hi!"]
-
-
-@pytest.mark.parametrize("second_turn_searches", [False, True])
-async def test_the_answer_guard_only_sees_the_current_turns_context(
-    second_turn_searches: bool,
-) -> None:
-    second_turn = (
-        [_search("security"), _answer("B")]
-        if second_turn_searches
-        else [_answer("hi!")]
-    )
-    model = _ScriptedChatModel(answers=[_search("pricing"), _answer("A"), *second_turn])
-    chat = _Chat(model)
-
-    await chat.send("first")
-    await chat.send("second")
-
-    # Turn 1 is checked. Turn 2 is checked only if it searched, and then only
-    # against its own results, not turn 1's.
-    assert len(model.answer_guard_calls) == (2 if second_turn_searches else 1)
-    if second_turn_searches:
-        assert "facts about security" in model.answer_guard_calls[1]
-        assert "facts about pricing" not in model.answer_guard_calls[1]
 
 
 async def test_a_blocked_message_gets_the_fixed_refusal_and_no_model_call() -> None:
@@ -783,17 +683,6 @@ async def test_the_same_message_with_other_attachments_is_checked_afresh() -> No
     assert len(model.input_guard_calls) == 2
 
 
-async def test_an_answer_may_draw_on_the_attached_text() -> None:
-    model = _ScriptedChatModel(answers=[_search("sync"), _answer("Run the sync job.")])
-
-    await _Chat(model).send("How do I set it up?", [_NOTES])
-
-    [answer_guard_prompt] = model.answer_guard_calls
-    assert "facts about sync" in answer_guard_prompt
-    assert "ATTACHED BY THE USER:" in answer_guard_prompt
-    assert "Run the sync job." in answer_guard_prompt
-
-
 _SKILL_FILE = (
     b"---\nname: release-notes\ndescription: Write release notes.\n---\n"
     b"Group the changes by area.\n"
@@ -830,10 +719,14 @@ async def test_the_model_sees_the_users_skills_but_not_off_topic() -> None:
     await chat.send("hello")
     await chat.send("weather?")
 
-    on_topic, off_topic = (call["messages"][0].text for call in model.agent_calls)
+    [research], [_, off_topic_call] = model.done_calls, model.agent_calls
+    on_topic, off_topic = (
+        research["messages"][0].text,
+        off_topic_call["messages"][0].text,
+    )
     assert "- release-notes: Write release notes." in on_topic
     assert "other-notes" not in on_topic
-    assert "load_skill" in model.agent_calls[0]["tools"]
+    assert "load_skill" in research["tools"]
     assert "release-notes" not in off_topic
 
 
@@ -842,7 +735,8 @@ async def test_without_skills_the_prompt_does_not_mention_them() -> None:
 
     await _Chat(model).send("hello")
 
-    assert "skills" not in model.agent_calls[0]["messages"][0].text
+    [research] = model.done_calls
+    assert "skills" not in research["messages"][0].text
 
 
 async def test_load_skill_hands_the_model_the_users_instructions() -> None:
@@ -918,21 +812,6 @@ async def test_read_skill_file_hands_the_model_one_of_the_users_files() -> None:
     assert theirs.content == ("The user's skill 'other-notes' has no file 'secret.md'.")
 
 
-async def test_a_skill_file_is_not_what_the_answer_is_checked_against() -> None:
-    model = _ScriptedChatModel(
-        answers=[
-            _read_skill_file("release-notes", "references/style.md"),
-            _search("pricing"),
-            _answer("A"),
-        ]
-    )
-
-    await _Chat(model, skills=await _skills_with_files()).send("notes please")
-
-    assert "facts about pricing" in model.answer_guard_calls[0]
-    assert "Be brief." not in model.answer_guard_calls[0]
-
-
 async def test_a_later_turn_rereads_a_skill_load_but_not_its_file_reads() -> None:
     model = _ScriptedChatModel(
         answers=[
@@ -992,26 +871,6 @@ async def test_the_history_is_cut_at_whichever_limit_is_reached_first(
     await chat.send("d")
 
     assert [m.text for m in _user_messages(model.agent_calls[3])] == seen
-
-
-async def test_a_loaded_skill_is_not_what_the_answer_is_checked_against() -> None:
-    model = _ScriptedChatModel(
-        answers=[_load_skill("release-notes"), _search("pricing"), _answer("A")]
-    )
-
-    await _Chat(model, skills=await _skills_of_the_user()).send("notes please")
-
-    assert len(model.answer_guard_calls) == 1
-    assert "facts about pricing" in model.answer_guard_calls[0]
-    assert "Group the changes by area." not in model.answer_guard_calls[0]
-
-
-async def test_a_turn_that_only_loads_a_skill_is_not_checked() -> None:
-    model = _ScriptedChatModel(answers=[_load_skill("release-notes"), _answer("A")])
-
-    events = await _Chat(model, skills=await _skills_of_the_user()).send("notes")
-
-    assert not any(isinstance(e, AnswerChecked) for e in events)
 
 
 def _loaded_skills(messages: Sequence[BaseMessage]) -> list[str]:
@@ -1096,7 +955,8 @@ async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
     assert _text(events) == "From sol."
     assert main.agent_calls == []  # the guards still run on the main model
     assert len(main.input_guard_calls) == 1
-    assert sol.reasoning == [{"effort": "high", "summary": "auto"}]
+    # Research, then the answer.
+    assert sol.reasoning == [{"effort": "high", "summary": "auto"}] * 2
 
 
 async def test_a_model_that_does_not_reason_is_not_asked_to() -> None:
@@ -1104,4 +964,4 @@ async def test_a_model_that_does_not_reason_is_not_asked_to() -> None:
 
     await _Chat(model).send("hello")
 
-    assert model.reasoning == [None]
+    assert model.reasoning == [None, None]  # research, then the answer

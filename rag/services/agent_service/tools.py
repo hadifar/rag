@@ -8,11 +8,9 @@ from rag.domain.models import ARTIFACTS, RunContext, SkillContent, SourceArtifac
 from rag.domain.ports import SearchPort, SkillsPort
 from rag.services.agent_service.prompts import SKILL_FILES_NOTE
 
-# The tools that hand the model a skill's instructions and its reference files: not
-# knowledge-base content, so the answer guard leaves their results out.
+# The tools that hand the model a skill's instructions and its reference files.
 SKILL_TOOL = "load_skill"
 SKILL_FILE_TOOL = "read_skill_file"
-SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
 
 
 def agent_tools(search: SearchPort, skills: SkillsPort) -> list[BaseTool]:
