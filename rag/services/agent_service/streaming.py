@@ -11,7 +11,7 @@ from langchain_core.messages import (
 
 from rag.domain.models import (
     AgentMemory,
-    AnswerVerified,
+    AnswerChecked,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
@@ -26,13 +26,13 @@ logger = logging.getLogger(__name__)
 
 # The custom events RagAgent's guard nodes dispatch, which the stream turns into
 # user-facing events (see _guard_events).
-# verify: the answer's check starting, then its verdict.
-ANSWER_VERIFICATION = "answer_verification"
-# classify: a blocked message, with the refusal sent instead of an answer.
+# check_answer: the answer's check starting, then its verdict.
+ANSWER_CHECK = "answer_check"
+# check_input: a blocked message, with the refusal sent instead of an answer.
 INPUT_BLOCKED = "input_blocked"
 
 # Only RagAgent's model node produces the user-facing answer. The guards' own LLM
-# calls (classification, not an answer) run in their own nodes of this same
+# calls (verdicts, not an answer) run in their own nodes of this same
 # graph and would otherwise leak into the text stream too, since astream_events
 # captures every chat model call in the run, not just this one.
 _USER_FACING_NODE = "model"
@@ -102,7 +102,7 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
 
 
 class AnswerGate:
-    """Holds back answer text the groundedness guard may still reject, so the user never
+    """Holds back answer text the answer guard may still reject, so the user never
     sees an answer that is then taken back. Text streams live until a tool runs in the
     turn: with nothing retrieved there is nothing to check it against. After that, each
     model call's text is held until it is clear what it was: released before the next
@@ -126,10 +126,10 @@ class AnswerGate:
             case ToolCall() | TodosUpdated():
                 self._checkable = True
                 return [*self.flush(), event]
-            case AnswerVerified(status="done", grounded=False):
+            case AnswerChecked(status="done", grounded=False):
                 self._held.clear()
                 return [event]
-            case AnswerVerified(status="done"):
+            case AnswerChecked(status="done"):
                 return [event, *self.flush()]
             case _:
                 return [event]
@@ -146,8 +146,8 @@ def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     aren't streamed.
     """
     name, data = raw_event["name"], raw_event["data"]
-    if name == ANSWER_VERIFICATION:
-        return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
+    if name == ANSWER_CHECK:
+        return [AnswerChecked(status=data["status"], grounded=data.get("grounded"))]
     if name == INPUT_BLOCKED:
         return [TextDelta(text=data["message"])]
     return []

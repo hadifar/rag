@@ -14,7 +14,7 @@ sequenceDiagram
     R->>CS: send_message
     CS->>DB: load earlier turns' agent memory
     CS->>A: run turn (with that memory)
-    A->>LLM: classify (off-topic guard)
+    A->>LLM: check_input (input guard)
     A->>LLM: model call
     A->>KB: search_kb
     KB->>DB: vector search
@@ -22,9 +22,9 @@ sequenceDiagram
     A-->>CS: stream events
     CS-->>R: events
     R-->>UI: SSE data: {type, ...}
-    A-->>UI: verification pending
-    A->>LLM: verify (groundedness check)
-    A-->>UI: verification done (grounded or not)
+    A-->>UI: answer check pending
+    A->>LLM: check_answer (answer guard)
+    A-->>UI: answer check done (grounded or not)
     alt grounded
         A-->>UI: answer
     else ungrounded

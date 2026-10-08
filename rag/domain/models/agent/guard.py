@@ -2,13 +2,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# allow: about the product. restrict: harmless but off-topic, so the model declines.
+# allow: about the product. off_topic: harmless but unrelated, so the model declines.
 # block: an injection, jailbreak or harmful request, which never reaches the model.
-InputDecision = Literal["allow", "restrict", "block"]
+InputDecision = Literal["allow", "off_topic", "block"]
 
 
 class InputVerdict(BaseModel):
-    """The off-topic guard's verdict on a user message: the schema its LLM call fills,
+    """The input guard's verdict on a user message: the schema its LLM call fills,
     and what its cache keeps.
     """
 
@@ -17,3 +17,9 @@ class InputVerdict(BaseModel):
         description="One sentence on why the message gets the decision."
     )
     decision: InputDecision
+
+
+class AnswerVerdict(BaseModel):
+    """The answer guard's verdict on an answer: the schema its LLM call fills."""
+
+    grounded: bool

@@ -10,24 +10,24 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
-	classify(classify)
+	check_input(check_input)
 	invoke_skill(invoke_skill)
 	model(model)
 	tools(tools)
-	verify(verify)
+	check_answer(check_answer)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> classify;
-	classify -.-> __end__;
-	classify -.-> invoke_skill;
-	classify -.-> model;
+	__start__ --> check_input;
+	check_answer -.-> __end__;
+	check_answer -.-> model;
+	check_input -.-> __end__;
+	check_input -.-> invoke_skill;
+	check_input -.-> model;
 	invoke_skill --> model;
 	model -.-> __end__;
+	model -.-> check_answer;
 	model -.-> tools;
-	model -.-> verify;
 	tools --> model;
-	verify -.-> __end__;
-	verify -.-> model;
 ```
 
-* `classify` ends the turn for a blocked question and sends an off-topic one straight to `model`; `invoke_skill` starts a turn whose question begins with `/<name>` with that skill loaded; `verify` ends it, or sends a rejected answer back to `model` to revise.
+* `check_input` ends the turn for a blocked question and sends an off-topic one straight to `model`; `invoke_skill` starts a turn whose question begins with `/<name>` with that skill loaded; `check_answer` ends it, or sends a rejected answer back to `model` to revise.
 * `model` builds each call's system prompt (planning or the off-topic decline) and picks its tools; neither is saved to the thread.

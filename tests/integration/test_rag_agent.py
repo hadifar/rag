@@ -28,7 +28,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
             llm,
             search=container.retrieval_service,
             skills=FakeSkillRepository(),  # a throwaway user has none
-            verdicts=NoCache(),
+            input_verdicts=NoCache(),
         )
         answer = ""
         tool_calls = []

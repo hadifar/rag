@@ -4,19 +4,19 @@ from langchain_core.messages import BaseMessage
 
 from rag.domain.models import AttachmentFile, InputDecision, InputVerdict
 from rag.domain.ports import CachePort, LLMPort
-from rag.services.agent_service.prompts import GUARDRAIL_PROMPT, OFF_TOPIC_SCOPE
+from rag.services.agent_service.prompts import INPUT_GUARD_PROMPT, PRODUCT_SCOPE
 from rag.services.agent_service.messages import is_final_answer, split_turns
 from rag.shared.resilience import or_default
 
 logger = logging.getLogger(__name__)
 
-# Earlier turns the classifier sees, to read a follow-up like "and what about pricing?".
+# Earlier turns the guard sees, to read a follow-up like "and what about pricing?".
 HISTORY_TURNS = 2
 
 
 def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
     """Each turn's user message and the answer it got: no tool output, which is long
-    and could carry text that steers the classifier.
+    and could carry text that steers the guard.
     """
     lines: list[str] = []
     for turn in turns[-HISTORY_TURNS:]:
@@ -27,21 +27,22 @@ def _history(turns: Sequence[Sequence[BaseMessage]]) -> str:
     return "\n".join(lines) or "(none)"
 
 
-async def classify_input(
+async def check_input(
     llm: LLMPort,
     messages: Sequence[BaseMessage],
     cache: CachePort[InputVerdict],
     attachments: Sequence[AttachmentFile] = (),
 ) -> InputDecision:
     """The decision for the latest user message and its `attachments`, with the turns
-    before it for context; allow if there's none or the classifier failed (fail open).
+    before it for context; allow if there's none or the guard's LLM call failed (fail
+    open).
     """
     turns = split_turns(messages)
     if not turns or not (turns[-1][0].text or attachments):
         return "allow"
 
-    prompt = GUARDRAIL_PROMPT.format(
-        scope=OFF_TOPIC_SCOPE, history=_history(turns[:-1]), message=turns[-1][0].text
+    prompt = INPUT_GUARD_PROMPT.format(
+        scope=PRODUCT_SCOPE, history=_history(turns[:-1]), message=turns[-1][0].text
     )
     verdict = await _verdict(llm, prompt, attachments, cache)
     if verdict is None:
@@ -57,9 +58,9 @@ async def _verdict(
     attachments: Sequence[AttachmentFile],
     cache: CachePort[InputVerdict],
 ) -> InputVerdict | None:
-    """The classifier's verdict, None if it failed. Verdicts are cached by the whole
+    """The guard's verdict, None if its LLM call failed. Verdicts are cached by the whole
     prompt and the attachments' content, so the same message after a different history
-    is classified afresh; a failed call is never cached.
+    is checked afresh; a failed call is never cached.
     """
     key = "\n".join([prompt, *(f.attachment.sha256 for f in attachments)])
     verdict = await or_default(cache.get(key), None)

@@ -10,7 +10,7 @@ import pytest
 
 from rag.api.schema.chat import StreamEventResponse, to_stream_event
 from rag.domain.models import (
-    AnswerVerified,
+    AnswerChecked,
     ArtifactsReady,
     ReasoningDelta,
     SourceArtifact,
@@ -28,7 +28,7 @@ _SAMPLES: list[StreamEvent] = [
     ReasoningDelta(text="Thinking"),
     ToolCall(name="search_kb", status="done", query="pricing", output="Plans…"),
     TodosUpdated(todos=[Todo(content="Find pricing", status="in_progress")]),
-    AnswerVerified(status="done", grounded=False),
+    AnswerChecked(status="done", grounded=False),
     ArtifactsReady(artifacts=[SourceArtifact(id="pricing.md")]),
     TurnFailed(message="Something went wrong"),
 ]

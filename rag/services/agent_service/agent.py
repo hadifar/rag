@@ -29,8 +29,8 @@ from rag.services.agent_service.attachments import (
     question_message,
     with_attachments,
 )
-from rag.services.agent_service.guards.groundedness import answer_to_check
-from rag.services.agent_service.guards.off_topic import classify_input
+from rag.services.agent_service.guards.answer import answer_to_check
+from rag.services.agent_service.guards.input import check_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.memory import HistoryLimits, recall
 from rag.services.agent_service.messages import is_final_answer
@@ -42,33 +42,31 @@ from rag.services.agent_service.prompts import (
 from rag.services.agent_service.skills import (
     invoked_skill,
     skill_file_tool,
-    skill_load_messages,
+    skill_to_messages,
     skill_tool,
 )
 from rag.services.agent_service.streaming import (
-    ANSWER_VERIFICATION,
+    ANSWER_CHECK,
     INPUT_BLOCKED,
     AgentTurn,
 )
 from rag.services.agent_service.tools import search_tool
 
-# Times verify sends an answer back to revise per turn; past it, the last answer ships.
+# Times check_answer sends an answer back to revise per turn; past it, the last answer ships.
 MAX_REVISIONS = 1
 
 # Graph steps a turn may take before LangGraph stops it (its default is 25). Each tool
-# round trip costs two (model, tools), each checked answer one more (verify).
+# round trip costs two (model, tools), each checked answer one more (check_answer).
 RECURSION_LIMIT = 75
 
-# Where classify and verify go next. LangGraph's END is typed as a plain str, so the
+# Where check_input and check_answer go next. LangGraph's END is typed as a plain str, so the
 # routes name it by its value.
-_Next = Literal["model", "__end__"]
-_Classified = Literal["invoke_skill", "model", "__end__"]
+_AfterInput = Literal["invoke_skill", "model", "__end__"]
+_AfterAnswer = Literal["model", "__end__"]
 
 
 class ChatState(MessagesState):
-    decision: NotRequired[
-        InputDecision
-    ]  # the off-topic guard's verdict on the turn's question
+    input_decision: NotRequired[InputDecision]  # the input guard's, on the question
     todos: NotRequired[list[Todo]]  # the plan, which write_todos replaces whole
     revisions: NotRequired[int]  # answers sent back to revise this turn
     # The thread's attachments by id: its messages list ids, each model call reads these.
@@ -80,14 +78,14 @@ class ChatState(MessagesState):
 class RagAgent:
     """The RAG agent (an AgentPort), grounded in the knowledge base, on this graph:
 
-        START -> classify -> invoke_skill -> model <-> tools
-                  |    |                      ^  |
-                  |    +---- off-topic -------+  |
-                 END                          verify -> END, or back to model to revise
+        START -> check_input -> invoke_skill -> model <-> tools
+                   |    |                        ^  |
+                   |    +----- off_topic --------+  |
+                  END                         check_answer -> END, or back to model
 
-    `classify` ends a blocked question's turn before the model runs, and sends an
+    `check_input` ends a blocked question's turn before the model runs, and sends an
     off-topic one straight to the model, which is only to decline; `invoke_skill`
-    loads the skill a question invokes ("/<name> ..."); `verify` checks a
+    loads the skill a question invokes ("/<name> ..."); `check_answer` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
     times, after which the model's answer ends the turn unchecked. Every LLM call, the
     model's and the guards', is retried by `llm`; once those run out, a model call's
@@ -96,8 +94,8 @@ class RagAgent:
     one's instructions with a tool when a question fits it.
     Instructions for one model call (declining an off-topic question, revising an
     answer) are added to that call only, never saved to the thread, so they can't leak
-    into later turns. It keeps nothing between turns but the off-topic guard's
-    verdicts, in `verdicts`.
+    into later turns. It keeps nothing between turns but the input guard's
+    verdicts, in `input_verdicts`.
     """
 
     def __init__(
@@ -106,7 +104,7 @@ class RagAgent:
         search: SearchPort,
         skills: SkillsPort,
         *,
-        verdicts: CachePort[InputVerdict],
+        input_verdicts: CachePort[InputVerdict],
         history_limits: HistoryLimits | None = None,
     ):
         tools = [
@@ -125,7 +123,7 @@ class RagAgent:
         # each raises once its retries run out, and each guard fails open.
         self._llm = llm
         self._trace_config = llm.trace_config
-        self._verdicts = verdicts  # the off-topic guard's
+        self._input_verdicts = input_verdicts
         self._skills = skills
         self._history_limits = history_limits or HistoryLimits()  # see `recall`
 
@@ -133,13 +131,13 @@ class RagAgent:
 
     def _init_graph(self, tools):
         graph = StateGraph(ChatState, context_schema=RunContext)
-        graph.add_node("classify", self._classify)
+        graph.add_node("check_input", self._check_input)
         graph.add_node("invoke_skill", self._invoke_skill)
         graph.add_node("model", self._model)
         graph.add_node("tools", ToolNode(tools))
-        graph.add_node("verify", self._verify)
+        graph.add_node("check_answer", self._check_answer)
 
-        graph.add_edge(START, "classify")
+        graph.add_edge(START, "check_input")
         graph.add_edge("invoke_skill", "model")
         graph.add_conditional_edges("model", _after_model)
         graph.add_edge("tools", "model")
@@ -172,23 +170,23 @@ class RagAgent:
         )
         return AgentTurn(run, question)
 
-    async def _classify(self, state: ChatState) -> Command[_Classified]:
+    async def _check_input(self, state: ChatState) -> Command[_AfterInput]:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
         question = state["messages"][-1]
-        decision = await classify_input(
+        decision = await check_input(
             self._llm,
             state["messages"],
-            self._verdicts,
+            self._input_verdicts,
             attachments_of(question, state.get("attachments", {})),
         )
 
-        if decision == "restrict":
-            return Command(goto="model", update={"decision": decision})
+        if decision == "off_topic":
+            return Command(goto="model", update={"input_decision": decision})
 
         if decision == "allow":
-            return Command(goto="invoke_skill", update={"decision": decision})
+            return Command(goto="invoke_skill", update={"input_decision": decision})
 
         await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
 
@@ -209,20 +207,25 @@ class RagAgent:
         content = await self._skills.content(runtime.context.user_id, name)
         if content is None:
             return {}
-        return {"messages": skill_load_messages(name, content)}
+        return {"messages": skill_to_messages(name, content)}
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> dict[str, Any]:
-        off_topic = state.get("decision") == "restrict"
+
+        off_topic = state.get("input_decision") == "off_topic"
+
         skills = state.get("skills")
+
         if skills is None:
             skills = await self._skills.list_for_user(runtime.context.user_id)
+
         messages: list[BaseMessage] = [
             SystemMessage(system_prompt(off_topic=off_topic, skills=skills)),
             *with_attachments(state["messages"], state.get("attachments", {})),
         ]
-        # The model only runs right after a final answer when verify rejected it.
+
+        # The model only runs right after a final answer when check_answer rejected it.
         if is_final_answer(state["messages"][-1]):
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
@@ -231,7 +234,7 @@ class RagAgent:
         model = self._llm.prepare(models[ctx.model], ctx.effort)
         return {"messages": [await model.ainvoke(messages)], "skills": skills}
 
-    async def _verify(self, state: ChatState) -> Command[_Next]:
+    async def _check_answer(self, state: ChatState) -> Command[_AfterAnswer]:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
         a rejected answer never reaches the user.
         """
@@ -240,10 +243,10 @@ class RagAgent:
             return Command(goto="__end__")
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
-        await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
+        await adispatch_custom_event(ANSWER_CHECK, {"status": "pending"})
         grounded = await check.passes(self._llm)
         await adispatch_custom_event(
-            ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
+            ANSWER_CHECK, {"status": "done", "grounded": grounded}
         )
         if grounded:
             return Command(goto="__end__")
@@ -252,9 +255,9 @@ class RagAgent:
         )
 
 
-def _after_model(state: ChatState) -> Literal["tools", "verify", "__end__"]:
+def _after_model(state: ChatState) -> Literal["tools", "check_answer", "__end__"]:
     """Tool calls run; an answer is checked while the turn may still revise it."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
-    return "verify" if state.get("revisions", 0) < MAX_REVISIONS else "__end__"
+    return "check_answer" if state.get("revisions", 0) < MAX_REVISIONS else "__end__"

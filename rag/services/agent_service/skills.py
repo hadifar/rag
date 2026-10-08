@@ -10,7 +10,7 @@ from rag.domain.ports import SkillsPort
 from rag.services.agent_service.prompts import SKILL_FILES_NOTE
 
 # The tools that hand the model a skill's instructions and its reference files: not
-# knowledge-base content, so the groundedness guard leaves their results out.
+# knowledge-base content, so the answer guard leaves their results out.
 SKILL_TOOL = "load_skill"
 SKILL_FILE_TOOL = "read_skill_file"
 SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
@@ -82,7 +82,7 @@ def invoked_skill(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def skill_load_messages(name: str, content: SkillContent) -> list[BaseMessage]:
+def skill_to_messages(name: str, content: SkillContent) -> list[BaseMessage]:
     """The load_skill call and its result (`content`, as `render_skill` words it), as
     if the model had made it: what a turn that invokes the skill starts with, so the
     model follows it, and later turns remember it was loaded.

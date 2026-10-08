@@ -68,7 +68,7 @@ class Container:
 class _Caches:
     embeddings: CachePort[list[float]]
     search: CachePort[list[tuple[Chunk, float]]]
-    verdicts: CachePort[InputVerdict]
+    input_verdicts: CachePort[InputVerdict]
 
 
 def _caches(
@@ -78,7 +78,7 @@ def _caches(
     that shape its result.
     """
     if not settings.CACHE.ENABLED:
-        return _Caches(embeddings=NoCache(), search=NoCache(), verdicts=NoCache())
+        return _Caches(embeddings=NoCache(), search=NoCache(), input_verdicts=NoCache())
 
     cache, llm, retrieval = settings.CACHE, settings.LLM, settings.RETRIEVAL
     reranker = DEFAULT_MODEL if retrieval.RERANK_CANDIDATES else "none"
@@ -98,7 +98,7 @@ def _caches(
                 f"summary_weight={retrieval.SUMMARY_WEIGHT};reranker={reranker}"
             ),
         ),
-        verdicts=InputVerdictCacheRepository(
+        input_verdicts=InputVerdictCacheRepository(
             db_pool,
             model=DEFAULT_MODEL,
             ttl=timedelta(days=cache.VERDICT_TTL_DAYS),
@@ -152,7 +152,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             llm=llm,
             search=retrieval_service,
             skills=skill_repo,
-            verdicts=caches.verdicts,
+            input_verdicts=caches.input_verdicts,
             history_limits=HistoryLimits(
                 max_tokens=settings.LLM.HISTORY_MAX_TOKENS,
                 max_turns=settings.LLM.HISTORY_MAX_TURNS,

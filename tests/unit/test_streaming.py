@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessageChunk
 from langgraph.types import Command
 
 from rag.domain.models import (
-    AnswerVerified,
+    AnswerChecked,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
@@ -90,13 +90,13 @@ def test_planning_tool_start_is_not_a_tool_call():
 
 def test_the_answers_check_is_sent_as_it_starts_and_with_its_verdict():
     def check(data: dict) -> dict:
-        return {"event": "on_custom_event", "name": "answer_verification", "data": data}
+        return {"event": "on_custom_event", "name": "answer_check", "data": data}
 
     assert parse_event(check({"status": "pending"})) == [
-        AnswerVerified(status="pending")
+        AnswerChecked(status="pending")
     ]
     assert parse_event(check({"status": "done", "grounded": False})) == [
-        AnswerVerified(status="done", grounded=False)
+        AnswerChecked(status="done", grounded=False)
     ]
 
 
@@ -115,9 +115,9 @@ def test_other_custom_events_are_not_streamed():
 
 
 _SEARCH = ToolCall(name="search_kb", status="pending", query="pricing")
-_CHECKING = AnswerVerified(status="pending")
-_PASSED = AnswerVerified(status="done", grounded=True)
-_FAILED = AnswerVerified(status="done", grounded=False)
+_CHECKING = AnswerChecked(status="pending")
+_PASSED = AnswerChecked(status="done", grounded=True)
+_FAILED = AnswerChecked(status="done", grounded=False)
 
 
 def _gated(*events: StreamEvent) -> list[StreamEvent]:

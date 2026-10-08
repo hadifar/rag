@@ -12,7 +12,7 @@ export function emptyTranscript(): Transcript {
 }
 
 function openTurn(): Turn {
-  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null, verificationId: null };
+  return { textId: null, reasoningId: null, pendingToolIds: [], todosId: null, answerCheckId: null };
 }
 
 /** A working copy that the functions below edit in place before handing it back. */
@@ -52,7 +52,7 @@ function endReasoning(t: Transcript, turn: Turn): void {
  * tool), a tool's bubble is filled in when it's `done`, the plan is one bubble rewritten
  * in place each time the agent updates it, the answer's check is a bubble filled in with
  * its verdict, and the turn's sources get their own. A checked answer arrives only after its
- * verdict, so it follows the verification bubble.
+ * verdict, so it follows the answer check bubble.
  */
 export function applyEvent(transcript: Transcript, event: StreamEventResponse): Transcript {
   const t = draft(transcript);
@@ -101,15 +101,15 @@ export function applyEvent(transcript: Transcript, event: StreamEventResponse): 
       }
       break;
     }
-    case 'verification': {
+    case 'answer_check': {
       const { type, ...content } = event;
       if (content.status === 'pending') {
-        turn.verificationId = push(t, { type, content });
+        turn.answerCheckId = push(t, { type, content });
         // Like a tool call: the checked answer is sent after its verdict, below it.
         turn.textId = null;
-      } else if (turn.verificationId !== null) {
-        edit(t, turn.verificationId, 'verification', () => content);
-        turn.verificationId = null;
+      } else if (turn.answerCheckId !== null) {
+        edit(t, turn.answerCheckId, 'answer_check', () => content);
+        turn.answerCheckId = null;
       }
       break;
     }

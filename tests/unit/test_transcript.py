@@ -1,5 +1,5 @@
 from rag.domain.models import (
-    AnswerVerified,
+    AnswerChecked,
     ArtifactsReady,
     ReasoningDelta,
     StreamEvent,
@@ -38,10 +38,10 @@ def test_text_on_either_side_of_a_search_stays_apart() -> None:
 
 def test_a_revision_follows_the_rejected_answers_verdict() -> None:
     # The rejected answer never reached the stream, only its verdict did.
-    rejected = AnswerVerified(status="done", grounded=False)
+    rejected = AnswerChecked(status="done", grounded=False)
 
     assert _built(
-        AnswerVerified(status="pending"),
+        AnswerChecked(status="pending"),
         rejected,
         TextDelta("revised"),
-    ) == [AnswerVerified(status="pending"), rejected, TextDelta("revised")]
+    ) == [AnswerChecked(status="pending"), rejected, TextDelta("revised")]

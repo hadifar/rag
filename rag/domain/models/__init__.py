@@ -11,9 +11,9 @@ from rag.domain.models.agent.agent import (
     RunContext,
 )
 from rag.domain.models.agent.artifact import ARTIFACTS, Artifact, SourceArtifact
-from rag.domain.models.agent.guard import InputDecision, InputVerdict
+from rag.domain.models.agent.guard import AnswerVerdict, InputDecision, InputVerdict
 from rag.domain.models.agent.stream import (
-    AnswerVerified,
+    AnswerChecked,
     ArtifactsReady,
     ReasoningDelta,
     StreamEvent,
@@ -57,7 +57,8 @@ __all__ = [
     "MODEL_NAMES",
     "ARTIFACTS",
     "AgentMemory",
-    "AnswerVerified",
+    "AnswerChecked",
+    "AnswerVerdict",
     "AppSettings",
     "Artifact",
     "ArtifactsReady",

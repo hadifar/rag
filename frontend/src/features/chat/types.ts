@@ -1,17 +1,17 @@
 import type {
+  AnswerCheckEvent,
   ReasoningEvent,
   RunSettingsResponse,
   TextEvent,
   TodosEvent,
   ToolEvent,
-  VerificationEvent,
 } from '@/shared/types';
 
 // A bubble's content is the stream event it shows, minus its `type`.
 export type TextContent = Omit<TextEvent, 'type'>;
 export type ToolContent = Omit<ToolEvent, 'type'>;
 export type TodosContent = Omit<TodosEvent, 'type'>;
-export type VerificationContent = Omit<VerificationEvent, 'type'>;
+export type AnswerCheckContent = Omit<AnswerCheckEvent, 'type'>;
 // `streaming` until the model moves on from reasoning to answering or calling a tool.
 export type ReasoningContent = Omit<ReasoningEvent, 'type'> & { streaming: boolean };
 export type ErrorContent = { text: string };
@@ -45,7 +45,7 @@ export type Bubble = { id: string } & (
   | { type: 'reasoning'; content: ReasoningContent }
   | { type: 'tool'; content: ToolContent }
   | { type: 'todos'; content: TodosContent }
-  | { type: 'verification'; content: VerificationContent }
+  | { type: 'answer_check'; content: AnswerCheckContent }
   | { type: 'sources'; content: SourcesContent }
   | { type: 'error'; content: ErrorContent }
 );
@@ -64,7 +64,7 @@ export type Turn = {
   // genuinely concurrent calls need a call id from the backend to track precisely.
   pendingToolIds: string[];
   todosId: string | null;
-  verificationId: string | null;
+  answerCheckId: string | null;
 };
 
 /** A conversation as shown: its bubbles, and the answer still being streamed, if any. */
