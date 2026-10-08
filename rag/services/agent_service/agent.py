@@ -80,9 +80,11 @@ class RagAgent:
         history_limits: HistoryLimits | None = None,
     ):
         tools = agent_tools(search, skills)
-        # One of each per model a conversation can be set to.
+        # One of each per model a conversation can be set to. Its tool calls in one
+        # reply run concurrently (ToolNode), so its searches run in parallel.
         self._research_models = {
-            name: model.bind_tools(tools) for name, model in llm.models.items()
+            name: model.bind_tools(tools, parallel_tool_calls=True)
+            for name, model in llm.models.items()
         }
         # The tools stay bound, unusable, so the API accepts research's tool calls in
         # the thread; the answer is written from what they returned.

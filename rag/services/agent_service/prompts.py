@@ -7,7 +7,6 @@ RAG_SYSTEM_PROMPT = (
     "base, never from memory."
 )
 
-# The research node's step: it gathers what the answer node writes the answer from.
 RESEARCH_INSTRUCTION = (
     "In this step you gather what the latest message needs from the knowledge base, "
     "which you reach with the search_kb tool. You don't write the answer: another "
@@ -17,7 +16,16 @@ RESEARCH_INSTRUCTION = (
     '"Done."'
 )
 
-# The answer node's step: it writes the answer from what research found.
+
+PLANNING_INSTRUCTIONS = (
+    "Use write_todos to show the user your plan: one todo per search the message "
+    "needs, each with a query focused on just its part. Send the plan and every "
+    "search that doesn't depend on another in the same reply: they run in parallel. "
+    "When their results are in, mark those todos completed in your next reply, with "
+    "any follow-up searches in that same reply, adding or dropping todos as the "
+    "results show. Call write_todos at most once per reply."
+)
+
 ANSWER_INSTRUCTION = (
     "Answer the latest message now, using only what the search_kb results above "
     "returned; you can't search any more. Cover every part of the question. If some "
@@ -93,14 +101,6 @@ INPUT_GUARD_PROMPT = (
     "LATEST MESSAGE:\n<<<\n{message}\n>>>"
 )
 
-# The research node's planning: when to plan with write_todos, which only it can see.
-PLANNING_INSTRUCTIONS = (
-    "Always use write_todos first to list one todo per question or search. "
-    "Then work through them in order: mark a todo in_progress, run search_kb with a "
-    "query focused on just that part, and mark it "
-    "completed before starting the next. If a search shows the plan needs changing, "
-    "update the list. Never call write_todos more than once at a time."
-)
 
 # Shown to the user when a turn fails (see TurnFailed).
 TURN_FAILED_MESSAGE = "Something went wrong while answering. Please try again."

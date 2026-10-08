@@ -1,5 +1,6 @@
 """Multi-turn tests for the chat agent: per-turn state must not leak into later turns."""
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -77,6 +78,7 @@ class _ScriptedChatModel(BaseChatModel):
     input_guard_attachments: list[list[Any]] = Field(default_factory=list)
     bound_tools: list[str] = Field(default_factory=list)
     answering: bool = False  # bound for the answer node: its tools can't be called
+    parallel_tool_calls: bool | None = None  # as bound
     # The reasoning each agent call asked for (None: none).
     reasoning: list[Any] = Field(default_factory=list)
 
@@ -89,6 +91,7 @@ class _ScriptedChatModel(BaseChatModel):
             update={
                 "bound_tools": [tool.name for tool in tools],
                 "answering": kwargs.get("tool_choice") == "none",
+                "parallel_tool_calls": kwargs.get("parallel_tool_calls"),
             }
         )
 
@@ -125,6 +128,7 @@ class _ScriptedChatModel(BaseChatModel):
             "messages": messages,
             "tools": self.bound_tools,
             "answering": self.answering,
+            "parallel_tool_calls": self.parallel_tool_calls,
         }
         researching = self.bound_tools and not self.answering
         if researching and not self.answers[0].tool_calls:
@@ -193,13 +197,33 @@ class _StubRetrievalService:
         ]
 
 
-def _search(query: str) -> AIMessage:
+def _search(*queries: str) -> AIMessage:
+    """One reply with a search_kb call per query."""
     return AIMessage(
         content="",
         tool_calls=[
             {"name": "search_kb", "args": {"query": query}, "id": str(uuid.uuid4())}
+            for query in queries
         ],
     )
+
+
+class _SearchesThatMeet(_StubRetrievalService):
+    """Each search waits until `expected` are running at once; run one at a time,
+    the first times out and fails the turn.
+    """
+
+    def __init__(self, expected: int):
+        self._expected = expected
+        self._running = 0
+        self._all_running = asyncio.Event()
+
+    async def search(self, query: str, top_k: int = 3) -> list[tuple[Chunk, float]]:
+        self._running += 1
+        if self._running == self._expected:
+            self._all_running.set()
+        await asyncio.wait_for(self._all_running.wait(), timeout=1)
+        return await super().search(query, top_k)
 
 
 def _answer(text: str) -> AIMessage:
@@ -320,6 +344,24 @@ async def test_the_answer_reads_the_skill_research_loaded_but_cannot_call_tools(
     # Bound, so the API accepts the thread's tool calls, but with tool_choice="none".
     assert answer["tools"]
     assert answer["answering"]
+
+
+async def test_one_replys_searches_run_in_parallel() -> None:
+    model = _ScriptedChatModel(answers=[_search("pricing", "security"), _answer("A")])
+
+    agent = RagAgent(
+        Llm(dict.fromkeys(MODEL_NAMES, model), _no_tracing, attempts=1),
+        _SearchesThatMeet(expected=2),
+        FakeSkillRepository(),
+        input_verdicts=FakeCache(),
+    )
+    ctx = RunContext(user_id=_USER, conversation_id=_CONVERSATION)
+
+    events = [e async for e in agent.stream("both?", [], ctx)]
+
+    assert model.agent_calls[0]["parallel_tool_calls"] is True
+    assert not any(isinstance(e, TurnFailed) for e in events)
+    assert _sources(events) == ["pricing", "security"]
 
 
 async def test_artifacts_cover_only_the_current_turn() -> None:
