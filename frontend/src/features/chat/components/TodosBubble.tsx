@@ -34,12 +34,12 @@ export function TodosBubble({ todos }: TodosContent) {
   return (
     <BubbleFrame className="w-[480px]">
       <div className="mb-1 text-xs font-medium text-slate-700">📋 Plan</div>
-      <ul aria-label="Plan" className="rounded-lg border border-slate-200 bg-white text-xs">
+      <ul aria-label="Plan" className="m-0 list-none rounded-lg p-0 border border-slate-200 bg-white text-xs">
         {todos.map(({ content, status }, index) => (
           <li
             // The agent rewrites the whole list each time, and two todos can read the same.
             key={`${index}:${content}`}
-            className="flex items-center gap-2 border-b border-slate-200 px-2.5 py-1.5 last:border-b-0"
+            className="flex items-center gap-2 border-b border-slate-200 px-2.5 py-2 last:border-b-0"
           >
             <span className="flex shrink-0" title={STATUS_LABEL[status]}>
               <StatusIcon status={status} />
