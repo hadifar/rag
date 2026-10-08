@@ -87,10 +87,24 @@
   }
 }
 
-/* Still ends, so the row is taken off the list, but without the motion. */
+/* Asked for less motion: the row just fades, then folds shut, with no blur or rise. */
 @media (prefers-reduced-motion: reduce) {
   .animate-vaporize {
-    animation-duration: 1ms;
+    animation: fade-shut 300ms ease-out forwards;
+  }
+}
+@keyframes fade-shut {
+  0% {
+    opacity: 1;
+    max-height: 3rem;
+  }
+  60% {
+    opacity: 0;
+    max-height: 3rem;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
   }
 }
 

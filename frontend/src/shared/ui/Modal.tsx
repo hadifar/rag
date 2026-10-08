@@ -13,7 +13,7 @@ type Props = {
 };
 
 /**
- * A centred card over a blurred backdrop; Escape, the backdrop and the X all close it. A
+ * A centred card over a dimmed backdrop; Escape, the backdrop and the X all close it. A
  * modal `<dialog>`: the browser keeps focus inside it and makes the page behind it inert.
  */
 export function Modal({
@@ -61,7 +61,7 @@ export function Modal({
       aria-describedby={describedBy}
       onCancel={handleCancel}
       onClick={handleClick}
-      className="m-auto w-full max-w-[min(28rem,calc(100%-2rem))] rounded-3xl bg-white p-0 shadow-2xl ring-1 ring-slate-900/5 transition duration-200 ease-out backdrop:bg-slate-900/40 backdrop:backdrop-blur-sm starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
+      className="m-auto w-full max-w-[min(28rem,calc(100%-2rem))] rounded-3xl border-0 bg-white p-0 shadow-2xl ring-1 ring-slate-900/5 transition duration-200 ease-out backdrop:bg-slate-900/40starting:scale-95 starting:opacity-0 motion-reduce:transition-none"
     >
       <div className={`relative p-6 sm:p-8 ${className}`}>
         {showCloseButton && (
