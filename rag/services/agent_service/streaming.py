@@ -2,6 +2,7 @@ import logging
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
+from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import (
     AIMessageChunk,
     BaseMessage,
@@ -24,12 +25,12 @@ from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
 
 logger = logging.getLogger(__name__)
 
-# The custom events RagAgent's guard nodes dispatch, which the stream turns into
-# user-facing events (see _guard_events).
+# The custom events RagAgent's guard nodes dispatch (with the helpers below), which the
+# stream turns into user-facing events (see _guard_events).
 # check_answer: the answer's check starting, then its verdict.
-ANSWER_CHECK = "answer_check"
+_ANSWER_CHECK = "answer_check"
 # check_input: a blocked message, with the refusal sent instead of an answer.
-INPUT_BLOCKED = "input_blocked"
+_INPUT_BLOCKED = "input_blocked"
 
 # Only RagAgent's model and decline nodes produce the user-facing answer. The guards' own LLM
 # calls (verdicts, not an answer) run in their own nodes of this same
@@ -143,15 +144,30 @@ class AnswerGate:
         return list(held)
 
 
+async def input_blocked(message: str) -> None:
+    """Sends `message`, the refusal, as the blocked question's answer."""
+    await adispatch_custom_event(_INPUT_BLOCKED, {"message": message})
+
+
+async def answer_check_started() -> None:
+    await adispatch_custom_event(_ANSWER_CHECK, {"status": "pending"})
+
+
+async def answer_checked(grounded: bool) -> None:
+    await adispatch_custom_event(
+        _ANSWER_CHECK, {"status": "done", "grounded": grounded}
+    )
+
+
 def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     """What the guards dispatched: the answer's check starting, then its verdict; or
     the refusal for a blocked message, sent as the answer's text. Other custom events
     aren't streamed.
     """
     name, data = raw_event["name"], raw_event["data"]
-    if name == ANSWER_CHECK:
+    if name == _ANSWER_CHECK:
         return [AnswerChecked(status=data["status"], grounded=data.get("grounded"))]
-    if name == INPUT_BLOCKED:
+    if name == _INPUT_BLOCKED:
         return [TextDelta(text=data["message"])]
     return []
 

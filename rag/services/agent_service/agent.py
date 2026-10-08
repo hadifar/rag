@@ -1,8 +1,7 @@
 from collections.abc import Sequence
-from typing import Any, Literal, NotRequired
+from typing import Literal, NotRequired, TypedDict
 
 from langchain.agents.middleware.todo import Todo
-from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -41,9 +40,10 @@ from rag.services.agent_service.prompts import (
 )
 from rag.services.agent_service.skills import invoked_skill, skill_to_messages
 from rag.services.agent_service.streaming import (
-    ANSWER_CHECK,
-    INPUT_BLOCKED,
     AgentTurn,
+    answer_check_started,
+    answer_checked,
+    input_blocked,
 )
 from rag.services.agent_service.tools import agent_tools
 
@@ -59,16 +59,22 @@ AnswerDecision = Literal["accept", "revise"]
 
 
 class ChatState(MessagesState):
-    input_decision: NotRequired[InputDecision]  # the input guard's, on the question
-    todos: NotRequired[list[Todo]]  # the plan, which write_todos replaces whole
-    answer_decision: NotRequired[
-        AnswerDecision
-    ]  # the answer guard's, on the last answer
-    revisions: NotRequired[int]  # answers sent back to revise this turn
-    # The thread's attachments by id: its messages list ids, each model call reads these.
+    input_decision: NotRequired[InputDecision]
+    todos: NotRequired[list[Todo]]
+    answer_decision: NotRequired[AnswerDecision]
+    revisions: NotRequired[int]
     attachments: NotRequired[dict[str, AttachmentFile]]
-    # The user's skills, loaded once per on-topic turn by load_skills.
     skills: NotRequired[list[Skill]]
+
+
+class ChatUpdate(TypedDict, total=False):
+    """What a node returns: the ChatState keys it changes (messages are appended)."""
+
+    messages: list[BaseMessage]
+    input_decision: InputDecision
+    answer_decision: AnswerDecision
+    revisions: int
+    skills: list[Skill]
 
 
 class RagAgent:
@@ -110,8 +116,8 @@ class RagAgent:
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("check_input", self._check_input)
         graph.add_node("load_skills", self._load_skills)
-        graph.add_node("model", self._model)
         graph.add_node("decline", self._decline)
+        graph.add_node("model", self._model)
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("check_answer", self._check_answer)
 
@@ -139,10 +145,7 @@ class RagAgent:
         attachments: Sequence[AttachmentFile] = (),
         earlier_attachments: Sequence[AttachmentFile] = (),
     ) -> AgentTurn:
-        """Answers `message` and its `attachments`, given the agent's memory of each
-        earlier turn (compacted and cut to fit, see `recall`) and the attachments those
-        were sent with.
-        """
+        """Answers `message` and its `attachments`"""
         question = question_message(message, attachments)
         earlier = recall(history, self._history_limits)
         files = {str(f.attachment.id): f for f in [*earlier_attachments, *attachments]}
@@ -157,7 +160,7 @@ class RagAgent:
         )
         return AgentTurn(run, question)
 
-    async def _check_input(self, state: ChatState) -> dict[str, Any]:
+    async def _check_input(self, state: ChatState) -> ChatUpdate:
         """A blocked question gets the fixed refusal and is dropped from the thread, so
         no later turn's model call sees it.
         """
@@ -172,20 +175,20 @@ class RagAgent:
         if decision != "block":
             return {"input_decision": decision}
 
-        await adispatch_custom_event(INPUT_BLOCKED, {"message": BLOCKED_MESSAGE})
+        await input_blocked(BLOCKED_MESSAGE)
 
         assert question.id is not None
         return {"input_decision": decision, "messages": [RemoveMessage(id=question.id)]}
 
     async def _load_skills(
         self, state: ChatState, runtime: Runtime[RunContext]
-    ) -> dict[str, Any]:
+    ) -> ChatUpdate:
         """The user's skills, for the model's system prompt to list, and, for a question
         that starts with "/<name>" of one of them, that skill loaded at the turn's
         start; a name the user has no skill of loads nothing.
         """
         user = runtime.context.user_id
-        update: dict[str, Any] = {"skills": await self._skills.list_for_user(user)}
+        update: ChatUpdate = {"skills": await self._skills.list_for_user(user)}
         name = invoked_skill(state["messages"][-1].text)
         if name is None:
             return update
@@ -196,11 +199,11 @@ class RagAgent:
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]
-    ) -> dict[str, Any]:
+    ) -> ChatUpdate:
         system = system_prompt(state.get("skills", []))
         messages = _model_messages(system, state)
 
-        # The model only runs right after a final answer when check_answer rejected it.
+        # when check_answer rejected previous answer.
         if is_final_answer(state["messages"][-1]):
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
@@ -210,7 +213,7 @@ class RagAgent:
 
     async def _decline(
         self, state: ChatState, runtime: Runtime[RunContext]
-    ) -> dict[str, Any]:
+    ) -> ChatUpdate:
         """An off-topic question's reply is fixed, and the turn ends."""
 
         ctx = runtime.context
@@ -218,7 +221,7 @@ class RagAgent:
         messages = _model_messages(DECLINE_SYSTEM_PROMPT, state)
         return {"messages": [await model.ainvoke(messages)]}
 
-    async def _check_answer(self, state: ChatState) -> dict[str, Any]:
+    async def _check_answer(self, state: ChatState) -> ChatUpdate:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
         a rejected answer never reaches the user.
         """
@@ -227,11 +230,9 @@ class RagAgent:
             return {"answer_decision": "accept"}
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
-        await adispatch_custom_event(ANSWER_CHECK, {"status": "pending"})
+        await answer_check_started()
         grounded = await check.passes(self._llm)
-        await adispatch_custom_event(
-            ANSWER_CHECK, {"status": "done", "grounded": grounded}
-        )
+        await answer_checked(grounded)
         if grounded:
             return {"answer_decision": "accept"}
         return {
