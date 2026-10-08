@@ -28,7 +28,7 @@ class HistoryLimits:
     turns are left out.
     """
 
-    max_tokens: int = 16_000  # counted approximately
+    max_tokens: int = 16_000
     max_turns: int = 20
 
 

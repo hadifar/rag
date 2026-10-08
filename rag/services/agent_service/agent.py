@@ -27,17 +27,13 @@ from rag.domain.ports import CachePort, SearchPort, SkillsPort
 from rag.services.agent_service.attachments import (
     attachments_of,
     question_message,
-    text_of,
     with_attachments,
 )
-from rag.services.agent_service.guards.groundedness import (
-    is_grounded,
-    verification_inputs,
-)
+from rag.services.agent_service.guards.groundedness import answer_to_check
 from rag.services.agent_service.guards.off_topic import classify_input
 from rag.services.agent_service.llm import Llm
 from rag.services.agent_service.memory import HistoryLimits, recall
-from rag.services.agent_service.messages import current_turn, is_final_answer
+from rag.services.agent_service.messages import is_final_answer
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
     REVISION_INSTRUCTION,
@@ -92,8 +88,9 @@ class RagAgent:
     `classify` ends a blocked question's turn before the model runs; `invoke_skill`
     loads the skill a question invokes ("/<name> ..."); `verify` checks a
     final answer against the turn's searches, sending it back up to `MAX_REVISIONS`
-    times. Every LLM call, the model's and the guards', is tried up to
-    `llm.attempts` times; then a model call's error ends the turn (see `AgentTurn`).
+    times, after which the model's answer ends the turn unchecked. Every LLM call, the
+    model's and the guards', is tried up to `llm.attempts` times; then a model call's
+    error ends the turn (see `AgentTurn`).
     The model sees the name and description of each of the user's `skills`, and loads
     one's instructions with a tool when a question fits it.
     Instructions for one model call (declining an off-topic question, revising an
@@ -137,7 +134,6 @@ class RagAgent:
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("classify", self._classify)
         graph.add_node("invoke_skill", self._invoke_skill)
-        # "model" is the node whose output the user sees (see streaming.parse_event).
         graph.add_node(
             "model",
             self._model,
@@ -241,27 +237,26 @@ class RagAgent:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
         a rejected answer never reaches the user.
         """
-        revisions = state.get("revisions", 0)
-        question = current_turn(state["messages"])[0]
-        attached = text_of(attachments_of(question, state.get("attachments", {})))
-        inputs = verification_inputs(state["messages"], attached)
-        if revisions >= MAX_REVISIONS or inputs is None:
+        check = answer_to_check(state["messages"], state.get("attachments", {}))
+        if check is None:
             return Command(goto="__end__")
 
         # The check is a whole LLM call the answer is held back for: the client shows it.
         await adispatch_custom_event(ANSWER_VERIFICATION, {"status": "pending"})
-        grounded = await is_grounded(self._llm, *inputs)
+        grounded = await check.passes(self._llm)
         await adispatch_custom_event(
             ANSWER_VERIFICATION, {"status": "done", "grounded": grounded}
         )
         if grounded:
             return Command(goto="__end__")
-        return Command(goto="model", update={"revisions": revisions + 1})
+        return Command(
+            goto="model", update={"revisions": state.get("revisions", 0) + 1}
+        )
 
 
-def _after_model(state: ChatState) -> Literal["tools", "verify"]:
-    """Tool calls run; an answer is checked."""
+def _after_model(state: ChatState) -> Literal["tools", "verify", "__end__"]:
+    """Tool calls run; an answer is checked while the turn may still revise it."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
-    return "verify"
+    return "verify" if state.get("revisions", 0) < MAX_REVISIONS else "__end__"
