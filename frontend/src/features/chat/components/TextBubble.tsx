@@ -22,8 +22,13 @@ export function TextBubble({ text }: TextContent) {
   const { state, copy } = useCopyText(text);
   const Icon = COPY_ICON[state];
   return (
-    <BubbleFrame look="answer" className="relative pr-9 leading-6 text-slate-800">
-      <IconButton label={COPY_LABEL[state]} onClick={copy} className="absolute top-1.5 right-1.5">
+    <BubbleFrame look="answer" className="group relative pr-9 leading-6 text-slate-800">
+      {/* Shown only while the answer is hovered, or the button has keyboard focus. */}
+      <IconButton
+        label={COPY_LABEL[state]}
+        onClick={copy}
+        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+      >
         <Icon className="size-4" />
       </IconButton>
       <MarkdownBody text={text} />
