@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from rag.domain.models.agent.agent import Effort, ModelName
+
 
 @dataclass(frozen=True)
 class UploadLimits:
@@ -18,3 +20,13 @@ class AppSettings:
     model: str  # the default chat model's name (the guards' and titles')
     top_k: int  # passages a knowledge-base search returns
     uploads: UploadLimits
+
+
+@dataclass(frozen=True)
+class RunSettingsUpdate:
+    """What to change about the model and effort a user's turns run on; a field left
+    None stays as is.
+    """
+
+    model: ModelName | None = None
+    effort: Effort | None = None

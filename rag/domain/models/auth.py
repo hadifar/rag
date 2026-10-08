@@ -21,13 +21,3 @@ class User:
     # What their chat turns run on, in every conversation: the last they picked.
     model: ModelName = DEFAULT_MODEL
     effort: Effort = DEFAULT_EFFORT
-
-
-@dataclass(frozen=True)
-class RunSettingsUpdate:
-    """What to change about the model and effort a user's turns run on; a field left
-    None stays as is.
-    """
-
-    model: ModelName | None = None
-    effort: Effort | None = None

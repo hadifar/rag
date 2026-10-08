@@ -25,7 +25,7 @@ from rag.domain.models.agent.stream import (
     TurnFailed,
 )
 from rag.domain.models.attachment import Attachment, AttachmentFile
-from rag.domain.models.auth import RunSettingsUpdate, User
+from rag.domain.models.auth import User
 from rag.domain.models.conversation import (
     AssistantMessage,
     Conversation,
@@ -46,7 +46,7 @@ from rag.domain.models.ingestion import (
     RawDocument,
 )
 from rag.domain.models.retrieval import Chunk
-from rag.domain.models.settings import AppSettings, UploadLimits
+from rag.domain.models.settings import AppSettings, RunSettingsUpdate, UploadLimits
 from rag.domain.models.skill import SKILL_NAME_PATTERN, Skill, SkillContent
 from rag.domain.models.upload import Upload
 

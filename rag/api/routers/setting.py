@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from rag.api.deps import (
-    AppSettingsDep,
     AuthenticatedUserDep,
-    RunSettingsServiceDep,
+    SettingServiceDep,
     get_current_user,
 )
 from rag.api.schema.setting import (
@@ -19,16 +18,16 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_settings(app_settings: AppSettingsDep) -> SettingsResponse:
-    return SettingsResponse.model_validate(app_settings)
+async def get_settings(settings: SettingServiceDep) -> SettingsResponse:
+    return SettingsResponse.model_validate(settings.app)
 
 
 @router.get("/me")
 async def get_run_settings(
-    current_user: AuthenticatedUserDep, run_settings: RunSettingsServiceDep
+    current_user: AuthenticatedUserDep, settings: SettingServiceDep
 ) -> RunSettingsResponse:
     """The model and effort the user's turns run on, in every conversation."""
-    user = await run_settings.get(current_user.id)
+    user = await settings.get_run_settings(current_user.id)
     return RunSettingsResponse.model_validate(user)
 
 
@@ -36,8 +35,8 @@ async def get_run_settings(
 async def update_run_settings(
     request: RunSettingsUpdateRequest,
     current_user: AuthenticatedUserDep,
-    run_settings: RunSettingsServiceDep,
+    settings: SettingServiceDep,
 ) -> RunSettingsResponse:
     """Sets the model or effort the user's turns run on, in every conversation."""
-    user = await run_settings.update(current_user.id, request.to_update())
+    user = await settings.update_run_settings(current_user.id, request.to_update())
     return RunSettingsResponse.model_validate(user)

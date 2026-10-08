@@ -39,7 +39,7 @@ from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
-from rag.services.run_settings_service.service import RunSettingsService
+from rag.services.setting_service.service import SettingService
 from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
@@ -151,13 +151,15 @@ def client() -> Generator[TestClient]:
             max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
             max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
         ),
-        run_settings_service=RunSettingsService(users=users),
-        app_settings=AppSettings(
-            model="gpt-4o-mini",
-            top_k=4,
-            uploads=UploadLimits(
-                **{k.lower(): v for k, v in UploadsConfig().model_dump().items()}
+        setting_service=SettingService(
+            app=AppSettings(
+                model="gpt-4o-mini",
+                top_k=4,
+                uploads=UploadLimits(
+                    **{k.lower(): v for k, v in UploadsConfig().model_dump().items()}
+                ),
             ),
+            users=users,
         ),
     )
     app = create_app(container=container, settings=_stub_settings())

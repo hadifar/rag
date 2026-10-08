@@ -46,7 +46,7 @@ from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
-from rag.services.run_settings_service.service import RunSettingsService
+from rag.services.setting_service.service import SettingService
 from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 
@@ -61,8 +61,7 @@ class Container:
     share_service: ShareService
     attachment_service: AttachmentService
     skill_service: SkillService
-    run_settings_service: RunSettingsService
-    app_settings: AppSettings
+    setting_service: SettingService
 
 
 @dataclass
@@ -210,10 +209,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 max_bytes=uploads.attachment_max_bytes,
             ),
             skill_service=skill_service,
-            run_settings_service=RunSettingsService(users=user_repo),
-            app_settings=AppSettings(
-                model=DEFAULT_MODEL,
-                top_k=retrieval_service.top_k,
-                uploads=uploads,
+            setting_service=SettingService(
+                app=AppSettings(
+                    model=DEFAULT_MODEL,
+                    top_k=retrieval_service.top_k,
+                    uploads=uploads,
+                ),
+                users=user_repo,
             ),
         )
