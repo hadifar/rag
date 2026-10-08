@@ -22,8 +22,8 @@ export function TextBubble({ text }: TextContent) {
   const { state, copy } = useCopyText(text);
   const Icon = COPY_ICON[state];
   return (
-    <BubbleFrame className="relative pr-9 leading-6 text-slate-800">
-      <IconButton label={COPY_LABEL[state]} onClick={copy} className="absolute top-0 right-1">
+    <BubbleFrame look="answer" className="relative pr-9 leading-6 text-slate-800">
+      <IconButton label={COPY_LABEL[state]} onClick={copy} className="absolute top-1.5 right-1.5">
         <Icon className="size-4" />
       </IconButton>
       <MarkdownBody text={text} />

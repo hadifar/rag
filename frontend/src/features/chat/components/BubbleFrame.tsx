@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 const looks = {
   /** Flush text, like the assistant's answer. */
   plain: 'max-w-[90%] px-3',
+  /** The assistant's final answer: a faint tint, just off the chat background. */
+  answer: 'max-w-[90%] rounded-xl bg-slate-100/50 px-3 py-2',
   /** A tinted card, for asides such as a tool call or the sources. */
   card: 'max-w-[90%] rounded-xl bg-slate-50 px-3 py-2',
   /** The user's own message: kept narrow, as chat apps do. */

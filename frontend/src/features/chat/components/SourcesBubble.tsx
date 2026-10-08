@@ -8,23 +8,23 @@ export function SourcesBubble({ sources, onOpen }: SourcesBubbleProps) {
   if (sources.length === 0) {
     return (
       <BubbleFrame look="card">
-        <span className="font-medium text-slate-700">📚 Sources</span>
-        <span className="text-slate-500"> — none found</span>
+        <span className="text-xs font-medium text-slate-700">📚 Sources</span>
+        <span className="text-xs text-slate-500"> — none found</span>
       </BubbleFrame>
     );
   }
 
   return (
     <BubbleFrame look="card">
-      <div className="font-medium text-slate-700">📚 Sources</div>
-      <ul className="mt-1 list-inside list-disc text-slate-600">
+      <div className="text-xs font-medium text-slate-700">📚 Sources</div>
+      <ul className="mt-1 list-inside list-disc text-xs text-slate-600">
         {sources.map((name) => (
           <li key={name}>
             {onOpen ? (
               <button
                 type="button"
                 onClick={() => onOpen(name)}
-                className="text-primary-600 hover:underline"
+                className="text-xs text-primary-600 hover:underline"
               >
                 {name}
               </button>
