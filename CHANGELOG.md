@@ -1,3 +1,58 @@
+## v0.16.0 (2026-10-08)
+
+### Feat
+
+- **infra**: add Application Insights on the free allowance
+- **backend**: run multiple uvicorn workers safely
+- **frontend**: add a copy button to assistant answers
+- **frontend**: check and word upload sizes from the backend's limits
+- **backend**: return the upload limits from /api/settings
+- **infra**: cap nginx upload bodies from the backend's upload limits
+- **skills**: accept .zip/.skill archives with reference files
+- **retrieval**: rerank by a keep-or-drop relevance verdict
+- **agent**: compact the history and cap it by turns and tokens
+
+### Fix
+
+- **backend**: stop exporting 4xx app errors as exceptions
+- **backend**: answer unexpected errors with a JSON 500
+- **frontend**: add smooth transition & remove modal dark borders
+- **frontend**: widen assistant bubbles and shrink the plan bubble
+- update planning instruction
+- **backend**: keep a rejected answer out of the turn's memory
+- **frontend**: make Modal a native dialog so focus stays inside
+
+### Refactor
+
+- **backend**: split the agent into research and answer nodes
+- **backend**: fold the write_todos prompt into PLANNING_INSTRUCTIONS
+- **backend**: shorten the skills instruction
+- type & events in agent.py
+- **backend**: name the model call's messages by what they are
+- **backend**: load the turn's skills in one load_skills node
+- **backend**: route both guards with conditional edges
+- **backend**: define every agent tool in tools.py
+- name the guards by what they check
+- **backend**: rename the skill-loading helpers by what they return
+- **backend**: retry the model call in Llm, not the graph node
+- **backend**: route off-topic questions from classify straight to the model
+- **backend**: let the groundedness guard gather its own inputs
+- **backend**: organize agent_service by concept
+- **backend**: serve app and run settings from one SettingService
+- keep the model and effort per user, not per conversation
+- **backend**: run the guards on the default of the pickable models
+- rename the max effort level to high
+- **backend**: hand the api layer AppSettings instead of Settings
+- **backend**: read upload limits from config into a domain Upload
+- **backend**: add a one_line text helper
+- **backend**: build service dependencies with one factory
+- **backend**: serve the agent's skills from the repository
+- **backend**: share guarded zip reading between ingestion and skills
+- **backend**: read capped uploads in one dependency
+- **frontend**: send every file upload through the typed client
+- **backend**: raise ConversationNotFoundError from the repository
+- **llm**: drop the temperature setting
+
 ## v0.15.0 (2026-10-07)
 
 ### Feat
