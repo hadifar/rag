@@ -1068,7 +1068,7 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_an_unexpected_error_is_logged_and_answered_with_a_bare_500(
+def test_an_unexpected_error_is_logged_and_answered_with_a_json_500(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     app = create_app(settings=_stub_settings())
@@ -1080,7 +1080,7 @@ def test_an_unexpected_error_is_logged_and_answered_with_a_bare_500(
     response = TestClient(app, raise_server_exceptions=False).get("/boom")
 
     assert response.status_code == 500
-    assert response.text == "Internal Server Error"
+    assert response.json() == {"detail": "Internal server error"}
     assert any(
         r.message == "Unexpected error on GET /boom" and r.exc_info
         for r in caplog.records

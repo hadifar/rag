@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 
 from rag.api.routers.auth import router as auth_router
 from rag.api.routers.chat import router as chat_router
@@ -43,13 +43,15 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     # Logged here because uvicorn's own log of it never reaches the root logger, so
-    # telemetry would see it only on a sampled request trace. Same bare 500 as before.
+    # telemetry would see it only on a sampled request trace. Same body shape as AppError.
     @app.exception_handler(Exception)
     async def _handle_unexpected_error(
         request: Request, exc: Exception
-    ) -> PlainTextResponse:
+    ) -> JSONResponse:
         logger.exception("Unexpected error on %s %s", request.method, request.url.path)
-        return PlainTextResponse("Internal Server Error", status_code=500)
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"}
+        )
 
 
 def create_app(

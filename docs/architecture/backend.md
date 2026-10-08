@@ -71,7 +71,7 @@ A turn whose tool or model fails (after `Llm.prepare`'s retries of the model cal
 ## Errors
 
 * Services raise an `AppError` subclass from `rag/domain/errors.py` with a `status_code`.
-* One handler in `rag/app.py` turns every `AppError` into `{"detail": ...}`. Another logs any other exception and answers a bare 500.
+* One handler in `rag/app.py` turns every `AppError` into `{"detail": ...}`. Another logs any other exception and answers a 500 with the same shape: `{"detail": "Internal server error"}`.
 * `fastapi.HTTPException` is banned.
 
 ## Configuration
