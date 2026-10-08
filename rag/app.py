@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -39,7 +40,14 @@ def _build_lifespan(container: Container | None, settings: Settings):
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
-        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        # A 4xx is the client's mistake, not ours: logged below WARNING so telemetry
+        # does not export it as an exception.
+        if exc.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
+            logger.exception("App error on %s %s", request.method, request.url.path)
+        else:
+            logger.info(
+                "%s on %s %s", type(exc).__name__, request.method, request.url.path
+            )
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     # Logged here because uvicorn's own log of it never reaches the root logger, so

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import logging
 import uuid
 import zipfile
 from collections.abc import Callable, Generator
@@ -24,7 +25,7 @@ from rag.config import (
     UploadsConfig,
 )
 from rag.container import Container
-from rag.domain.errors import DocumentNotFoundError
+from rag.domain.errors import AppError, DocumentNotFoundError
 from rag.domain.models import (
     AppSettings,
     UploadLimits,
@@ -1066,6 +1067,41 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
+
+
+def test_a_4xx_app_error_is_logged_at_info_without_a_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/missing")
+    async def _missing() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise DocumentNotFoundError("doc-1")
+
+    with caplog.at_level(logging.INFO):
+        response = TestClient(app).get("/missing")
+
+    assert response.status_code == 404
+    [record] = [r for r in caplog.records if r.name == "rag.app"]
+    assert record.levelno == logging.INFO
+    assert record.exc_info is None
+
+
+def test_a_5xx_app_error_is_logged_with_its_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/broken")
+    async def _broken() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise AppError("broken")
+
+    response = TestClient(app).get("/broken")
+
+    assert response.status_code == 500
+    assert any(
+        r.message == "App error on GET /broken" and r.exc_info for r in caplog.records
+    )
 
 
 def test_an_unexpected_error_is_logged_and_answered_with_a_json_500(
