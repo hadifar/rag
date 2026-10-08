@@ -1,7 +1,5 @@
 from collections.abc import Sequence
 
-from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
-
 from rag.domain.models import Skill
 
 RAG_SYSTEM_PROMPT = (
@@ -85,9 +83,10 @@ PLANNING_INSTRUCTIONS = (
     "Then work through them in order: mark a todo in_progress, run search_kb with a "
     "query focused on just that part, and mark it "
     "completed before starting the next. If a search shows the plan needs changing, "
-    "update the list. Todos are your private scratchpad: never mention them to the "
-    "user.\n"
-    "Write the final answer as its own message after your last write_todos call."
+    "update the list. Never call write_todos more than once at a time. Todos are your "
+    "private scratchpad: never mention them to the user.\n"
+    "Write the final answer as its own message after your last write_todos call, "
+    "starting with the answer itself."
 )
 
 # The answer guard: its prompt, and what the model is told when its answer is sent
@@ -116,7 +115,7 @@ DECLINE_SYSTEM_PROMPT = "\n\n".join(
 
 def system_prompt(skills: Sequence[Skill] = ()) -> str:
     """The model node's system prompt, listing the user's `skills`."""
-    steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+    steps = [PLANNING_INSTRUCTIONS]
     if skills:
         listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
         steps.append(SKILLS_INSTRUCTION.format(skills=listed))
