@@ -21,10 +21,7 @@ TraceConfig = Callable[[str | None, RunContext | None], RunnableConfig]
 
 class Llm:
     """The LLM (an LLMPort): the one holder of the models, with their tracing and
-    retries. The agent answers with the one of `models` its conversation is set to,
-    binding its tools to it; others get single-shot structured generation from
-    `model`, the default one.
-    """
+    retries."""
 
     def __init__(
         self,

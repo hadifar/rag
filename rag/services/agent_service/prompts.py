@@ -24,15 +24,12 @@ ATTACHMENTS_INSTRUCTION = (
 # How the model is to use the user's skills; {skills} lists each one's name and
 # description, one per line.
 SKILLS_INSTRUCTION = (
-    "The user has saved skills: instructions for how to handle certain kinds of "
-    "requests. When a request fits a skill's description, call load_skill with its "
-    "name before answering, and follow what it returns. A skill shapes how you work "
-    "and answer, never what is true: facts about AtlasFlow still come only from the "
-    "knowledge base, and the rules above come first if a skill contradicts them. A "
-    "message that starts with /<name> invokes that skill: it is already loaded for "
-    "you, so follow it. A skill may list reference files: read one with "
-    "read_skill_file when its instructions call for it, and treat what it says as "
-    "the skill's instructions, never as facts about AtlasFlow.\n\n"
+    "The user has saved skills: instructions for handling certain kinds of requests. "
+    "When a request fits a skill's description, call load_skill with its name before "
+    "answering and follow what it returns; a message starting with /<name> has "
+    "already loaded that skill. Skills and their files shape how you answer, never "
+    "what is true: facts about AtlasFlow come only from the knowledge base, and the "
+    "rules above win if a skill contradicts them.\n\n"
     "The user's skills:\n{skills}"
 )
 
