@@ -1,11 +1,27 @@
 from typing import Any
 
-from langchain.tools import tool
+from langchain.agents.middleware.todo import write_todos
+from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
-from rag.domain.models import ARTIFACTS, SourceArtifact
-from rag.domain.ports import SearchPort
+from rag.domain.models import ARTIFACTS, RunContext, SkillContent, SourceArtifact
+from rag.domain.ports import SearchPort, SkillsPort
+from rag.services.agent_service.prompts import SKILL_FILES_NOTE
 
-# The skill tools are in skills.py, with the rest of the skills' handling.
+# The tools that hand the model a skill's instructions and its reference files: not
+# knowledge-base content, so the answer guard leaves their results out.
+SKILL_TOOL = "load_skill"
+SKILL_FILE_TOOL = "read_skill_file"
+SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
+
+
+def agent_tools(search: SearchPort, skills: SkillsPort) -> list[BaseTool]:
+    """Every tool the chat agent's model can call."""
+    return [
+        search_tool(search),
+        skill_tool(skills),
+        skill_file_tool(skills),
+        write_todos,
+    ]
 
 
 def search_tool(knowledge_base: SearchPort) -> BaseTool:
@@ -34,3 +50,58 @@ def search_tool(knowledge_base: SearchPort) -> BaseTool:
         return content, ARTIFACTS.dump_python(sources, mode="json")
 
     return search_kb
+
+
+def render_skill(content: SkillContent) -> str:
+    """What loading a skill hands the model: its instructions, then the paths of its
+    reference files, if it has any.
+    """
+    if not content.files:
+        return content.instructions
+    files = "\n".join(f"- {path}" for path in content.files)
+    return f"{content.instructions}\n\n{SKILL_FILES_NOTE.format(files=files)}"
+
+
+def skill_tool(skills: SkillsPort) -> BaseTool:
+    """load_skill: the instructions of one of the user's skills, by name. The user is
+    the turn's, from its RunContext; the model only names the skill.
+    """
+
+    @tool(
+        SKILL_TOOL,
+        description=(
+            "Load the instructions of one of the user's skills, by its name, before "
+            "answering a request that fits the skill's description."
+        ),
+    )
+    async def load_skill(name: str, runtime: ToolRuntime[RunContext]) -> str:
+        content = await skills.content(runtime.context.user_id, name)
+        if content is None:
+            return f"The user has no skill named {name!r}."
+        return render_skill(content)
+
+    return load_skill
+
+
+def skill_file_tool(skills: SkillsPort) -> BaseTool:
+    """read_skill_file: one reference file of one of the user's skills, by the skill's
+    name and the file's path, as load_skill listed it. The user is the turn's, from its
+    RunContext.
+    """
+
+    @tool(
+        SKILL_FILE_TOOL,
+        description=(
+            "Read a reference file of one of the user's skills, by the skill's name "
+            "and the file's path as load_skill listed it."
+        ),
+    )
+    async def read_skill_file(
+        skill: str, path: str, runtime: ToolRuntime[RunContext]
+    ) -> str:
+        content = await skills.file(runtime.context.user_id, skill, path)
+        if content is None:
+            return f"The user's skill {skill!r} has no file {path!r}."
+        return content
+
+    return read_skill_file

@@ -7,7 +7,7 @@ from rag.domain.models import AnswerVerdict, AttachmentFile
 from rag.domain.ports import LLMPort
 from rag.services.agent_service.attachments import attachments_of, text_of
 from rag.services.agent_service.prompts import ANSWER_GUARD_PROMPT
-from rag.services.agent_service.skills import SKILL_TOOLS
+from rag.services.agent_service.tools import SKILL_TOOLS
 from rag.services.agent_service.messages import current_turn, turn_tool_messages
 from rag.shared.resilience import or_default
 

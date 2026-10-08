@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, Literal, NotRequired
 
-from langchain.agents.middleware.todo import Todo, write_todos
+from langchain.agents.middleware.todo import Todo
 from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import (
     AIMessage,
@@ -39,18 +39,13 @@ from rag.services.agent_service.prompts import (
     REVISION_INSTRUCTION,
     system_prompt,
 )
-from rag.services.agent_service.skills import (
-    invoked_skill,
-    skill_file_tool,
-    skill_to_messages,
-    skill_tool,
-)
+from rag.services.agent_service.skills import invoked_skill, skill_to_messages
 from rag.services.agent_service.streaming import (
     ANSWER_CHECK,
     INPUT_BLOCKED,
     AgentTurn,
 )
-from rag.services.agent_service.tools import search_tool
+from rag.services.agent_service.tools import agent_tools
 
 # Times check_answer sends an answer back to revise per turn; past it, the last answer ships.
 MAX_REVISIONS = 1
@@ -107,12 +102,7 @@ class RagAgent:
         input_verdicts: CachePort[InputVerdict],
         history_limits: HistoryLimits | None = None,
     ):
-        tools = [
-            search_tool(search),
-            skill_tool(skills),
-            skill_file_tool(skills),
-            write_todos,
-        ]
+        tools = agent_tools(search, skills)
         # One of each per model a conversation can be set to.
         self._on_topic_models = {
             name: model.bind_tools(tools) for name, model in llm.models.items()

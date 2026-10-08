@@ -16,7 +16,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 
 from rag.domain.models import ARTIFACTS, AgentMemory, Artifact, ArtifactsReady
 from rag.services.agent_service.messages import split_turns
-from rag.services.agent_service.skills import SKILL_TOOL
+from rag.services.agent_service.tools import SKILL_TOOL
 
 # The agent's memory of a conversation: what each turn saves (`remember`), and how
 # much of it later turns reread (`recall`).
