@@ -157,13 +157,13 @@ async def test_update_sets_the_model_and_effort_and_keeps_them_otherwise(
     assert (conversation.model, conversation.effort) == ("gpt-6-luna", "low")
 
     updated = await repository.update_owned(
-        user_id, conversation.id, ConversationUpdate(model="gpt-6-sol", effort="max")
+        user_id, conversation.id, ConversationUpdate(model="gpt-6-sol", effort="high")
     )
-    assert (updated.model, updated.effort) == ("gpt-6-sol", "max")
+    assert (updated.model, updated.effort) == ("gpt-6-sol", "high")
     renamed = await repository.update_owned(
         user_id, conversation.id, ConversationUpdate(title="t")
     )
-    assert (renamed.model, renamed.effort) == ("gpt-6-sol", "max")
+    assert (renamed.model, renamed.effort) == ("gpt-6-sol", "high")
 
 
 async def test_deleting_a_user_deletes_their_conversations(

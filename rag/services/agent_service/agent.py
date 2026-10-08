@@ -276,9 +276,11 @@ def _system_prompt(*, off_topic: bool, skills: Sequence[Skill] = ()) -> str:
         steps = [OFF_TOPIC_INSTRUCTION]
     else:
         steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+
         if skills:
             listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
             steps.append(SKILLS_INSTRUCTION.format(skills=listed))
+
     return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])
 
 

@@ -520,12 +520,15 @@ def test_the_model_and_effort_are_set_per_conversation(
 
     response = client.patch(
         f"/api/conversations/{conversation_id}",
-        json={"model": "gpt-6-sol", "effort": "max"},
+        json={"model": "gpt-6-sol", "effort": "high"},
         headers=auth_headers,
     )
 
     assert response.status_code == 200
-    assert (response.json()["model"], response.json()["effort"]) == ("gpt-6-sol", "max")
+    assert (response.json()["model"], response.json()["effort"]) == (
+        "gpt-6-sol",
+        "high",
+    )
     # Setting one leaves the other as it was.
     effort_only = client.patch(
         f"/api/conversations/{conversation_id}",
@@ -540,7 +543,7 @@ def test_the_model_and_effort_are_set_per_conversation(
     assert (other["model"], other["effort"]) == ("gpt-6-luna", "low")
 
 
-@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "high"}])
+@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "max"}])
 def test_an_unknown_model_or_effort_is_rejected(
     client: TestClient, auth_headers: dict[str, str], body: dict[str, str]
 ) -> None:

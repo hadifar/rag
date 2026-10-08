@@ -229,9 +229,9 @@ describe('Composer model and effort', () => {
     expect(screen.getByRole('menuitemradio', { name: 'gpt-6-luna' })).toHaveAttribute('aria-checked', 'true');
     await user.click(screen.getByRole('menuitemradio', { name: 'gpt-6-astra' }));
     await user.click(screen.getByRole('button', { name: 'Effort: Low' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Max' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'High' }));
 
     expect(run.onModel).toHaveBeenCalledExactlyOnceWith('gpt-6-astra');
-    expect(run.onEffort).toHaveBeenCalledExactlyOnceWith('max');
+    expect(run.onEffort).toHaveBeenCalledExactlyOnceWith('high');
   });
 });

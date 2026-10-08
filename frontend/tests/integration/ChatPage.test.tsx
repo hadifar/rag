@@ -300,17 +300,17 @@ describe('ChatPage', () => {
       ),
       http.patch('/api/conversations/:id', async ({ request }) => {
         saved = (await request.json()) as ConversationUpdateRequest;
-        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'max' });
+        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'high' });
       }),
     );
     const { user } = renderChat(`/chat/${newConversation.id}`);
 
     expect(await screen.findByRole('button', { name: 'Model: gpt-6-astra' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Effort: Medium' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Max' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'High' }));
 
-    expect(await screen.findByRole('button', { name: 'Effort: Max' })).toBeInTheDocument();
-    expect(saved).toEqual({ effort: 'max' });
+    expect(await screen.findByRole('button', { name: 'Effort: High' })).toBeInTheDocument();
+    expect(saved).toEqual({ effort: 'high' });
   });
 
   it("sets a new chat to the model picked before its first message goes", async () => {

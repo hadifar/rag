@@ -18,9 +18,6 @@ from rag.services.agent_service.attachments import render
 
 TraceConfig = Callable[[str | None, RunContext | None], RunnableConfig]
 
-# The reasoning effort each level the user picks asks the model for.
-_REASONING_EFFORT: dict[Effort, str] = {"low": "low", "medium": "medium", "max": "high"}
-
 
 class Llm:
     """The LLM (an LLMPort): the one holder of the model, with its tracing and retries.
@@ -50,9 +47,7 @@ class Llm:
         """`model`, set to think as hard as `effort` says; as is if it doesn't reason."""
         if not self._reasoning:
             return model
-        return model.bind(
-            reasoning={"effort": _REASONING_EFFORT[effort], "summary": "auto"}
-        )
+        return model.bind(reasoning={"effort": effort, "summary": "auto"})
 
     async def generate_structured[T: BaseModel](
         self,

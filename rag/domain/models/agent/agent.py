@@ -9,7 +9,7 @@ MODEL_NAMES: tuple[ModelName, ...] = get_args(ModelName)
 DEFAULT_MODEL: ModelName = "gpt-6-luna"
 
 # How hard a reasoning model thinks, as the user picks it.
-Effort = Literal["low", "medium", "max"]
+Effort = Literal["low", "medium", "high"]
 EFFORTS: tuple[Effort, ...] = get_args(Effort)
 DEFAULT_EFFORT: Effort = "low"
 

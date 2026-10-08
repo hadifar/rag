@@ -173,11 +173,11 @@ async def test_a_turn_runs_on_the_model_and_effort_its_conversation_is_set_to() 
 
     await _chat(service, conversation_id, "hi")
     await repository.update_owned(
-        ALICE, conversation_id, ConversationUpdate(model="gpt-6-sol", effort="max")
+        ALICE, conversation_id, ConversationUpdate(model="gpt-6-sol", effort="high")
     )
     await _chat(service, conversation_id, "again")
 
     assert [(c.model, c.effort) for c in agent.contexts] == [
         ("gpt-6-luna", "low"),
-        ("gpt-6-sol", "max"),
+        ("gpt-6-sol", "high"),
     ]

@@ -570,7 +570,7 @@ export interface components {
              * Effort
              * @enum {string}
              */
-            effort: "low" | "medium" | "max";
+            effort: "low" | "medium" | "high";
         };
         /**
          * ConversationUpdateRequest
@@ -584,7 +584,7 @@ export interface components {
             /** Model */
             model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
             /** Effort */
-            effort?: ("low" | "medium" | "max") | null;
+            effort?: ("low" | "medium" | "high") | null;
         };
         /**
          * ErrorEvent

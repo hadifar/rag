@@ -1051,7 +1051,7 @@ async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
         verdicts=FakeCache(),
     )
     ctx = RunContext(
-        user_id=_USER, conversation_id=_CONVERSATION, model="gpt-6-sol", effort="max"
+        user_id=_USER, conversation_id=_CONVERSATION, model="gpt-6-sol", effort="high"
     )
 
     events = [e async for e in agent.stream("hello", [], ctx)]

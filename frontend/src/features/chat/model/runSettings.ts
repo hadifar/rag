@@ -6,7 +6,7 @@ export const MODELS: ModelName[] = ['gpt-6-luna', 'gpt-6-astra', 'gpt-6-sol'];
 export const EFFORTS: { value: Effort; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
-  { value: 'max', label: 'Max' },
+  { value: 'high', label: 'High' },
 ];
 
 // Keep in sync with DEFAULT_MODEL and DEFAULT_EFFORT in rag/domain/models/agent/agent.py.
