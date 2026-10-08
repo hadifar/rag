@@ -35,6 +35,7 @@ from rag.services.agent_service.memory import HistoryLimits, recall
 from rag.services.agent_service.messages import is_final_answer
 from rag.services.agent_service.prompts import (
     BLOCKED_MESSAGE,
+    DECLINE_SYSTEM_PROMPT,
     REVISION_INSTRUCTION,
     system_prompt,
 )
@@ -66,17 +67,16 @@ class ChatState(MessagesState):
     revisions: NotRequired[int]  # answers sent back to revise this turn
     # The thread's attachments by id: its messages list ids, each model call reads these.
     attachments: NotRequired[dict[str, AttachmentFile]]
-    # The user's skills, loaded on the turn's first model call.
+    # The user's skills, loaded once per on-topic turn by load_skills.
     skills: NotRequired[list[Skill]]
 
 
 class RagAgent:
     """The RAG agent (an AgentPort):
 
-    START -> check_input -> invoke_skill -> model <-> tools
-               |    |                        ^  |
-               |    +----- off_topic --------+  |
-              END                         check_answer -> END, or  model
+    START -> check_input -allow-----> load_skills -> model <-> tools
+                         -off_topic-> decline -> END     |
+                         -block-----> END                check_answer -> END, or model
 
     """
 
@@ -109,8 +109,9 @@ class RagAgent:
     def _init_graph(self, tools):
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("check_input", self._check_input)
-        graph.add_node("invoke_skill", self._invoke_skill)
+        graph.add_node("load_skills", self._load_skills)
         graph.add_node("model", self._model)
+        graph.add_node("decline", self._decline)
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("check_answer", self._check_answer)
 
@@ -118,9 +119,10 @@ class RagAgent:
         graph.add_conditional_edges(
             "check_input",
             _after_input,
-            {"allow": "invoke_skill", "off_topic": "model", "block": END},
+            {"allow": "load_skills", "off_topic": "decline", "block": END},
         )
-        graph.add_edge("invoke_skill", "model")
+        graph.add_edge("load_skills", "model")
+        graph.add_edge("decline", END)
         graph.add_conditional_edges("model", _after_model)
         graph.add_edge("tools", "model")
         graph.add_conditional_edges(
@@ -175,44 +177,45 @@ class RagAgent:
         assert question.id is not None
         return {"input_decision": decision, "messages": [RemoveMessage(id=question.id)]}
 
-    async def _invoke_skill(
+    async def _load_skills(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> dict[str, Any]:
-        """Only trigger when a question that starts with "/<name>" of one of the user's skills starts its
-        turn with that skill loaded; a name the user has no skill of loads nothing.
+        """The user's skills, for the model's system prompt to list, and, for a question
+        that starts with "/<name>" of one of them, that skill loaded at the turn's
+        start; a name the user has no skill of loads nothing.
         """
+        user = runtime.context.user_id
+        update: dict[str, Any] = {"skills": await self._skills.list_for_user(user)}
         name = invoked_skill(state["messages"][-1].text)
         if name is None:
-            return {}
-        content = await self._skills.content(runtime.context.user_id, name)
-        if content is None:
-            return {}
-        return {"messages": skill_to_messages(name, content)}
+            return update
+        content = await self._skills.content(user, name)
+        if content is not None:
+            update["messages"] = skill_to_messages(name, content)
+        return update
 
     async def _model(
         self, state: ChatState, runtime: Runtime[RunContext]
     ) -> dict[str, Any]:
-
-        off_topic = state.get("input_decision") == "off_topic"
-
-        skills = state.get("skills")
-
-        if skills is None:
-            skills = await self._skills.list_for_user(runtime.context.user_id)
-
-        messages: list[BaseMessage] = [
-            SystemMessage(system_prompt(off_topic=off_topic, skills=skills)),
-            *with_attachments(state["messages"], state.get("attachments", {})),
-        ]
+        messages = _prompted(system_prompt(state.get("skills", [])), state)
 
         # The model only runs right after a final answer when check_answer rejected it.
         if is_final_answer(state["messages"][-1]):
             messages.append(HumanMessage(REVISION_INSTRUCTION))
 
         ctx = runtime.context
-        models = self._off_topic_models if off_topic else self._on_topic_models
-        model = self._llm.prepare(models[ctx.model], ctx.effort)
-        return {"messages": [await model.ainvoke(messages)], "skills": skills}
+        model = self._llm.prepare(self._on_topic_models[ctx.model], ctx.effort)
+        return {"messages": [await model.ainvoke(messages)]}
+
+    async def _decline(
+        self, state: ChatState, runtime: Runtime[RunContext]
+    ) -> dict[str, Any]:
+        """An off-topic question's reply is fixed, and the turn ends."""
+
+        ctx = runtime.context
+        model = self._llm.prepare(self._off_topic_models[ctx.model], ctx.effort)
+        messages = _prompted(DECLINE_SYSTEM_PROMPT, state)
+        return {"messages": [await model.ainvoke(messages)]}
 
     async def _check_answer(self, state: ChatState) -> dict[str, Any]:
         """The stream holds a checked answer back until its verdict (`AnswerGate`), so
@@ -234,6 +237,14 @@ class RagAgent:
             "answer_decision": "revise",
             "revisions": state.get("revisions", 0) + 1,
         }
+
+
+def _prompted(system: str, state: ChatState) -> list[BaseMessage]:
+    """A model call's messages: `system`, then the thread with its attachments."""
+    return [
+        SystemMessage(system),
+        *with_attachments(state["messages"], state.get("attachments", {})),
+    ]
 
 
 def _after_input(state: ChatState) -> InputDecision:

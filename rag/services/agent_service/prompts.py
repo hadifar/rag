@@ -110,17 +110,17 @@ REVISION_INSTRUCTION = (
 TURN_FAILED_MESSAGE = "Something went wrong while answering. Please try again."
 
 
-def system_prompt(*, off_topic: bool, skills: Sequence[Skill] = ()) -> str:
-    """The chat agent's system prompt. Off-topic, the model is told to decline, and not
-    to plan or load skills with tools it doesn't have.
-    """
-    if off_topic:
-        steps = [OFF_TOPIC_INSTRUCTION]
-    else:
-        steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+# The decline node's system prompt: told to decline, the model isn't told to plan or
+# load skills with tools it doesn't have.
+DECLINE_SYSTEM_PROMPT = "\n\n".join(
+    [RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, OFF_TOPIC_INSTRUCTION]
+)
 
-        if skills:
-            listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
-            steps.append(SKILLS_INSTRUCTION.format(skills=listed))
 
+def system_prompt(skills: Sequence[Skill] = ()) -> str:
+    """The model node's system prompt, listing the user's `skills`."""
+    steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+    if skills:
+        listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
+        steps.append(SKILLS_INSTRUCTION.format(skills=listed))
     return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])

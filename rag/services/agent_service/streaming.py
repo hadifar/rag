@@ -31,11 +31,11 @@ ANSWER_CHECK = "answer_check"
 # check_input: a blocked message, with the refusal sent instead of an answer.
 INPUT_BLOCKED = "input_blocked"
 
-# Only RagAgent's model node produces the user-facing answer. The guards' own LLM
+# Only RagAgent's model and decline nodes produce the user-facing answer. The guards' own LLM
 # calls (verdicts, not an answer) run in their own nodes of this same
 # graph and would otherwise leak into the text stream too, since astream_events
 # captures every chat model call in the run, not just this one.
-_USER_FACING_NODE = "model"
+_USER_FACING_NODES = frozenset({"model", "decline"})
 
 # LangChain's planning tool, which RagAgent uses as is. Its call is the plan, not a
 # search, so it's sent as the plan itself; it returns a Command whose state update holds
@@ -88,7 +88,10 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     kind = raw_event["event"]
 
     if kind == "on_chat_model_stream":
-        if raw_event.get("metadata", {}).get("langgraph_node") != _USER_FACING_NODE:
+        if (
+            raw_event.get("metadata", {}).get("langgraph_node")
+            not in _USER_FACING_NODES
+        ):
             return []
         return _chunk_events(raw_event["data"]["chunk"])
 

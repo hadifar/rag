@@ -453,6 +453,18 @@ async def test_off_topic_instruction_applies_to_that_turn_only() -> None:
     assert not any(isinstance(m, SystemMessage) for m in chat.saved_messages())
 
 
+async def test_an_off_topic_reply_streams_without_an_answer_check() -> None:
+    model = _ScriptedChatModel(
+        answers=[_answer("I only help with AtlasFlow.")],
+        off_topic_messages={"weather?"},
+    )
+
+    events = await _Chat(model).send("weather?")
+
+    assert _text(events) == "I only help with AtlasFlow."
+    assert not any(isinstance(e, AnswerChecked) for e in events)
+
+
 async def test_a_failed_search_ends_the_turn_with_an_error_and_is_forgotten() -> None:
     model = _ScriptedChatModel(
         answers=[
