@@ -19,7 +19,7 @@ from rag.domain.models import (
 )
 from rag.repository.base_repository import BaseRepository
 
-_COLUMNS = "id, user_id, title, created_at, updated_at, pinned_at, model, effort"
+_COLUMNS = "id, user_id, title, created_at, updated_at, pinned_at"
 # Turn events are stored as the JSON objects their `type` tells apart.
 _EVENTS = TypeAdapter(list[TaggedStreamEvent])
 
@@ -99,8 +99,6 @@ class ConversationRepository(BaseRepository[Conversation]):
             f"""
             UPDATE conversations SET
                 title = COALESCE(%(title)s::text, title),
-                model = COALESCE(%(model)s::text, model),
-                effort = COALESCE(%(effort)s::text, effort),
                 pinned_at = CASE
                     WHEN %(pinned)s::boolean IS NULL THEN pinned_at
                     WHEN %(pinned)s::boolean THEN COALESCE(pinned_at, now())

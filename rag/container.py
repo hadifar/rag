@@ -46,6 +46,7 @@ from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.run_settings_service.service import RunSettingsService
 from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 
@@ -60,6 +61,7 @@ class Container:
     share_service: ShareService
     attachment_service: AttachmentService
     skill_service: SkillService
+    run_settings_service: RunSettingsService
     app_settings: AppSettings
 
 
@@ -166,8 +168,9 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             max_archive_bytes=uploads.kb_max_bytes,
         )
 
+        user_repo = UserRepository(db_pool)
         auth_service = AuthService(
-            user_repository=UserRepository(db_pool),
+            user_repository=user_repo,
             pass_hasher=Argon2PasswordHasher(),
             token_codec=JwtTokenCodec(
                 settings.AUTH.JWT_SECRET.get_secret_value(),
@@ -187,6 +190,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         chat_service = ChatService(
             repository=conversation_repo,
             attachments=attachment_repo,
+            users=user_repo,
             agent=rag_agent,
         )
 
@@ -206,6 +210,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
                 max_bytes=uploads.attachment_max_bytes,
             ),
             skill_service=skill_service,
+            run_settings_service=RunSettingsService(users=user_repo),
             app_settings=AppSettings(
                 model=DEFAULT_MODEL,
                 top_k=retrieval_service.top_k,

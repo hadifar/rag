@@ -17,7 +17,7 @@ DEFAULT_EFFORT: Effort = "low"
 @dataclass(frozen=True)
 class RunContext:
     """Who a chat turn is for, and where: the turn's trace is tagged with it. And
-    how it runs: the model and effort its conversation is set to.
+    how it runs: the model and effort the user is set to.
     """
 
     user_id: uuid.UUID

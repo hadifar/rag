@@ -25,7 +25,7 @@ from rag.domain.models.agent.stream import (
     TurnFailed,
 )
 from rag.domain.models.attachment import Attachment, AttachmentFile
-from rag.domain.models.auth import User
+from rag.domain.models.auth import RunSettingsUpdate, User
 from rag.domain.models.conversation import (
     AssistantMessage,
     Conversation,
@@ -81,6 +81,7 @@ __all__ = [
     "ReasoningDelta",
     "SKILL_NAME_PATTERN",
     "RunContext",
+    "RunSettingsUpdate",
     "Share",
     "SharedConversation",
     "Skill",

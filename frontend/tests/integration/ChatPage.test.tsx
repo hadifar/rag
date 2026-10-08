@@ -10,9 +10,10 @@ import type {
   AttachmentResponse,
   ChatMessageRequest,
   ConversationResponse,
-  ConversationUpdateRequest,
   HistoryMessageResponse,
   MessageRequest,
+  RunSettingsResponse,
+  RunSettingsUpdateRequest,
 } from '@/shared/types';
 import { withQueryClient } from '../queryClient';
 import { server, sse } from '../server';
@@ -45,8 +46,6 @@ const newConversation: ConversationResponse = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   pinned_at: null,
-  model: 'gpt-6-luna',
-  effort: 'low',
 };
 
 async function ask(user: ReturnType<typeof userEvent.setup>, question: string) {
@@ -291,17 +290,17 @@ describe('ChatPage', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
-  it("shows the conversation's model and effort, and saves a new pick", async () => {
-    let saved: ConversationUpdateRequest | undefined;
+  it("shows the user's model and effort, and saves a new pick", async () => {
+    let saved: RunSettingsUpdateRequest | undefined;
     server.use(
       http.get('/api/conversations/:id/messages', () => HttpResponse.json([])),
-      http.get('/api/conversations/:id', () =>
-        HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'medium' }),
+      http.get('/api/settings/me', () =>
+        HttpResponse.json<RunSettingsResponse>({ model: 'gpt-6-astra', effort: 'medium' })
       ),
-      http.patch('/api/conversations/:id', async ({ request }) => {
-        saved = (await request.json()) as ConversationUpdateRequest;
-        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-astra', effort: 'high' });
-      }),
+      http.patch('/api/settings/me', async ({ request }) => {
+        saved = (await request.json()) as RunSettingsUpdateRequest;
+        return HttpResponse.json<RunSettingsResponse>({ model: 'gpt-6-astra', effort: 'high' });
+      })
     );
     const { user } = renderChat(`/chat/${newConversation.id}`);
 
@@ -313,32 +312,24 @@ describe('ChatPage', () => {
     expect(saved).toEqual({ effort: 'high' });
   });
 
-  it("sets a new chat to the model picked before its first message goes", async () => {
-    const calls: string[] = [];
+  it('keeps a pick made in one conversation for the next', async () => {
+    let current: RunSettingsResponse = { model: 'gpt-6-luna', effort: 'low' };
     server.use(
-      http.post('/api/conversations', () => HttpResponse.json(newConversation)),
-      http.patch('/api/conversations/:id', async ({ request }) => {
-        calls.push(`patch ${JSON.stringify(await request.json())}`);
-        return HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-sol' });
-      }),
-      http.post('/api/chat/:id', () => {
-        calls.push('chat');
-        return sse([{ type: 'text', text: 'Hi.' }]);
-      }),
-      http.post('/api/conversations/:id/title', () => HttpResponse.json(newConversation)),
-      // Once the URL has its id, the page reads the conversation as the server keeps it.
-      http.get('/api/conversations/:id', () =>
-        HttpResponse.json<ConversationResponse>({ ...newConversation, model: 'gpt-6-sol' }),
-      ),
+      http.get('/api/conversations/:id/messages', () => HttpResponse.json([])),
+      http.get('/api/settings/me', () => HttpResponse.json(current)),
+      http.patch('/api/settings/me', async ({ request }) => {
+        current = { ...current, ...((await request.json()) as Partial<RunSettingsResponse>) };
+        return HttpResponse.json(current);
+      })
     );
-    const { user } = renderChat('/chat');
+    const { router, user } = renderChat(`/chat/${newConversation.id}`);
 
-    await user.click(screen.getByRole('button', { name: 'Model: gpt-6-luna' }));
+    await user.click(await screen.findByRole('button', { name: 'Model: gpt-6-luna' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'gpt-6-sol' }));
-    await ask(user, 'hello');
+    await screen.findByRole('button', { name: 'Model: gpt-6-sol' });
+    await act(() => router.navigate('/chat'));
 
-    expect(await screen.findByText('Hi.')).toBeInTheDocument();
-    expect(calls).toEqual(['patch {"model":"gpt-6-sol"}', 'chat']);
-    expect(screen.getByRole('button', { name: 'Model: gpt-6-sol' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Model: gpt-6-sol' })).toBeInTheDocument();
+    expect(current).toEqual({ model: 'gpt-6-sol', effort: 'low' });
   });
 });

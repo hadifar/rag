@@ -11,7 +11,7 @@ export function useChat(conversationId: string | undefined) {
   const transcript = useTranscript(conversationId);
   const sendMessage = useSendMessage(conversationId);
   const attachments = useAttachmentDrafts(conversationId);
-  const run = useRunSettings(conversationId);
+  const run = useRunSettings();
   const { settings } = run;
   const { take } = attachments;
   const failed = retryable(transcript);
@@ -23,9 +23,9 @@ export function useChat(conversationId: string | undefined) {
   const send = useCallback(
     (text: string) => {
       const { attachments: files, conversation } = take();
-      void sendMessage(text, files, conversation, settings);
+      void sendMessage(text, files, conversation);
     },
-    [sendMessage, take, settings]
+    [sendMessage, take]
   );
 
   // Sends the failed question again as a new turn, as the saved history will show it,

@@ -19,6 +19,7 @@ from rag.domain.models import (
     IngestionReport,
     IngestionRun,
     RunContext,
+    RunSettingsUpdate,
     Share,
     Skill,
     SkillContent,
@@ -116,6 +117,25 @@ class FakeUserRepository:
             return None
         self._users[user.id] = replace(user, is_admin=is_admin)
         return self._users[user.id]
+
+    async def update_run_settings(
+        self, user_id: uuid.UUID, change: RunSettingsUpdate
+    ) -> User | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        fields = {k: v for k, v in asdict(change).items() if v is not None}
+        self._users[user_id] = replace(user, **fields)
+        return self._users[user_id]
+
+    def add(self, user_id: uuid.UUID) -> None:
+        """A user with the id the test picked, set to the defaults."""
+        self._users[user_id] = User(
+            id=user_id,
+            email=f"{user_id}@example.com",
+            hashed_password="x",
+            created_at=datetime.now(UTC),
+        )
 
 
 class FakeIngestionRunRepository:

@@ -1,6 +1,6 @@
 import type {
-  ConversationResponse,
   ReasoningEvent,
+  RunSettingsResponse,
   TextEvent,
   TodosEvent,
   ToolEvent,
@@ -78,7 +78,7 @@ export type Transcript = {
 /** A skill the user can invoke with "/<name>" at the start of a message. */
 export type SkillOption = { name: string; description: string };
 
-/** What a conversation's answers run on: its model, and how hard that model thinks. */
-export type RunSettings = Pick<ConversationResponse, 'model' | 'effort'>;
+/** What the user's answers run on, in every conversation: the model, and how hard it thinks. */
+export type RunSettings = RunSettingsResponse;
 export type ModelName = RunSettings['model'];
 export type Effort = RunSettings['effort'];

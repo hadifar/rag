@@ -164,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Update Conversation
-         * @description Renames, pins or unpins it, or sets the model and effort its turns run on.
+         * @description Renames, or pins or unpins it.
          */
         patch: operations["update_conversation_api_conversations__conversation_id__patch"];
         trace?: never;
@@ -389,6 +389,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run Settings
+         * @description The model and effort the user's turns run on, in every conversation.
+         */
+        get: operations["get_run_settings_api_settings_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Run Settings
+         * @description Sets the model or effort the user's turns run on, in every conversation.
+         */
+        patch: operations["update_run_settings_api_settings_me_patch"];
+        trace?: never;
+    };
     "/api/shares/{share_id}": {
         parameters: {
             query?: never;
@@ -561,16 +585,6 @@ export interface components {
             updated_at: string;
             /** Pinned At */
             pinned_at: string | null;
-            /**
-             * Model
-             * @enum {string}
-             */
-            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
-            /**
-             * Effort
-             * @enum {string}
-             */
-            effort: "low" | "medium" | "high";
         };
         /**
          * ConversationUpdateRequest
@@ -581,10 +595,6 @@ export interface components {
             title?: string | null;
             /** Pinned */
             pinned?: boolean | null;
-            /** Model */
-            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
-            /** Effort */
-            effort?: ("low" | "medium" | "high") | null;
         };
         /**
          * ErrorEvent
@@ -668,6 +678,32 @@ export interface components {
             type: "reasoning";
             /** Text */
             text: string;
+        };
+        /**
+         * RunSettingsResponse
+         * @description What the user's chat turns run on, in every conversation.
+         */
+        RunSettingsResponse: {
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
+            /**
+             * Effort
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "high";
+        };
+        /**
+         * RunSettingsUpdateRequest
+         * @description The fields to change; each one left out stays as is.
+         */
+        RunSettingsUpdateRequest: {
+            /** Model */
+            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "high") | null;
         };
         /**
          * SettingsResponse
@@ -1639,6 +1675,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    get_run_settings_api_settings_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_run_settings_api_settings_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

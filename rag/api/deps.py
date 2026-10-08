@@ -15,6 +15,7 @@ from rag.services.conversation_service.service import ConversationService
 from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.run_settings_service.service import RunSettingsService
 from rag.services.skill_service.service import SkillService
 
 # A bearer token from POST /api/auth/login. Not OAuth2PasswordBearer: login takes JSON,
@@ -57,6 +58,9 @@ AttachmentServiceDep = Annotated[
     AttachmentService, _from_container(lambda c: c.attachment_service)
 ]
 SkillServiceDep = Annotated[SkillService, _from_container(lambda c: c.skill_service)]
+RunSettingsServiceDep = Annotated[
+    RunSettingsService, _from_container(lambda c: c.run_settings_service)
+]
 AppSettingsDep = Annotated[AppSettings, _from_container(lambda c: c.app_settings)]
 
 

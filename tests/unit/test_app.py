@@ -39,6 +39,7 @@ from rag.services.conversation_service.service import ConversationService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.run_settings_service.service import RunSettingsService
 from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
@@ -88,9 +89,9 @@ def _stub_settings() -> Settings:
     )
 
 
-def _build_auth_service() -> AuthService:
+def _build_auth_service(users: FakeUserRepository) -> AuthService:
     return AuthService(
-        user_repository=FakeUserRepository(),
+        user_repository=users,
         pass_hasher=FakePasswordHasher(),
         token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
@@ -100,7 +101,8 @@ def _build_auth_service() -> AuthService:
 
 @pytest.fixture
 def client() -> Generator[TestClient]:
-    auth_service = _build_auth_service()
+    users = FakeUserRepository()
+    auth_service = _build_auth_service(users)
     asyncio.run(auth_service.create_user(_TEST_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
@@ -132,6 +134,7 @@ def client() -> Generator[TestClient]:
         chat_service=ChatService(
             repository=conversation_repository,
             attachments=attachment_repository,
+            users=users,
             agent=agent,
         ),
         share_service=ShareService(
@@ -148,6 +151,7 @@ def client() -> Generator[TestClient]:
             max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
             max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
         ),
+        run_settings_service=RunSettingsService(users=users),
         app_settings=AppSettings(
             model="gpt-4o-mini",
             top_k=4,
@@ -346,11 +350,8 @@ def test_create_conversation_starts_it_untitled_and_empty(
         "created_at",
         "updated_at",
         "pinned_at",
-        "model",
-        "effort",
     }
     assert conversation["title"] is None
-    assert (conversation["model"], conversation["effort"]) == ("gpt-6-luna", "low")
     assert conversation["pinned_at"] is None
     messages_url = f"/api/conversations/{conversation['id']}/messages"
     assert client.get(messages_url, headers=auth_headers).json() == []
@@ -512,46 +513,37 @@ def test_rename_stores_the_title_on_one_line(
     assert listed["items"][0]["title"] == "Billing questions"
 
 
-def test_the_model_and_effort_are_set_per_conversation(
+def test_the_model_and_effort_are_set_per_user(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    conversation_id = _start_conversation(client, auth_headers)
-    other_id = _create_conversation(client, auth_headers)
+    initial = client.get("/api/settings/me", headers=auth_headers).json()
+    assert initial == {"model": "gpt-6-luna", "effort": "low"}
 
     response = client.patch(
-        f"/api/conversations/{conversation_id}",
+        "/api/settings/me",
         json={"model": "gpt-6-sol", "effort": "high"},
         headers=auth_headers,
     )
 
     assert response.status_code == 200
-    assert (response.json()["model"], response.json()["effort"]) == (
-        "gpt-6-sol",
-        "high",
-    )
+    assert response.json() == {"model": "gpt-6-sol", "effort": "high"}
     # Setting one leaves the other as it was.
     effort_only = client.patch(
-        f"/api/conversations/{conversation_id}",
-        json={"effort": "low"},
-        headers=auth_headers,
+        "/api/settings/me", json={"effort": "low"}, headers=auth_headers
     ).json()
-    assert (effort_only["model"], effort_only["effort"]) == ("gpt-6-sol", "low")
-    fetched = client.get(f"/api/conversations/{conversation_id}", headers=auth_headers)
-    assert (fetched.json()["model"], fetched.json()["effort"]) == ("gpt-6-sol", "low")
-    other = client.post("/api/conversations", headers=auth_headers).json()
-    assert other["id"] == other_id
-    assert (other["model"], other["effort"]) == ("gpt-6-luna", "low")
+    assert effort_only == {"model": "gpt-6-sol", "effort": "low"}
+    fetched = client.get("/api/settings/me", headers=auth_headers).json()
+    assert fetched == {"model": "gpt-6-sol", "effort": "low"}
+    # Another user's stay as they were.
+    other = client.get("/api/settings/me", headers=_login(client, _OTHER_EMAIL))
+    assert other.json() == {"model": "gpt-6-luna", "effort": "low"}
 
 
 @pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "max"}])
 def test_an_unknown_model_or_effort_is_rejected(
     client: TestClient, auth_headers: dict[str, str], body: dict[str, str]
 ) -> None:
-    conversation_id = _start_conversation(client, auth_headers)
-
-    response = client.patch(
-        f"/api/conversations/{conversation_id}", json=body, headers=auth_headers
-    )
+    response = client.patch("/api/settings/me", json=body, headers=auth_headers)
 
     assert response.status_code == 422
 

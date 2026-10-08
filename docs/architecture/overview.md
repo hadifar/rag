@@ -29,7 +29,7 @@ A user can attach files (`.md`, `.png`, `.jpg`) to a message.
 * The agent's memory stores only attachment ids. Every model call reads the files again, so a later turn still sees an earlier image.
 * `rag prune-attachments` deletes files that were uploaded but never sent.
 
-Each conversation has a model (`gpt-6-luna`, `gpt-6-astra` or `gpt-6-sol`) and an effort (`low`, `medium` or `high`), on `conversations`. The user picks them in the composer (`PATCH /api/conversations/{id}`); a new chat applies its picks when its first message creates it.
+Each user has a model (`gpt-6-luna`, `gpt-6-astra` or `gpt-6-sol`) and an effort (`low`, `medium` or `high`), on `users`. The user picks them in the composer (`PATCH /api/settings/me`); the pick applies to every conversation, new or old.
 
 * The model is the one the provider is called with (for Azure, the deployment name). Only the agent's answers use it; titles, the reranker and the guards run on the default, `gpt-6-luna` (`DEFAULT_MODEL`).
 * The effort is sent as the model's reasoning effort, only when `LLM__REASONING_EFFORT` is set (reasoning models).

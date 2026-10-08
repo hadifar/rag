@@ -2,21 +2,15 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  createConversation,
-  generateTitle,
-  updateConversation,
-  useConversationCache,
-} from '@/features/conversations';
+import { createConversation, generateTitle, useConversationCache } from '@/features/conversations';
 import { errorMessage } from '@/shared/api/errors';
 import type { ConversationResponse, StreamEventResponse } from '@/shared/types';
 import { routes } from '@/shared/routes';
 import { streamChat } from '../api/chat';
 import { chatKeys } from '../api/queryKeys';
 import { titleSource } from '../model/attachments';
-import { settingsToChange } from '../model/runSettings';
 import { applyEvents, emptyTranscript, endTurn, startTurn } from '../model/transcript';
-import type { AttachmentChip, RunSettings, Transcript } from '../types';
+import type { AttachmentChip, Transcript } from '../types';
 import { frameBatcher } from './frameBatcher';
 
 /** Why the answer stopped, for the user: never the raw error, which reads as gibberish. */
@@ -38,9 +32,8 @@ type Stream = { conversationId: string | undefined; controller: AbortController 
  * and streams the answer into the conversation's transcript.
  * `conversationId` is the one on screen (undefined for a new chat, which is created on
  * its first message and then followed by the URL). A new chat whose files were uploaded
- * first passes `newChat`, the conversation they went to. A new chat is set to `settings`,
- * the model and effort the user picked for it, before its message goes. Leaving the
- * conversation stops it.
+ * first passes `newChat`, the conversation they went to. Leaving the conversation stops
+ * it.
  */
 export function useSendMessage(conversationId: string | undefined) {
   const queryClient = useQueryClient();
@@ -73,8 +66,7 @@ export function useSendMessage(conversationId: string | undefined) {
     async (
       val: string,
       attachments: AttachmentChip[] = [],
-      newChat: ConversationResponse | null = null,
-      settings: RunSettings | null = null
+      newChat: ConversationResponse | null = null
     ) => {
       const text = val.trim();
       if (!text && attachments.length === 0) return;
@@ -106,10 +98,7 @@ export function useSendMessage(conversationId: string | undefined) {
           // The server lists it first too, as it takes the message.
           bump(conversationId);
         } else {
-          const created = newChat ?? (await createConversation(controller.signal));
-          const change = settings && settingsToChange(created, settings);
-          const conversation = change ? await updateConversation(created.id, change) : created;
-          queryClient.setQueryData(chatKeys.conversation(conversation.id), conversation);
+          const conversation = newChat ?? (await createConversation(controller.signal));
           upsert(conversation);
           void nameConversation(conversation.id, titleSource(text, attachments));
           // Move what's on screen to the new chat's own entry, then let the URL follow.

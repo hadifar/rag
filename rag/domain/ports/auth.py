@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-from rag.domain.models import User
+from rag.domain.models import RunSettingsUpdate, User
 
 
 class UserRepositoryPort(Protocol):
@@ -16,6 +16,12 @@ class UserRepositoryPort(Protocol):
 
     async def set_admin(self, email: str, is_admin: bool) -> User | None:
         """None if no user has that email."""
+        ...
+
+    async def update_run_settings(
+        self, user_id: uuid.UUID, change: RunSettingsUpdate
+    ) -> User | None:
+        """A field `change` leaves None stays as is. None if no user has that id."""
         ...
 
 

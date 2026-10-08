@@ -2,11 +2,13 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator, Sequence
 
+from rag.domain.errors import UserNotFoundError
 from rag.domain.models import AttachmentFile, RunContext, StreamEvent
 from rag.domain.ports import (
     AgentPort,
     AttachmentRepositoryPort,
     ConversationRepositoryPort,
+    UserRepositoryPort,
 )
 from rag.services.chat_service.transcript import TranscriptBuilder
 
@@ -22,9 +24,11 @@ class ChatService:
         self,
         repository: ConversationRepositoryPort,
         attachments: AttachmentRepositoryPort,
+        users: UserRepositoryPort,
         agent: AgentPort,
     ):
         self._repository = repository
+        self._users = users
         self._attachments = attachments
         self._agent = agent
 
@@ -41,15 +45,18 @@ class ChatService:
         to the transcript however the stream ends, so a failed or abandoned answer
         still shows what the user saw of it.
         """
-        conversation = await self._repository.touch_owned(user_id, conversation_id)
+        await self._repository.touch_owned(user_id, conversation_id)
         turns = await self._repository.list_turns(conversation_id)
         history = [turn.memory for turn in turns if turn.memory is not None]
         earlier_attachments = await self._attachments.list_sent(conversation_id)
+        user = await self._users.get_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id)
         ctx = RunContext(
             user_id=user_id,
             conversation_id=conversation_id,
-            model=conversation.model,
-            effort=conversation.effort,
+            model=user.model,
+            effort=user.effort,
         )
         answer = self._agent.stream(
             message,

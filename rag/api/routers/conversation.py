@@ -79,7 +79,7 @@ async def update_conversation(
     current_user: AuthenticatedUserDep,
     conversation_service: ConversationServiceDep,
 ) -> ConversationResponse:
-    """Renames, pins or unpins it, or sets the model and effort its turns run on."""
+    """Renames, or pins or unpins it."""
     conversation = await conversation_service.update(
         current_user.id, conversation_id, update_request.to_update()
     )

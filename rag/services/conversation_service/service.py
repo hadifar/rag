@@ -90,9 +90,8 @@ class ConversationService:
         conversation_id: uuid.UUID,
         change: ConversationUpdate,
     ) -> Conversation:
-        """Renames it, pins or unpins it, or sets the model and effort its turns run
-        on; a field `change` leaves None stays as is. No change counts as using it,
-        so it keeps its place among the recent ones.
+        """Renames it, or pins or unpins it; a field `change` leaves None stays as
+        is. No change counts as using it, so it keeps its place among the recent ones.
         """
         return await self._repository.update_owned(user_id, conversation_id, change)
 
