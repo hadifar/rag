@@ -2,11 +2,11 @@ import type { ReactNode } from 'react';
 
 const looks = {
   /** Flush text, like the assistant's answer. */
-  plain: 'px-3',
+  plain: 'max-w-[90%] px-3',
   /** A tinted card, for asides such as a tool call or the sources. */
-  card: 'rounded-xl bg-slate-50 px-3 py-2',
-  /** The user's own message. */
-  user: 'rounded-2xl rounded-tr-sm bg-slate-100 px-4 py-3',
+  card: 'max-w-[90%] rounded-xl bg-slate-50 px-3 py-2',
+  /** The user's own message: kept narrow, as chat apps do. */
+  user: 'max-w-[480px] rounded-2xl rounded-tr-sm bg-slate-100 px-4 py-3',
 };
 
 type BubbleFrameProps = {
@@ -16,7 +16,7 @@ type BubbleFrameProps = {
   children: ReactNode;
 };
 
-/** The box every chat bubble sits in: one width, one text size, a `look` per kind. */
+/** The box every chat bubble sits in: one text size, a `look` (and width) per kind. */
 export function BubbleFrame({ look = 'plain', className = '', children }: BubbleFrameProps) {
-  return <div className={`max-w-[480px] text-sm ${looks[look]} ${className}`}>{children}</div>;
+  return <div className={`text-sm ${looks[look]} ${className}`}>{children}</div>;
 }

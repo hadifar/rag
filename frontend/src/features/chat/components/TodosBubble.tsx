@@ -18,28 +18,28 @@ const TEXT_STYLE: Record<TodoItem['status'], string> = {
 function StatusIcon({ status }: Pick<TodoItem, 'status'>) {
   switch (status) {
     case 'completed':
-      return <CheckCircleIcon className="size-4 text-success-500" />;
+      return <CheckCircleIcon className="size-3.5 text-success-500" />;
     case 'in_progress':
       return (
-        <span className="flex size-4 items-center justify-center rounded-full border-[1.5px] border-primary-500">
+        <span className="flex size-3.5 items-center justify-center rounded-full border-[1.5px] border-primary-500">
           <span className="size-1.5 animate-pulse rounded-full bg-primary-500" />
         </span>
       );
     case 'pending':
-      return <span className="size-4 rounded-full border-[1.5px] border-slate-300" />;
+      return <span className="size-3.5 rounded-full border-[1.5px] border-slate-300" />;
   }
 }
 
 export function TodosBubble({ todos }: TodosContent) {
   return (
     <BubbleFrame className="w-full">
-      <div className="mb-1.5 font-medium text-slate-700">📋 Plan</div>
-      <ul aria-label="Plan" className="rounded-lg border border-slate-200 bg-white">
+      <div className="mb-1 text-xs font-medium text-slate-700">📋 Plan</div>
+      <ul aria-label="Plan" className="rounded-lg border border-slate-200 bg-white text-xs">
         {todos.map(({ content, status }, index) => (
           <li
             // The agent rewrites the whole list each time, and two todos can read the same.
             key={`${index}:${content}`}
-            className="flex items-center gap-2 border-b border-slate-200 px-3 py-2.5 last:border-b-0"
+            className="flex items-center gap-2 border-b border-slate-200 px-2.5 py-1.5 last:border-b-0"
           >
             <span className="flex shrink-0" title={STATUS_LABEL[status]}>
               <StatusIcon status={status} />
