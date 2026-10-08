@@ -13,7 +13,7 @@ from rag.config import (
 
 _PLACEHOLDER_SETTINGS = Settings(
     _env_file=None,  # pyright: ignore[reportCallIssue] — ignore the real .env, only the schema shape matters here
-    LLM=OpenAILLMConfig(API_KEY=SecretStr("placeholder"), MODEL="placeholder"),
+    LLM=OpenAILLMConfig(API_KEY=SecretStr("placeholder")),
     DATABASE_URL=SecretStr("placeholder"),
     AUTH=AuthConfig(JWT_SECRET=SecretStr("placeholder")),
 )

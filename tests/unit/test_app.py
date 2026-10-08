@@ -79,7 +79,7 @@ class _StubRetrievalService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
+        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key")),
         DATABASE_URL=SecretStr("unused"),
         AUTH=AuthConfig(
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),

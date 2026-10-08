@@ -24,6 +24,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda
 from pydantic import BaseModel, Field
 
 from rag.domain.models import (
+    MODEL_NAMES,
     AgentMemory,
     AnswerVerified,
     ArtifactsReady,
@@ -212,7 +213,9 @@ class _Chat:
         history_limits: HistoryLimits | None = None,
     ):
         self.agent = RagAgent(
-            Llm(model, _no_tracing, attempts=retry_attempts),
+            Llm(
+                dict.fromkeys(MODEL_NAMES, model), _no_tracing, attempts=retry_attempts
+            ),
             _StubRetrievalService(),
             skills if skills is not None else FakeSkillRepository(),
             verdicts=verdicts if verdicts is not None else FakeCache(),
@@ -1038,10 +1041,9 @@ async def test_a_turn_answers_on_its_conversations_model_and_effort() -> None:
     main = _ScriptedChatModel(answers=[])
     sol = _ScriptedChatModel(answers=[_answer("From sol.")])
     llm = Llm(
-        main,
+        {"gpt-6-luna": main, "gpt-6-astra": main, "gpt-6-sol": sol},
         _no_tracing,
         attempts=1,
-        models={"gpt-6-luna": main, "gpt-6-astra": main, "gpt-6-sol": sol},
         reasoning=True,
     )
     agent = RagAgent(

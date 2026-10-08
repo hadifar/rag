@@ -15,6 +15,6 @@ class UploadLimits:
 class AppSettings:
     """What the app tells its users about how it's configured; no secrets."""
 
-    model: str  # the chat model's name (its deployment's, on Azure)
+    model: str  # the default chat model's name (the guards' and titles')
     top_k: int  # passages a knowledge-base search returns
     uploads: UploadLimits

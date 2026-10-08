@@ -8,7 +8,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 
 from rag.domain.models import (
-    MODEL_NAMES,
+    DEFAULT_MODEL,
     AttachmentFile,
     Effort,
     ModelName,
@@ -20,23 +20,22 @@ TraceConfig = Callable[[str | None, RunContext | None], RunnableConfig]
 
 
 class Llm:
-    """The LLM (an LLMPort): the one holder of the model, with its tracing and retries.
-    Others get single-shot structured generation from `model`, the main one; the
-    agent answers with the one of `models` its conversation is set to, binding its
-    tools to it. Left out, every name runs on `model`.
+    """The LLM (an LLMPort): the one holder of the models, with their tracing and
+    retries. The agent answers with the one of `models` its conversation is set to,
+    binding its tools to it; others get single-shot structured generation from
+    `model`, the default one.
     """
 
     def __init__(
         self,
-        model: BaseChatModel,
+        models: Mapping[ModelName, BaseChatModel],
         trace_config: TraceConfig,
         attempts: int,
         *,
-        models: Mapping[ModelName, BaseChatModel] | None = None,
         reasoning: bool = False,
     ):
-        self.model = model
-        self.models = dict(models) if models else dict.fromkeys(MODEL_NAMES, model)
+        self.models = dict(models)
+        self.model = self.models[DEFAULT_MODEL]
         self.trace_config = trace_config
         self.attempts = attempts  # tries per call
         self._reasoning = reasoning  # the models think (LLM__REASONING_EFFORT is set)

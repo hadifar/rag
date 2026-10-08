@@ -9,29 +9,29 @@ from psycopg_pool import AsyncConnectionPool
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
-from rag.adapters.langchain.llm_client import build_embeddings, build_llm
+from rag.adapters.langchain.llm_client import build_embeddings, build_llms
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
 from rag.config import Settings
 from rag.domain.models import (
-    MODEL_NAMES,
+    DEFAULT_MODEL,
     AppSettings,
     Chunk,
     InputVerdict,
     UploadLimits,
 )
 from rag.domain.ports import CachePort
+from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.cache_repository import (
     EmbeddingCacheRepository,
     InputVerdictCacheRepository,
     NoCache,
     SearchCacheRepository,
 )
-from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.conversation_repository import ConversationRepository
-from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.repository.share_repository import ShareRepository
 from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
@@ -80,7 +80,7 @@ def _caches(
         return _Caches(embeddings=NoCache(), search=NoCache(), verdicts=NoCache())
 
     cache, llm, retrieval = settings.CACHE, settings.LLM, settings.RETRIEVAL
-    reranker = llm.chat_model_name if retrieval.RERANK_CANDIDATES else "none"
+    reranker = DEFAULT_MODEL if retrieval.RERANK_CANDIDATES else "none"
     return _Caches(
         embeddings=EmbeddingCacheRepository(
             db_pool,
@@ -99,7 +99,7 @@ def _caches(
         ),
         verdicts=InputVerdictCacheRepository(
             db_pool,
-            model=llm.chat_model_name,
+            model=DEFAULT_MODEL,
             ttl=timedelta(days=cache.VERDICT_TTL_DAYS),
         ),
     )
@@ -121,10 +121,9 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
         llm = Llm(
-            model=build_llm(settings),
+            models=build_llms(settings),
             trace_config=trace_config,
             attempts=settings.LLM.RETRY_ATTEMPTS,
-            models={model: build_llm(settings, model) for model in MODEL_NAMES},
             reasoning=settings.LLM.REASONING_EFFORT is not None,
         )
 
@@ -208,8 +207,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             ),
             skill_service=skill_service,
             app_settings=AppSettings(
-                model=settings.LLM.chat_model_name,
-                # The search's: the reranker's pick, or every fetched passage.
+                model=DEFAULT_MODEL,
                 top_k=retrieval_service.top_k,
                 uploads=uploads,
             ),

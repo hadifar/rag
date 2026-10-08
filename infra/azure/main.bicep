@@ -65,12 +65,10 @@ param jwtSecret string
 @allowed(['openai', 'azure_openai'])
 param llmProvider string = 'openai'
 
-@description('Non-secret app config — see rag/config.py:Settings for the full field list.')
-param openAiModel string = 'gpt-4o-mini'
 @description('Must be a text-embedding-3-* model — see rag/config.py:OpenAILLM.EMBEDDING_MODEL.')
 param openAiEmbeddingModel string = 'text-embedding-3-small'
+@description('Must have one chat deployment per model a user can pick, named after it — see rag/domain/models:ModelName.')
 param azureOpenAiEndpoint string = ''
-param azureOpenAiDeployment string = ''
 @description('A text-embedding-3-* deployment — required when llmProvider is azure_openai.')
 param azureOpenAiEmbeddingDeployment string = ''
 param azureOpenAiApiVersion string = '2024-05-01-preview'
@@ -103,13 +101,11 @@ var llmAppSettings = llmProvider == 'azure_openai'
   ? {
       LLM__BACKEND: 'azure_openai'
       LLM__ENDPOINT: azureOpenAiEndpoint
-      LLM__DEPLOYMENT: azureOpenAiDeployment
       LLM__EMBEDDING_DEPLOYMENT: azureOpenAiEmbeddingDeployment
       LLM__API_VERSION: azureOpenAiApiVersion
     }
   : {
       LLM__BACKEND: 'openai'
-      LLM__MODEL: openAiModel
       LLM__EMBEDDING_MODEL: openAiEmbeddingModel
     }
 

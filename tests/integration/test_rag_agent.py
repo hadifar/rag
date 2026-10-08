@@ -2,7 +2,7 @@ import uuid
 
 from langchain_core.runnables import RunnableConfig
 
-from rag.adapters.langchain.llm_client import build_llm
+from rag.adapters.langchain.llm_client import build_llms
 from rag.container import build_container
 from rag.domain.models import RunContext, TextDelta, ToolCall
 from rag.repository.cache_repository import NoCache
@@ -20,7 +20,7 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         # The agent alone, over the app's search: through `chat_service`, the turn
         # would need a real user and conversation.
         llm = Llm(
-            build_llm(integration_settings),
+            build_llms(integration_settings),
             _no_tracing,
             attempts=integration_settings.LLM.RETRY_ATTEMPTS,
         )
