@@ -35,7 +35,7 @@ from rag.repository.share_repository import ShareRepository
 from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
-from rag.services.agent_service.history import HistoryLimits
+from rag.services.agent_service.memory import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService

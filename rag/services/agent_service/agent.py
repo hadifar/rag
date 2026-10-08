@@ -1,12 +1,7 @@
-import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import Sequence
 from typing import Any, Literal, NotRequired
 
-from langchain.agents.middleware.todo import (
-    WRITE_TODOS_SYSTEM_PROMPT,
-    Todo,
-    write_todos,
-)
+from langchain.agents.middleware.todo import Todo, write_todos
 from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.messages import (
     AIMessage,
@@ -27,8 +22,6 @@ from rag.domain.models import (
     InputVerdict,
     RunContext,
     Skill,
-    StreamEvent,
-    TurnFailed,
 )
 from rag.domain.ports import CachePort, SearchPort, SkillsPort
 from rag.services.agent_service.attachments import (
@@ -42,34 +35,27 @@ from rag.services.agent_service.guards.groundedness import (
     verification_inputs,
 )
 from rag.services.agent_service.guards.off_topic import classify_input
-from rag.services.agent_service.history import HistoryLimits, recall
 from rag.services.agent_service.llm import Llm
+from rag.services.agent_service.memory import HistoryLimits, recall
+from rag.services.agent_service.messages import current_turn, is_final_answer
 from rag.services.agent_service.prompts import (
-    ATTACHMENTS_INSTRUCTION,
     BLOCKED_MESSAGE,
-    OFF_TOPIC_INSTRUCTION,
-    PLANNING_INSTRUCTIONS,
-    RAG_SYSTEM_PROMPT,
     REVISION_INSTRUCTION,
-    SKILLS_INSTRUCTION,
-    TURN_FAILED_MESSAGE,
+    system_prompt,
+)
+from rag.services.agent_service.skills import (
+    invoked_skill,
+    loaded_skill,
+    skill_file_tool,
+    skill_loaded,
+    skill_tool,
 )
 from rag.services.agent_service.streaming import (
     ANSWER_VERIFICATION,
     INPUT_BLOCKED,
-    AnswerGate,
-    parse_event,
+    AgentTurn,
 )
-from rag.services.agent_service.skills import invoked_skill, skill_loaded
-from rag.services.agent_service.tools import (
-    loaded_skill,
-    search_tool,
-    skill_file_tool,
-    skill_tool,
-)
-from rag.services.agent_service.turn import current_turn, is_final_answer, remember
-
-logger = logging.getLogger(__name__)
+from rag.services.agent_service.tools import search_tool
 
 # Times verify sends an answer back to revise per turn; past it, the last answer ships.
 MAX_REVISIONS = 1
@@ -145,7 +131,9 @@ class RagAgent:
         self._skills = skills
         self._history_limits = history_limits or HistoryLimits()  # see `recall`
 
-        # The turn's RunContext: whose skills the model sees and load_skill reads.
+        self.graph = self._init_graph(tools)
+
+    def _init_graph(self, tools):
         graph = StateGraph(ChatState, context_schema=RunContext)
         graph.add_node("classify", self._classify)
         graph.add_node("invoke_skill", self._invoke_skill)
@@ -153,15 +141,18 @@ class RagAgent:
         graph.add_node(
             "model",
             self._model,
-            retry_policy=RetryPolicy(max_attempts=llm.attempts, retry_on=Exception),
+            retry_policy=RetryPolicy(
+                max_attempts=self._llm.attempts, retry_on=Exception
+            ),
         )
         graph.add_node("tools", ToolNode(tools))
         graph.add_node("verify", self._verify)
+
         graph.add_edge(START, "classify")
         graph.add_edge("invoke_skill", "model")
         graph.add_conditional_edges("model", _after_model)
         graph.add_edge("tools", "model")
-        self.graph = graph.compile()
+        return graph.compile()
 
     def stream(
         self,
@@ -171,7 +162,7 @@ class RagAgent:
         *,
         attachments: Sequence[AttachmentFile] = (),
         earlier_attachments: Sequence[AttachmentFile] = (),
-    ) -> "AgentTurn":
+    ) -> AgentTurn:
         """Answers `message` and its `attachments`, given the agent's memory of each
         earlier turn (compacted and cut to fit, see `recall`) and the attachments those
         were sent with.
@@ -234,7 +225,7 @@ class RagAgent:
         if skills is None:
             skills = await self._skills.list_for_user(runtime.context.user_id)
         messages: list[BaseMessage] = [
-            SystemMessage(_system_prompt(off_topic=off_topic, skills=skills)),
+            SystemMessage(system_prompt(off_topic=off_topic, skills=skills)),
             *with_attachments(state["messages"], state.get("attachments", {})),
         ]
         # The model only runs right after a final answer when verify rejected it.
@@ -268,65 +259,9 @@ class RagAgent:
         return Command(goto="model", update={"revisions": revisions + 1})
 
 
-def _system_prompt(*, off_topic: bool, skills: Sequence[Skill] = ()) -> str:
-    """Off-topic, the model is told to decline, and not to plan or load skills with
-    tools it doesn't have.
-    """
-    if off_topic:
-        steps = [OFF_TOPIC_INSTRUCTION]
-    else:
-        steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
-
-        if skills:
-            listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
-            steps.append(SKILLS_INSTRUCTION.format(skills=listed))
-
-    return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])
-
-
 def _after_model(state: ChatState) -> Literal["tools", "verify"]:
     """Tool calls run; an answer is checked."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
     return "verify"
-
-
-class AgentTurn:
-    """One turn: iterate it for its events, as the user is to see them (see
-    `AnswerGate`), then what its tools handed the user. Once they end, `memory` holds
-    the turn's messages, from the question on; it stays None for a turn to forget: a
-    blocked question, a failed tool or model call (whose unanswered tool call the
-    model's API would reject in every later turn), or a stream its caller stopped
-    reading.
-    """
-
-    def __init__(self, run: AsyncIterator[Any], question: HumanMessage):
-        self._run = run
-        self._question = question
-        self._messages: list[BaseMessage] = []  # the run's, once it ends
-        self.memory: AgentMemory | None = None
-
-    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
-        """If a tool or the model fails, the turn ends with `TurnFailed` instead."""
-        try:
-            async for event in self._gated_events():
-                yield event
-            self.memory, artifacts = remember(self._messages, self._question)
-            if artifacts is not None:
-                yield artifacts
-        except Exception:
-            logger.exception("chat turn failed")
-            self.memory = None
-            yield TurnFailed(message=TURN_FAILED_MESSAGE)
-
-    async def _gated_events(self) -> AsyncIterator[StreamEvent]:
-        gate = AnswerGate()
-        async for raw_event in self._run:
-            # The run's own end (it has no parent) carries the final state.
-            if raw_event["event"] == "on_chain_end" and not raw_event["parent_ids"]:
-                self._messages = raw_event["data"]["output"]["messages"]
-            for released in [r for e in parse_event(raw_event) for r in gate.feed(e)]:
-                yield released
-        for released in gate.flush():
-            yield released

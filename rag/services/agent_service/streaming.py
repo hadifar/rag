@@ -1,16 +1,28 @@
-from collections.abc import Mapping
+import logging
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.messages import (
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
 
 from rag.domain.models import (
+    AgentMemory,
     AnswerVerified,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
     TodosUpdated,
     ToolCall,
+    TurnFailed,
 )
+from rag.services.agent_service.memory import remember
+from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
+
+logger = logging.getLogger(__name__)
 
 # The custom events RagAgent's guard nodes dispatch, which the stream turns into
 # user-facing events (see _guard_events).
@@ -29,6 +41,46 @@ _USER_FACING_NODE = "model"
 # search, so it's sent as the plan itself; it returns a Command whose state update holds
 # the new todos.
 _PLANNING_TOOL = "write_todos"
+
+
+class AgentTurn:
+    """One turn: iterate it for its events, as the user is to see them (see
+    `AnswerGate`), then what its tools handed the user. Once they end, `memory` holds
+    the turn's messages, from the question on; it stays None for a turn to forget: a
+    blocked question, a failed tool or model call (whose unanswered tool call the
+    model's API would reject in every later turn), or a stream its caller stopped
+    reading.
+    """
+
+    def __init__(self, run: AsyncIterator[Any], question: HumanMessage):
+        self._run = run
+        self._question = question
+        self._messages: list[BaseMessage] = []  # the run's, once it ends
+        self.memory: AgentMemory | None = None
+
+    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
+        """If a tool or the model fails, the turn ends with `TurnFailed` instead."""
+        try:
+            async for event in self._gated_events():
+                yield event
+            self.memory, artifacts = remember(self._messages, self._question)
+            if artifacts is not None:
+                yield artifacts
+        except Exception:
+            logger.exception("chat turn failed")
+            self.memory = None
+            yield TurnFailed(message=TURN_FAILED_MESSAGE)
+
+    async def _gated_events(self) -> AsyncIterator[StreamEvent]:
+        gate = AnswerGate()
+        async for raw_event in self._run:
+            # The run's own end (it has no parent) carries the final state.
+            if raw_event["event"] == "on_chain_end" and not raw_event["parent_ids"]:
+                self._messages = raw_event["data"]["output"]["messages"]
+            for released in [r for e in parse_event(raw_event) for r in gate.feed(e)]:
+                yield released
+        for released in gate.flush():
+            yield released
 
 
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:

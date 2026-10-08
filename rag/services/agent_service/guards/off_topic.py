@@ -5,7 +5,7 @@ from langchain_core.messages import BaseMessage
 from rag.domain.models import AttachmentFile, InputDecision, InputVerdict
 from rag.domain.ports import CachePort, LLMPort
 from rag.services.agent_service.prompts import GUARDRAIL_PROMPT, OFF_TOPIC_SCOPE
-from rag.services.agent_service.turn import is_final_answer, split_turns
+from rag.services.agent_service.messages import is_final_answer, split_turns
 from rag.shared.resilience import or_default
 
 logger = logging.getLogger(__name__)

@@ -1,3 +1,9 @@
+from collections.abc import Sequence
+
+from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
+
+from rag.domain.models import Skill
+
 RAG_SYSTEM_PROMPT = (
     "You are a support assistant for AtlasFlow. Answer only from the knowledge base, "
     "which you reach with the search_kb tool: search before answering, never answer "
@@ -102,3 +108,19 @@ REVISION_INSTRUCTION = (
 
 # Shown to the user when a turn fails (see TurnFailed).
 TURN_FAILED_MESSAGE = "Something went wrong while answering. Please try again."
+
+
+def system_prompt(*, off_topic: bool, skills: Sequence[Skill] = ()) -> str:
+    """The chat agent's system prompt. Off-topic, the model is told to decline, and not
+    to plan or load skills with tools it doesn't have.
+    """
+    if off_topic:
+        steps = [OFF_TOPIC_INSTRUCTION]
+    else:
+        steps = [WRITE_TODOS_SYSTEM_PROMPT, PLANNING_INSTRUCTIONS]
+
+        if skills:
+            listed = "\n".join(f"- {s.name}: {s.description}" for s in skills)
+            steps.append(SKILLS_INSTRUCTION.format(skills=listed))
+
+    return "\n\n".join([RAG_SYSTEM_PROMPT, ATTACHMENTS_INSTRUCTION, *steps])

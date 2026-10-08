@@ -52,7 +52,7 @@ from rag.services.agent_service.prompts import (
     TURN_FAILED_MESSAGE,
 )
 from rag.services.agent_service.agent import RagAgent
-from rag.services.agent_service.history import HistoryLimits
+from rag.services.agent_service.memory import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import FakeCache, FakeSkillRepository
