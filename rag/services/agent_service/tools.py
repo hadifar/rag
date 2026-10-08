@@ -3,6 +3,7 @@ from typing import Any
 from langchain.agents.middleware.todo import write_todos
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+
 from rag.domain.models import ARTIFACTS, RunContext, SkillContent, SourceArtifact
 from rag.domain.ports import SearchPort, SkillsPort
 from rag.services.agent_service.prompts import SKILL_FILES_NOTE
