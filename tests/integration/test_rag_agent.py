@@ -2,12 +2,13 @@ import uuid
 
 from langchain_core.runnables import RunnableConfig
 
-from rag.adapters.langchain.llm_client import build_llm
+from rag.adapters.langchain.llm_client import build_llms
 from rag.container import build_container
 from rag.domain.models import RunContext, TextDelta, ToolCall
 from rag.repository.cache_repository import NoCache
 from rag.services.agent_service.agent import RagAgent
 from rag.services.agent_service.llm import Llm
+from tests.unit.fakes import FakeSkillRepository
 
 
 def _no_tracing(name: str | None, ctx: RunContext | None) -> RunnableConfig:
@@ -19,15 +20,15 @@ async def _ask(integration_settings, message: str) -> tuple[str, list[str]]:
         # The agent alone, over the app's search: through `chat_service`, the turn
         # would need a real user and conversation.
         llm = Llm(
-            build_llm(integration_settings),
+            build_llms(integration_settings),
             _no_tracing,
             attempts=integration_settings.LLM.RETRY_ATTEMPTS,
         )
         agent = RagAgent(
             llm,
             search=container.retrieval_service,
-            skills=container.skill_service,
-            verdicts=NoCache(),
+            skills=FakeSkillRepository(),  # a throwaway user has none
+            input_verdicts=NoCache(),
         )
         answer = ""
         tool_calls = []

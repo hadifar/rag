@@ -27,6 +27,7 @@ dependencies = [
     "azure-identity>=1.25.3",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.3",
+    "azure-monitor-opentelemetry>=1.8.11",
 ]
 
 [project.urls]
@@ -187,10 +188,18 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "api routers reach the domain and config only through deps and schema"
+name = "api routers reach the domain only through deps and schema"
 type = "forbidden"
 source_modules = ["rag.api.routers"]
-forbidden_modules = ["rag.domain", "rag.config"]
+forbidden_modules = ["rag.domain"]
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+name = "api never reads config: the container hands it AppSettings, with no secrets"
+type = "forbidden"
+source_modules = ["rag.api"]
+forbidden_modules = ["rag.config"]
+# Direct imports only: deps reaches the container, which reads the config.
 allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]

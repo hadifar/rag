@@ -1,9 +1,9 @@
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
-import type { VerificationContent } from '../types';
+import type { AnswerCheckContent } from '../types';
 import { BubbleFrame } from './BubbleFrame';
 
 // One line, light like the thought process: the check of the answer against its sources.
-export function VerificationBubble({ status, grounded }: VerificationContent) {
+export function AnswerCheckBubble({ status, grounded }: AnswerCheckContent) {
   const pending = status === 'pending';
 
   return (

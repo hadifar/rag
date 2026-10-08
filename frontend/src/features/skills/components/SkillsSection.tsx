@@ -13,7 +13,7 @@ import { SKILL_ACCEPT } from '../model/skills';
 export function SkillsSection() {
   const { skills, status, pending, isDeleting, deleteError, requestDelete, confirm, cancel } =
     useSkills();
-  const { upload, uploading, notice } = useSkillUpload();
+  const { upload, uploading, notice, sizes } = useSkillUpload();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const handlePick = (e: ChangeEvent<HTMLInputElement>) => {
@@ -28,8 +28,14 @@ export function SkillsSection() {
       <h2 className="m-0 text-base font-semibold text-slate-900">Skills</h2>
       <p className="m-0 text-sm text-slate-600">
         Instructions the assistant loads when a question fits their description. Upload a
-        SKILL.md file with a <code>name</code> and <code>description</code> in its frontmatter.
+        SKILL.md file with a <code>name</code> and <code>description</code> in its frontmatter
+        {sizes && ` (up to ${sizes.file})`}, or a .zip or .skill archive of one with its reference
+        files{sizes && ` (up to ${sizes.archive})`}.
       </p>
+      <StatusLine tone="warning" size="sm">
+        A skill steers what the assistant does with your conversations. Only upload skills you
+        wrote or have read through yourself.
+      </StatusLine>
 
       {status === 'loading' && <StatusLine>Loading skills…</StatusLine>}
       {status === 'error' && <StatusLine tone="warning">Couldn't load your skills.</StatusLine>}
@@ -44,6 +50,9 @@ export function SkillsSection() {
                 <p title={skill.description} className="m-0 mt-0.5 truncate text-[13px] text-slate-600">
                   {skill.description}
                 </p>
+                {skill.filesLabel && (
+                  <p className="m-0 mt-0.5 text-xs text-slate-500">{skill.filesLabel}</p>
+                )}
               </div>
               <IconButton label={`Delete ${skill.name}`} tone="danger" onClick={() => requestDelete(skill)}>
                 <TrashIcon className="size-4" />

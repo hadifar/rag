@@ -1,4 +1,4 @@
-import { api, unwrap } from '@/shared/api/client';
+import { api, fileBody, unwrap } from '@/shared/api/client';
 import type { AttachmentResponse } from '@/shared/types';
 
 function byIds(conversationId: string, attachmentId: string) {
@@ -14,14 +14,7 @@ export function uploadAttachment(conversationId: string, file: File): Promise<At
   return unwrap(
     api.POST('/api/conversations/{conversation_id}/attachments', {
       params: { path: { conversation_id: conversationId } },
-      // The schema types the file as a string; it goes as form data, which the
-      // serializer builds from the File itself.
-      body: { file: file.name },
-      bodySerializer: () => {
-        const form = new FormData();
-        form.append('file', file);
-        return form;
-      },
+      ...fileBody(file),
     })
   );
 }

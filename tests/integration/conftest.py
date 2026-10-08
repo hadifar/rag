@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from rag.adapters.kb_archive_store import LocalArchiveStore
 from rag.adapters.langchain.llm_client import build_embeddings
-from rag.config import RetrievalConfig, Settings
+from rag.config import RetrievalConfig, Settings, UploadsConfig
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
@@ -65,6 +65,7 @@ def ingestion_service(
         WholeDocumentChunker(),
         LocalArchiveStore(tmp_path),
         IngestionRunRepository(db_pool),
+        max_archive_bytes=UploadsConfig().KB_MAX_BYTES,
     )
 
 

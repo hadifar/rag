@@ -47,14 +47,15 @@ class TodosUpdated:
 
 
 @dataclass
-class AnswerVerified:
+class AnswerChecked:
     """The answer checked against what the turn's searches found: `pending` while the
-    check runs, then `done` with whether the answer is supported by them.
+    check runs, then `done` with whether the answer is supported by them. No longer
+    sent (the agent has no answer check); kept so stored transcripts still read.
     """
 
     status: Literal["pending", "done"]
     grounded: bool | None = None
-    type: Literal["verification"] = "verification"
+    type: Literal["answer_check"] = "answer_check"
 
 
 @dataclass
@@ -82,7 +83,7 @@ StreamEvent = (
     | ReasoningDelta
     | ToolCall
     | TodosUpdated
-    | AnswerVerified
+    | AnswerChecked
     | ArtifactsReady
     | TurnFailed
 )

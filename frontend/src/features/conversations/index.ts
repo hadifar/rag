@@ -2,10 +2,4 @@
 export { ConversationList } from './components/ConversationList';
 export { useConversationCache } from './hooks/useConversationCache';
 export { sharedOn } from './model/conversations';
-export {
-  createConversation,
-  fetchConversation,
-  fetchConversationMessages,
-  generateTitle,
-  updateConversation,
-} from './api/conversations';
+export { createConversation, fetchConversationMessages, generateTitle } from './api/conversations';

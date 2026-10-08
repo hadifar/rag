@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import logging
 import uuid
 import zipfile
 from collections.abc import Callable, Generator
@@ -21,10 +22,13 @@ from rag.config import (
     LoggingObservabilityConfig,
     OpenAILLMConfig,
     Settings,
+    UploadsConfig,
 )
 from rag.container import Container
-from rag.domain.errors import DocumentNotFoundError
+from rag.domain.errors import AppError, DocumentNotFoundError
 from rag.domain.models import (
+    AppSettings,
+    UploadLimits,
     Chunk,
     SourceArtifact,
     ToolCall,
@@ -33,19 +37,20 @@ from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
-from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.chunking import WholeDocumentChunker
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.setting_service.service import SettingService
+from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 from tests.unit.fakes import (
     FakeArchiveStore,
     FakeAttachmentRepository,
     FakeConversationRepository,
-    FakeShareRepository,
     FakeDocumentIndex,
     FakeIngestionRunRepository,
     FakePasswordHasher,
+    FakeShareRepository,
     FakeSkillRepository,
     FakeUserRepository,
     StubAgent,
@@ -76,7 +81,7 @@ class _StubRetrievalService:
 def _stub_settings() -> Settings:
     return Settings(
         _env_file=None,  # pyright: ignore[reportCallIssue] — unit tests must be hermetic, independent of the developer's .env
-        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key"), MODEL="gpt-4o-mini"),
+        LLM=OpenAILLMConfig(API_KEY=SecretStr("test-key")),
         DATABASE_URL=SecretStr("unused"),
         AUTH=AuthConfig(
             JWT_SECRET=SecretStr("test-secret-that-is-long-enough-32b"),
@@ -85,9 +90,9 @@ def _stub_settings() -> Settings:
     )
 
 
-def _build_auth_service() -> AuthService:
+def _build_auth_service(users: FakeUserRepository) -> AuthService:
     return AuthService(
-        user_repository=FakeUserRepository(),
+        user_repository=users,
         pass_hasher=FakePasswordHasher(),
         token_codec=JwtTokenCodec("test-secret-that-is-long-enough-32b", "HS256"),
         access_ttl=timedelta(minutes=15),
@@ -97,7 +102,8 @@ def _build_auth_service() -> AuthService:
 
 @pytest.fixture
 def client() -> Generator[TestClient]:
-    auth_service = _build_auth_service()
+    users = FakeUserRepository()
+    auth_service = _build_auth_service(users)
     asyncio.run(auth_service.create_user(_TEST_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_OTHER_EMAIL, _TEST_PASSWORD))
     asyncio.run(auth_service.create_user(_ADMIN_EMAIL, _TEST_PASSWORD, is_admin=True))
@@ -119,6 +125,7 @@ def client() -> Generator[TestClient]:
             WholeDocumentChunker(),
             FakeArchiveStore(),
             FakeIngestionRunRepository(),
+            max_archive_bytes=UploadsConfig().KB_MAX_BYTES,
         ),
         auth_service=auth_service,
         conversation_service=ConversationService(
@@ -128,6 +135,7 @@ def client() -> Generator[TestClient]:
         chat_service=ChatService(
             repository=conversation_repository,
             attachments=attachment_repository,
+            users=users,
             agent=agent,
         ),
         share_service=ShareService(
@@ -137,8 +145,23 @@ def client() -> Generator[TestClient]:
         attachment_service=AttachmentService(
             attachments=attachment_repository,
             conversations=conversation_repository,
+            max_bytes=UploadsConfig().ATTACHMENT_MAX_BYTES,
         ),
-        skill_service=SkillService(skills=FakeSkillRepository()),
+        skill_service=SkillService(
+            skills=FakeSkillRepository(),
+            max_skill_bytes=UploadsConfig().SKILL_MAX_BYTES,
+            max_archive_bytes=UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        ),
+        setting_service=SettingService(
+            app=AppSettings(
+                model="gpt-4o-mini",
+                top_k=4,
+                uploads=UploadLimits(
+                    **{k.lower(): v for k, v in UploadsConfig().model_dump().items()}
+                ),
+            ),
+            users=users,
+        ),
     )
     app = create_app(container=container, settings=_stub_settings())
     # https, so the client sends the (always Secure) refresh cookie back.
@@ -171,20 +194,24 @@ def test_ready_endpoint_exercises_retrieval_service(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_settings_endpoint_returns_config(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
-    response = client.get("/api/settings", headers=auth_headers)
-    assert response.status_code == 200
-    body = response.json()
-    assert body["model"] == "gpt-4o-mini"
-    assert body["temperature"] == 0.2
-    assert body["top_k"] == 3  # the search's
-
-
 def test_settings_endpoint_requires_auth(client: TestClient) -> None:
     response = client.get("/api/settings")
     assert response.status_code == 401
+
+
+def test_settings_endpoint_returns_the_upload_limits(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    response = client.get("/api/settings", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["model"] == "gpt-4o-mini"
+    assert response.json()["uploads"] == {
+        "kb_max_bytes": UploadsConfig().KB_MAX_BYTES,
+        "skill_max_bytes": UploadsConfig().SKILL_MAX_BYTES,
+        "skill_archive_max_bytes": UploadsConfig().SKILL_ARCHIVE_MAX_BYTES,
+        "attachment_max_bytes": UploadsConfig().ATTACHMENT_MAX_BYTES,
+    }
 
 
 def test_retrieval_endpoint_returns_document(
@@ -326,11 +353,8 @@ def test_create_conversation_starts_it_untitled_and_empty(
         "created_at",
         "updated_at",
         "pinned_at",
-        "model",
-        "effort",
     }
     assert conversation["title"] is None
-    assert (conversation["model"], conversation["effort"]) == ("gpt-6-luna", "low")
     assert conversation["pinned_at"] is None
     messages_url = f"/api/conversations/{conversation['id']}/messages"
     assert client.get(messages_url, headers=auth_headers).json() == []
@@ -492,43 +516,37 @@ def test_rename_stores_the_title_on_one_line(
     assert listed["items"][0]["title"] == "Billing questions"
 
 
-def test_the_model_and_effort_are_set_per_conversation(
+def test_the_model_and_effort_are_set_per_user(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    conversation_id = _start_conversation(client, auth_headers)
-    other_id = _create_conversation(client, auth_headers)
+    initial = client.get("/api/settings/me", headers=auth_headers).json()
+    assert initial == {"model": "gpt-6-luna", "effort": "low"}
 
     response = client.patch(
-        f"/api/conversations/{conversation_id}",
-        json={"model": "gpt-6-sol", "effort": "max"},
+        "/api/settings/me",
+        json={"model": "gpt-6-sol", "effort": "high"},
         headers=auth_headers,
     )
 
     assert response.status_code == 200
-    assert (response.json()["model"], response.json()["effort"]) == ("gpt-6-sol", "max")
+    assert response.json() == {"model": "gpt-6-sol", "effort": "high"}
     # Setting one leaves the other as it was.
     effort_only = client.patch(
-        f"/api/conversations/{conversation_id}",
-        json={"effort": "low"},
-        headers=auth_headers,
+        "/api/settings/me", json={"effort": "low"}, headers=auth_headers
     ).json()
-    assert (effort_only["model"], effort_only["effort"]) == ("gpt-6-sol", "low")
-    fetched = client.get(f"/api/conversations/{conversation_id}", headers=auth_headers)
-    assert (fetched.json()["model"], fetched.json()["effort"]) == ("gpt-6-sol", "low")
-    other = client.post("/api/conversations", headers=auth_headers).json()
-    assert other["id"] == other_id
-    assert (other["model"], other["effort"]) == ("gpt-6-luna", "low")
+    assert effort_only == {"model": "gpt-6-sol", "effort": "low"}
+    fetched = client.get("/api/settings/me", headers=auth_headers).json()
+    assert fetched == {"model": "gpt-6-sol", "effort": "low"}
+    # Another user's stay as they were.
+    other = client.get("/api/settings/me", headers=_login(client, _OTHER_EMAIL))
+    assert other.json() == {"model": "gpt-6-luna", "effort": "low"}
 
 
-@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "high"}])
+@pytest.mark.parametrize("body", [{"model": "sol"}, {"effort": "max"}])
 def test_an_unknown_model_or_effort_is_rejected(
     client: TestClient, auth_headers: dict[str, str], body: dict[str, str]
 ) -> None:
-    conversation_id = _start_conversation(client, auth_headers)
-
-    response = client.patch(
-        f"/api/conversations/{conversation_id}", json=body, headers=auth_headers
-    )
+    response = client.patch("/api/settings/me", json=body, headers=auth_headers)
 
     assert response.status_code == 422
 
@@ -918,6 +936,25 @@ def test_a_skill_is_uploaded_listed_and_deleted(
     assert client.get("/api/skills", headers=auth_headers).json() == []
 
 
+def test_a_skill_archive_is_uploaded_with_its_reference_files(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("release-notes/SKILL.md", _SKILL)
+        # Past the 50 KB a SKILL.md may be: the whole archive is read.
+        archive.writestr("release-notes/references/big.md", "x" * 90_000)
+
+    response = client.post(
+        "/api/skills",
+        files={"file": ("release-notes.skill", buffer.getvalue(), "application/zip")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["file_count"] == 1
+
+
 def test_an_invalid_skill_file_is_rejected_saying_why(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
@@ -1030,3 +1067,57 @@ def test_unknown_ingestion_run_is_404(client: TestClient) -> None:
         f"/api/ingestions/{uuid.uuid4()}", headers=_login(client, _ADMIN_EMAIL)
     )
     assert response.status_code == 404
+
+
+def test_a_4xx_app_error_is_logged_at_info_without_a_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/missing")
+    async def _missing() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise DocumentNotFoundError("doc-1")
+
+    with caplog.at_level(logging.INFO):
+        response = TestClient(app).get("/missing")
+
+    assert response.status_code == 404
+    [record] = [r for r in caplog.records if r.name == "rag.app"]
+    assert record.levelno == logging.INFO
+    assert record.exc_info is None
+
+
+def test_a_5xx_app_error_is_logged_with_its_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/broken")
+    async def _broken() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise AppError("broken")
+
+    response = TestClient(app).get("/broken")
+
+    assert response.status_code == 500
+    assert any(
+        r.message == "App error on GET /broken" and r.exc_info for r in caplog.records
+    )
+
+
+def test_an_unexpected_error_is_logged_and_answered_with_a_json_500(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(settings=_stub_settings())
+
+    @app.get("/boom")
+    async def _boom() -> None:  # pyright: ignore[reportUnusedFunction]
+        raise RuntimeError("boom")
+
+    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    assert any(
+        r.message == "Unexpected error on GET /boom" and r.exc_info
+        for r in caplog.records
+    )

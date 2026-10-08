@@ -112,13 +112,13 @@ describe('applyEvent', () => {
     ]).map((b) => b.type)).toEqual(['text', 'todos', 'text']);
   });
 
-  it('fills in the verification bubble with its verdict, and shows the answer below it', () => {
+  it('fills in the answer check bubble with its verdict, and shows the answer below it', () => {
     expect(bubbles([
-      { type: 'verification', status: 'pending' },
-      { type: 'verification', status: 'done', grounded: true },
+      { type: 'answer_check', status: 'pending' },
+      { type: 'answer_check', status: 'done', grounded: true },
       { type: 'text', text: 'It costs 10.' },
     ])).toEqual([
-      { type: 'verification', content: { status: 'done', grounded: true } },
+      { type: 'answer_check', content: { status: 'done', grounded: true } },
       { type: 'text', content: { text: 'It costs 10.' } },
     ]);
   });
@@ -126,19 +126,19 @@ describe('applyEvent', () => {
   it('starts a new bubble for an answer checked after earlier text', () => {
     expect(bubbles([
       { type: 'text', text: 'Let me check.' },
-      { type: 'verification', status: 'pending' },
-      { type: 'verification', status: 'done', grounded: true },
+      { type: 'answer_check', status: 'pending' },
+      { type: 'answer_check', status: 'done', grounded: true },
       { type: 'text', text: 'It costs 10.' },
-    ]).map((b) => b.type)).toEqual(['text', 'verification', 'text']);
+    ]).map((b) => b.type)).toEqual(['text', 'answer_check', 'text']);
   });
 
   it('shows a revision below the verdict that rejected the answer', () => {
     expect(bubbles([
-      { type: 'verification', status: 'pending' },
-      { type: 'verification', status: 'done', grounded: false },
+      { type: 'answer_check', status: 'pending' },
+      { type: 'answer_check', status: 'done', grounded: false },
       { type: 'text', text: 'revised' },
     ])).toEqual([
-      { type: 'verification', content: { status: 'done', grounded: false } },
+      { type: 'answer_check', content: { status: 'done', grounded: false } },
       { type: 'text', content: { text: 'revised' } },
     ]);
   });

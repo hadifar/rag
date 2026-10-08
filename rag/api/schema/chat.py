@@ -44,12 +44,12 @@ class TodosEvent(BaseModel):
     todos: list[TodoItem]
 
 
-class VerificationEvent(BaseModel):
+class AnswerCheckEvent(BaseModel):
     """The answer checked against what the turn's searches found: `pending` while the
     check runs, then `done` with whether the answer is supported by them.
     """
 
-    type: Literal["verification"] = "verification"
+    type: Literal["answer_check"] = "answer_check"
     status: Literal["pending", "done"]
     grounded: bool | None = None
 
@@ -88,7 +88,7 @@ class StreamEventResponse(
             | ReasoningEvent
             | ToolEvent
             | TodosEvent
-            | VerificationEvent
+            | AnswerCheckEvent
             | ArtifactsEvent
             | ErrorEvent,
             Field(discriminator="type"),

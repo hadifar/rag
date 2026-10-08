@@ -18,6 +18,8 @@ graph LR
         acr[(Container Registry)]
         blob[(Storage: kb-archives)]
         dns[privatelink DNS zone]
+        appi[(Application Insights)]
+        logs[(Log Analytics<br/>0.16 GB/day cap)]
     end
 
     pg[(Postgres)]
@@ -28,6 +30,8 @@ graph LR
     dns -.-> fe
     be -->|Key Vault refs| kv
     be -->|Blob Data Contributor| blob
+    be -->|Metrics Publisher| appi
+    appi --> logs
     be --> pg
     be --> llm
     ci -->|AcrPush| acr

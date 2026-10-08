@@ -3,32 +3,41 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 
+from fastapi import FastAPI
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from rag.adapters.argon2 import Argon2PasswordHasher
 from rag.adapters.jwt_codec import JwtTokenCodec
 from rag.adapters.kb_archive_store import open_archive_store
-from rag.adapters.langchain.llm_client import build_embeddings, build_llm
+from rag.adapters.langchain.llm_client import build_embeddings, build_llms
 from rag.adapters.langchain.observability import open_trace_config
 from rag.adapters.postgres_db import open_db_pool
+from rag.adapters.telemetry import instrument_app as instrument_telemetry
 from rag.config import Settings
-from rag.domain.models import MODEL_NAMES, Chunk, InputVerdict
+from rag.domain.models import (
+    DEFAULT_MODEL,
+    AppSettings,
+    Chunk,
+    InputVerdict,
+    UploadLimits,
+)
 from rag.domain.ports import CachePort
+from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.cache_repository import (
     EmbeddingCacheRepository,
     InputVerdictCacheRepository,
     NoCache,
     SearchCacheRepository,
 )
-from rag.repository.attachment_repository import AttachmentRepository
 from rag.repository.conversation_repository import ConversationRepository
-from rag.repository.share_repository import ShareRepository
 from rag.repository.document_repository import DocumentRepository
 from rag.repository.ingestion_run_repository import IngestionRunRepository
+from rag.repository.share_repository import ShareRepository
 from rag.repository.skill_repository import SkillRepository
 from rag.repository.user_repository import UserRepository
 from rag.services.agent_service.agent import RagAgent
+from rag.services.agent_service.memory import HistoryLimits
 from rag.services.agent_service.llm import Llm
 from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthService
@@ -39,6 +48,7 @@ from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.caching import CachedEmbeddings
 from rag.services.retrieval_service.reranking import LlmReranker, NoReranker
 from rag.services.retrieval_service.service import RetrievalService
+from rag.services.setting_service.service import SettingService
 from rag.services.share_service.service import ShareService
 from rag.services.skill_service.service import SkillService
 
@@ -53,13 +63,14 @@ class Container:
     share_service: ShareService
     attachment_service: AttachmentService
     skill_service: SkillService
+    setting_service: SettingService
 
 
 @dataclass
 class _Caches:
     embeddings: CachePort[list[float]]
     search: CachePort[list[tuple[Chunk, float]]]
-    verdicts: CachePort[InputVerdict]
+    input_verdicts: CachePort[InputVerdict]
 
 
 def _caches(
@@ -69,10 +80,10 @@ def _caches(
     that shape its result.
     """
     if not settings.CACHE.ENABLED:
-        return _Caches(embeddings=NoCache(), search=NoCache(), verdicts=NoCache())
+        return _Caches(embeddings=NoCache(), search=NoCache(), input_verdicts=NoCache())
 
     cache, llm, retrieval = settings.CACHE, settings.LLM, settings.RETRIEVAL
-    reranker = llm.chat_model_name if retrieval.RERANK_CANDIDATES else "none"
+    reranker = DEFAULT_MODEL if retrieval.RERANK_CANDIDATES else "none"
     return _Caches(
         embeddings=EmbeddingCacheRepository(
             db_pool,
@@ -89,12 +100,17 @@ def _caches(
                 f"summary_weight={retrieval.SUMMARY_WEIGHT};reranker={reranker}"
             ),
         ),
-        verdicts=InputVerdictCacheRepository(
+        input_verdicts=InputVerdictCacheRepository(
             db_pool,
-            model=llm.chat_model_name,
+            model=DEFAULT_MODEL,
             ttl=timedelta(days=cache.VERDICT_TTL_DAYS),
         ),
     )
+
+
+def instrument_app(app: FastAPI, settings: Settings) -> None:
+    """Export the app's telemetry: once per process, before it serves."""
+    instrument_telemetry(app, settings.TELEMETRY)
 
 
 @asynccontextmanager
@@ -113,10 +129,9 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             summary_weight=settings.RETRIEVAL.SUMMARY_WEIGHT,
         )
         llm = Llm(
-            model=build_llm(settings),
+            models=build_llms(settings),
             trace_config=trace_config,
             attempts=settings.LLM.RETRY_ATTEMPTS,
-            models={model: build_llm(settings, model) for model in MODEL_NAMES},
             reasoning=settings.LLM.REASONING_EFFORT is not None,
         )
 
@@ -132,13 +147,23 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             cache=caches.search,
         )
 
-        skill_service = SkillService(skills=SkillRepository(db_pool))
+        skill_repo = SkillRepository(db_pool)
+        uploads = UploadLimits(**{k.lower(): v for k, v in settings.UPLOADS})
+        skill_service = SkillService(
+            skills=skill_repo,
+            max_skill_bytes=uploads.skill_max_bytes,
+            max_archive_bytes=uploads.skill_archive_max_bytes,
+        )
 
         rag_agent = RagAgent(
             llm=llm,
             search=retrieval_service,
-            skills=skill_service,
-            verdicts=caches.verdicts,
+            skills=skill_repo,
+            input_verdicts=caches.input_verdicts,
+            history_limits=HistoryLimits(
+                max_tokens=settings.LLM.HISTORY_MAX_TOKENS,
+                max_turns=settings.LLM.HISTORY_MAX_TURNS,
+            ),
         )
 
         ingestion_service = IngestionService(
@@ -146,10 +171,12 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             chunker=WholeDocumentChunker(),
             archives=archive_store,
             runs=IngestionRunRepository(db_pool),
+            max_archive_bytes=uploads.kb_max_bytes,
         )
 
+        user_repo = UserRepository(db_pool)
         auth_service = AuthService(
-            user_repository=UserRepository(db_pool),
+            user_repository=user_repo,
             pass_hasher=Argon2PasswordHasher(),
             token_codec=JwtTokenCodec(
                 settings.AUTH.JWT_SECRET.get_secret_value(),
@@ -169,6 +196,7 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
         chat_service = ChatService(
             repository=conversation_repo,
             attachments=attachment_repo,
+            users=user_repo,
             agent=rag_agent,
         )
 
@@ -185,6 +213,15 @@ async def build_container(settings: Settings) -> AsyncGenerator[Container, None]
             attachment_service=AttachmentService(
                 attachments=attachment_repo,
                 conversations=conversation_repo,
+                max_bytes=uploads.attachment_max_bytes,
             ),
             skill_service=skill_service,
+            setting_service=SettingService(
+                app=AppSettings(
+                    model=DEFAULT_MODEL,
+                    top_k=retrieval_service.top_k,
+                    uploads=uploads,
+                ),
+                users=user_repo,
+            ),
         )

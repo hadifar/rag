@@ -10,22 +10,24 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
-	classify(classify)
-	invoke_skill(invoke_skill)
-	model(model)
+	check_input(check_input)
+	load_skills(load_skills)
+	decline(decline)
+	research(research)
 	tools(tools)
-	verify(verify)
+	answer(answer)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> classify;
-	classify -.-> __end__;
-	classify -.-> invoke_skill;
-	invoke_skill --> model;
-	model -.-> tools;
-	model -.-> verify;
-	tools --> model;
-	verify -.-> __end__;
-	verify -.-> model;
+	__start__ --> check_input;
+	check_input -. &nbsp;block&nbsp; .-> __end__;
+	check_input -. &nbsp;off_topic&nbsp; .-> decline;
+	check_input -. &nbsp;allow&nbsp; .-> load_skills;
+	load_skills --> research;
+	research -.-> answer;
+	research -.-> tools;
+	tools --> research;
+	answer --> __end__;
+	decline --> __end__;
 ```
 
-* `classify` ends the turn for a blocked question; `invoke_skill` starts a turn whose question begins with `/<name>` with that skill loaded; `verify` ends it, or sends a rejected answer back to `model` to revise.
-* `model` builds each call's system prompt (planning or the off-topic decline) and picks its tools; neither is saved to the thread.
+* `check_input` ends the turn for a blocked question, sends an off-topic one to `decline`, and the rest to `load_skills`; `load_skills` lists the user's skills for research and starts a turn whose question begins with `/<name>` with that skill loaded; `research` runs `tools` until it stops calling them, then `answer` writes the answer and ends the turn.
+* `research` builds each call's system prompt (planning and the user's skills) and binds the tools; its closing "Done." isn't kept. `answer` gets the answer prompt and can't call tools. `decline` answers an off-topic question with the decline prompt and no tools, and ends the turn. No prompt is saved to the thread.

@@ -1,18 +1,43 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
+from rag.domain.models import Effort, ModelName, RunSettingsUpdate
+
+
+class UploadLimitsResponse(BaseModel):
+    """The largest file each upload takes, in bytes."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    kb_max_bytes: int
+    skill_max_bytes: int
+    skill_archive_max_bytes: int
+    attachment_max_bytes: int
 
 
 class SettingsResponse(BaseModel):
-    model: str
-    temperature: float
-    top_k: int
+    """How the app is configured, as far as its users need to know."""
 
-    @classmethod
-    def from_settings(cls, settings: Settings, top_k: int) -> "SettingsResponse":
-        match settings.LLM:
-            case OpenAILLMConfig() as llm:
-                model = llm.MODEL
-            case AzureOpenAILLMConfig() as llm:
-                model = llm.DEPLOYMENT
-        return cls(model=model, temperature=llm.TEMPERATURE, top_k=top_k)
+    model_config = ConfigDict(from_attributes=True)
+
+    model: str
+    top_k: int
+    uploads: UploadLimitsResponse
+
+
+class RunSettingsResponse(BaseModel):
+    """What the user's chat turns run on, in every conversation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    model: ModelName
+    effort: Effort
+
+
+class RunSettingsUpdateRequest(BaseModel):
+    """The fields to change; each one left out stays as is."""
+
+    model: ModelName | None = None
+    effort: Effort | None = None
+
+    def to_update(self) -> RunSettingsUpdate:
+        return RunSettingsUpdate(**self.model_dump())

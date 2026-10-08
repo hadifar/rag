@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, type ComponentType } from 'react';
 import type { Bubble, BubbleOf, BubbleType } from '../types';
+import { AnswerCheckBubble } from './AnswerCheckBubble';
 import { ErrorBubble } from './ErrorBubble';
 import { ReasoningBubble } from './ReasoningBubble';
 import { SourcesBubble } from './SourcesBubble';
@@ -8,7 +9,6 @@ import { TodosBubble } from './TodosBubble';
 import { ToolBubble } from './ToolBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { UserBubble } from './UserBubble';
-import { VerificationBubble } from './VerificationBubble';
 
 type BubbleViewProps<K extends BubbleType> = {
   bubble: BubbleOf<K>;
@@ -25,7 +25,7 @@ const bubbleViews: { [K in BubbleType]: ComponentType<BubbleViewProps<K>> } = {
   reasoning: ({ bubble }) => <ReasoningBubble {...bubble.content} />,
   tool: ({ bubble }) => <ToolBubble {...bubble.content} />,
   todos: ({ bubble }) => <TodosBubble {...bubble.content} />,
-  verification: ({ bubble }) => <VerificationBubble {...bubble.content} />,
+  answer_check: ({ bubble }) => <AnswerCheckBubble {...bubble.content} />,
   sources: ({ bubble, onOpenSource }) => <SourcesBubble {...bubble.content} onOpen={onOpenSource} />,
   error: ({ bubble, onRetry }) => <ErrorBubble {...bubble.content} onRetry={onRetry} />,
 };

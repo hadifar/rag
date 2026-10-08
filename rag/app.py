@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -15,7 +16,7 @@ from rag.api.routers.setting import router as setting_router
 from rag.api.routers.share import router as share_router
 from rag.api.routers.skill import router as skill_router
 from rag.config import Settings, get_settings
-from rag.container import Container, build_container
+from rag.container import Container, build_container, instrument_app
 from rag.domain.errors import AppError
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,6 @@ def _build_lifespan(container: Container | None, settings: Settings):
             return
 
         async with build_container(settings) as built:
-            await _fail_interrupted_runs(built)
             app.state.container = built
             yield
 
@@ -40,19 +40,26 @@ def _build_lifespan(container: Container | None, settings: Settings):
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
-        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        # A 4xx is the client's mistake, not ours: logged below WARNING so telemetry
+        # does not export it as an exception.
+        if exc.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
+            logger.exception("App error on %s %s", request.method, request.url.path)
+        else:
+            logger.info(
+                "%s on %s %s", type(exc).__name__, request.method, request.url.path
+            )
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
-
-async def _fail_interrupted_runs(container: Container) -> None:
-    try:
-        count = await container.ingestion_service.fail_interrupted_runs()
-    except Exception:
-        # E.g. migrations not applied yet — that mustn't stop the app from serving.
-        logger.warning("Couldn't check for interrupted ingestion runs", exc_info=True)
-        return
-    if count:
-        logger.warning("Marked %d interrupted ingestion run(s) as failed", count)
+    # Logged here because uvicorn's own log of it never reaches the root logger, so
+    # telemetry would see it only on a sampled request trace. Same body shape as AppError.
+    @app.exception_handler(Exception)
+    async def _handle_unexpected_error(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        logger.exception("Unexpected error on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error"}
+        )
 
 
 def create_app(
@@ -60,7 +67,6 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="RAG", lifespan=_build_lifespan(container, settings))
-    app.state.settings = settings
 
     app.include_router(auth_router)
     app.include_router(health_router)
@@ -73,5 +79,6 @@ def create_app(
     app.include_router(skill_router)
 
     register_error_handlers(app)
+    instrument_app(app, settings)
 
     return app

@@ -164,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Update Conversation
-         * @description Renames, pins or unpins it, or sets the model and effort its turns run on.
+         * @description Renames, or pins or unpins it.
          */
         patch: operations["update_conversation_api_conversations__conversation_id__patch"];
         trace?: never;
@@ -389,6 +389,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run Settings
+         * @description The model and effort the user's turns run on, in every conversation.
+         */
+        get: operations["get_run_settings_api_settings_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Run Settings
+         * @description Sets the model or effort the user's turns run on, in every conversation.
+         */
+        patch: operations["update_run_settings_api_settings_me_patch"];
+        trace?: never;
+    };
     "/api/shares/{share_id}": {
         parameters: {
             query?: never;
@@ -425,7 +449,8 @@ export interface paths {
         /**
          * Upload Skill
          * @description Saves a SKILL.md file (frontmatter with `name` and `description`, then the
-         *     instructions), replacing the caller's skill of that name if they have one.
+         *     instructions), or a .zip or .skill archive of one with its reference files,
+         *     replacing the caller's skill of that name if they have one.
          */
         post: operations["upload_skill_api_skills_post"];
         delete?: never;
@@ -455,6 +480,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswerCheckEvent
+         * @description The answer checked against what the turn's searches found: `pending` while the
+         *     check runs, then `done` with whether the answer is supported by them.
+         */
+        AnswerCheckEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "answer_check";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "done";
+            /** Grounded */
+            grounded?: boolean | null;
+        };
         /**
          * ArtifactsEvent
          * @description What the turn's tools handed the user, deduplicated, once it's done. Only sent
@@ -560,16 +604,6 @@ export interface components {
             updated_at: string;
             /** Pinned At */
             pinned_at: string | null;
-            /**
-             * Model
-             * @enum {string}
-             */
-            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
-            /**
-             * Effort
-             * @enum {string}
-             */
-            effort: "low" | "medium" | "max";
         };
         /**
          * ConversationUpdateRequest
@@ -580,10 +614,6 @@ export interface components {
             title?: string | null;
             /** Pinned */
             pinned?: boolean | null;
-            /** Model */
-            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
-            /** Effort */
-            effort?: ("low" | "medium" | "max") | null;
         };
         /**
          * ErrorEvent
@@ -668,14 +698,42 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** SettingsResponse */
+        /**
+         * RunSettingsResponse
+         * @description What the user's chat turns run on, in every conversation.
+         */
+        RunSettingsResponse: {
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol";
+            /**
+             * Effort
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "high";
+        };
+        /**
+         * RunSettingsUpdateRequest
+         * @description The fields to change; each one left out stays as is.
+         */
+        RunSettingsUpdateRequest: {
+            /** Model */
+            model?: ("gpt-6-luna" | "gpt-6-astra" | "gpt-6-sol") | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "high") | null;
+        };
+        /**
+         * SettingsResponse
+         * @description How the app is configured, as far as its users need to know.
+         */
         SettingsResponse: {
             /** Model */
             model: string;
-            /** Temperature */
-            temperature: number;
             /** Top K */
             top_k: number;
+            uploads: components["schemas"]["UploadLimitsResponse"];
         };
         /**
          * ShareResponse
@@ -725,6 +783,8 @@ export interface components {
             name: string;
             /** Description */
             description: string;
+            /** File Count */
+            file_count: number;
             /**
              * Created At
              * Format: date-time
@@ -754,7 +814,7 @@ export interface components {
          * @description One event of the message stream. A named model rather than a bare union, so it's
          *     in the OpenAPI schema and the frontend's generated types by this name.
          */
-        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["VerificationEvent"] | components["schemas"]["ArtifactsEvent"] | components["schemas"]["ErrorEvent"];
+        StreamEventResponse: components["schemas"]["TextEvent"] | components["schemas"]["ReasoningEvent"] | components["schemas"]["ToolEvent"] | components["schemas"]["TodosEvent"] | components["schemas"]["AnswerCheckEvent"] | components["schemas"]["ArtifactsEvent"] | components["schemas"]["ErrorEvent"];
         /**
          * TextEvent
          * @description A piece of the answer, in order.
@@ -823,6 +883,20 @@ export interface components {
             /** Output */
             output?: string | null;
         };
+        /**
+         * UploadLimitsResponse
+         * @description The largest file each upload takes, in bytes.
+         */
+        UploadLimitsResponse: {
+            /** Kb Max Bytes */
+            kb_max_bytes: number;
+            /** Skill Max Bytes */
+            skill_max_bytes: number;
+            /** Skill Archive Max Bytes */
+            skill_archive_max_bytes: number;
+            /** Attachment Max Bytes */
+            attachment_max_bytes: number;
+        };
         /** UserMessageResponse */
         UserMessageResponse: {
             /**
@@ -862,25 +936,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /**
-         * VerificationEvent
-         * @description The answer checked against what the turn's searches found: `pending` while the
-         *     check runs, then `done` with whether the answer is supported by them.
-         */
-        VerificationEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "verification";
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "pending" | "done";
-            /** Grounded */
-            grounded?: boolean | null;
         };
     };
     responses: never;
@@ -1620,6 +1675,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    get_run_settings_api_settings_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSettingsResponse"];
+                };
+            };
+        };
+    };
+    update_run_settings_api_settings_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -38,12 +38,6 @@ function detailOf(body: unknown): string | null {
   return null;
 }
 
-/** The `ApiError` for a failed response, with the backend's reason if it gave one. */
-export async function apiError(res: Response, what: string): Promise<ApiError> {
-  const body: unknown = await res.json().catch(() => null);
-  return new ApiError(res.status, `${what} failed: ${res.status}`, detailOf(body));
-}
-
 // The access token lives here, in memory only (never localStorage), so every api/*.ts
 // module can send it and renew it without components passing it around.
 let accessToken: string | null = null;
@@ -132,6 +126,21 @@ export const publicApi = createClient<ApiPaths>({
   // Looked up per call, not captured here, so a fetch swapped in later (tests) is used.
   fetch: (request) => fetch(request),
 });
+
+/**
+ * A typed call's body for a file upload (`UploadFile` named `file`): the schema types the
+ * file as a string, so the body names it, and the serializer sends the File itself as form data.
+ */
+export function fileBody(file: File) {
+  return {
+    body: { file: file.name },
+    bodySerializer: () => {
+      const form = new FormData();
+      form.append('file', file);
+      return form;
+    },
+  };
+}
 
 /** A typed call's data; throws an `ApiError` (with the backend's `detail`) if it failed. */
 export async function unwrap<T>(

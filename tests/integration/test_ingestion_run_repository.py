@@ -3,6 +3,7 @@ Every run here has an `it-` archive name, and is deleted afterwards.
 """
 
 from collections.abc import AsyncGenerator
+from datetime import timedelta
 
 import pytest
 from psycopg import AsyncConnection
@@ -52,3 +53,45 @@ async def test_finish_records_the_report(runs: IngestionRunRepository) -> None:
     assert done.finished_at is not None
     assert (await runs.latest()) == done
     assert await runs.running() is None
+
+
+async def test_an_ended_run_keeps_its_outcome(runs: IngestionRunRepository) -> None:
+    run = await runs.create("it-ended.zip", None)
+    await runs.fail(run.id, "stale")
+
+    await runs.finish(
+        run.id, IngestionReport(added=1, updated=0, unchanged=0, removed=0, chunks=1)
+    )
+    await runs.fail(run.id, "later")
+
+    done = await runs.get(run.id)
+    assert done is not None
+    assert (done.status, done.error, done.added) == ("failed", "stale", None)
+
+
+async def test_only_a_run_whose_lease_lapsed_is_failed(
+    runs: IngestionRunRepository, db_pool: AsyncConnectionPool[AsyncConnection]
+) -> None:
+    run = await runs.create("it-lease.zip", None)
+
+    assert await runs.fail_stale("stale", timedelta(minutes=1)) == 0
+
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "UPDATE ingestion_runs SET heartbeat_at = now() - interval '2 minutes' "
+            "WHERE id = %s",
+            (run.id,),
+        )
+    await runs.heartbeat(run.id)  # renewed: alive again
+    assert await runs.fail_stale("stale", timedelta(minutes=1)) == 0
+
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "UPDATE ingestion_runs SET heartbeat_at = now() - interval '2 minutes' "
+            "WHERE id = %s",
+            (run.id,),
+        )
+    assert await runs.fail_stale("stale", timedelta(minutes=1)) == 1
+    failed = await runs.get(run.id)
+    assert failed is not None
+    assert (failed.status, failed.error) == ("failed", "stale")

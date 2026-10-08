@@ -1,12 +1,12 @@
 import hashlib
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
-from rag.domain.errors import IngestionInProgressError
+from rag.domain.errors import ConversationNotFoundError, IngestionInProgressError
 from rag.domain.models import (
     AgentMemory,
     Artifact,
@@ -19,8 +19,10 @@ from rag.domain.models import (
     IngestionReport,
     IngestionRun,
     RunContext,
+    RunSettingsUpdate,
     Share,
     Skill,
+    SkillContent,
     StreamEvent,
     TextDelta,
     Turn,
@@ -116,12 +118,32 @@ class FakeUserRepository:
         self._users[user.id] = replace(user, is_admin=is_admin)
         return self._users[user.id]
 
+    async def update_run_settings(
+        self, user_id: uuid.UUID, change: RunSettingsUpdate
+    ) -> User | None:
+        user = self._users.get(user_id)
+        if user is None:
+            return None
+        fields = {k: v for k, v in asdict(change).items() if v is not None}
+        self._users[user_id] = replace(user, **fields)
+        return self._users[user_id]
+
+    def add(self, user_id: uuid.UUID) -> None:
+        """A user with the id the test picked, set to the defaults."""
+        self._users[user_id] = User(
+            id=user_id,
+            email=f"{user_id}@example.com",
+            hashed_password="x",
+            created_at=datetime.now(UTC),
+        )
+
 
 class FakeIngestionRunRepository:
     """In-memory IngestionRunRepositoryPort, one running run at a time like the real one."""
 
     def __init__(self):
         self.runs: dict[uuid.UUID, IngestionRun] = {}
+        self.heartbeats: dict[uuid.UUID, datetime] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     async def create(
@@ -138,6 +160,7 @@ class FakeIngestionRunRepository:
             started_at=self._clock,
         )
         self.runs[run.id] = run
+        self.heartbeats[run.id] = datetime.now(UTC)
         return run
 
     async def get(self, run_id: uuid.UUID) -> IngestionRun | None:
@@ -150,18 +173,30 @@ class FakeIngestionRunRepository:
         return next((r for r in self.runs.values() if r.status == "running"), None)
 
     async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None:
-        self.runs[run_id] = replace(
-            self.runs[run_id], status="succeeded", **asdict(report)
-        )
+        if self.runs[run_id].status == "running":
+            self.runs[run_id] = replace(
+                self.runs[run_id], status="succeeded", **asdict(report)
+            )
 
     async def fail(self, run_id: uuid.UUID, error: str) -> None:
-        self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
+        if self.runs[run_id].status == "running":
+            self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
 
-    async def fail_running(self, error: str) -> int:
-        running = [r for r in self.runs.values() if r.status == "running"]
-        for run in running:
+    async def heartbeat(self, run_id: uuid.UUID) -> None:
+        if self.runs[run_id].status == "running":
+            self.heartbeats[run_id] = datetime.now(UTC)
+
+    async def fail_stale(self, error: str, stale_after: timedelta) -> int:
+        """Leases run on the wall clock, like Postgres's `now()`."""
+        cutoff = datetime.now(UTC) - stale_after
+        stale = [
+            r
+            for r in self.runs.values()
+            if r.status == "running" and self.heartbeats[r.id] < cutoff
+        ]
+        for run in stale:
             await self.fail(run.id, error)
-        return len(running)
+        return len(stale)
 
 
 class FakeArchiveStore:
@@ -226,9 +261,7 @@ class FakeConversationRepository:
             None,
         )
         if empty is not None:
-            touched = await self.touch_owned(user_id, empty.id)
-            assert touched is not None
-            return touched
+            return await self.touch_owned(user_id, empty.id)
         now = self._now()
         conversation = Conversation(
             id=uuid.uuid4(), user_id=user_id, title=None, created_at=now, updated_at=now
@@ -238,11 +271,11 @@ class FakeConversationRepository:
 
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
+    ) -> Conversation:
         conversation = self.rows.get(conversation_id)
-        return (
-            conversation if conversation and conversation.user_id == user_id else None
-        )
+        if conversation is None or conversation.user_id != user_id:
+            raise ConversationNotFoundError(conversation_id)
+        return conversation
 
     async def list_for_user(
         self,
@@ -276,10 +309,8 @@ class FakeConversationRepository:
         user_id: uuid.UUID,
         conversation_id: uuid.UUID,
         change: ConversationUpdate,
-    ) -> Conversation | None:
+    ) -> Conversation:
         conversation = await self.get_owned(user_id, conversation_id)
-        if conversation is None:
-            return None
         fields = {
             k: v for k, v in asdict(change).items() if v is not None and k != "pinned"
         }
@@ -294,9 +325,8 @@ class FakeConversationRepository:
 
     async def touch_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> Conversation | None:
-        if await self.get_owned(user_id, conversation_id) is None:
-            return None
+    ) -> Conversation:
+        await self.get_owned(user_id, conversation_id)
         self.rows[conversation_id] = replace(
             self.rows[conversation_id], updated_at=self._now()
         )
@@ -363,7 +393,9 @@ class FakeAttachmentRepository:
     async def get_owned(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID, attachment_id: uuid.UUID
     ) -> AttachmentFile | None:
-        if await self.conversations.get_owned(user_id, conversation_id) is None:
+        try:
+            await self.conversations.get_owned(user_id, conversation_id)
+        except ConversationNotFoundError:
             return None
         files = await self.list_in(conversation_id, [attachment_id])
         return files[0] if files else None
@@ -421,11 +453,17 @@ class FakeSkillRepository:
     """In-memory SkillRepositoryPort."""
 
     def __init__(self):
-        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str]] = {}  # by owner, name
+        # By owner and name: the skill, its instructions and its files by path.
+        self.rows: dict[tuple[uuid.UUID, str], tuple[Skill, str, dict[str, str]]] = {}
         self._clock = datetime(2026, 3, 1, tzinfo=UTC)
 
     async def save(
-        self, user_id: uuid.UUID, name: str, description: str, instructions: str
+        self,
+        user_id: uuid.UUID,
+        name: str,
+        description: str,
+        instructions: str,
+        files: Mapping[str, str],
     ) -> Skill:
         self._clock += timedelta(seconds=1)
         existing = self.rows.get((user_id, name))
@@ -433,27 +471,36 @@ class FakeSkillRepository:
             id=existing[0].id if existing else uuid.uuid4(),
             name=name,
             description=description,
+            file_count=len(files),
             created_at=existing[0].created_at if existing else self._clock,
             updated_at=self._clock,
         )
-        self.rows[user_id, name] = (skill, instructions)
+        self.rows[user_id, name] = (skill, instructions, dict(files))
         return skill
 
     async def list_for_user(self, user_id: uuid.UUID) -> list[Skill]:
         return sorted(
-            (skill for (owner, _), (skill, _) in self.rows.items() if owner == user_id),
+            (
+                skill
+                for (owner, _), (skill, *_) in self.rows.items()
+                if owner == user_id
+            ),
             key=lambda s: s.name,
         )
 
-    async def get_instructions(self, user_id: uuid.UUID, name: str) -> str | None:
+    async def content(self, user_id: uuid.UUID, name: str) -> SkillContent | None:
         row = self.rows.get((user_id, name))
-        return row[1] if row else None
+        return SkillContent(row[1], tuple(sorted(row[2]))) if row else None
+
+    async def file(self, user_id: uuid.UUID, name: str, path: str) -> str | None:
+        row = self.rows.get((user_id, name))
+        return row[2].get(path) if row else None
 
     async def delete_owned(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> bool:
         key = next(
             (
                 k
-                for k, (skill, _) in self.rows.items()
+                for k, (skill, *_) in self.rows.items()
                 if k[0] == user_id and skill.id == skill_id
             ),
             None,

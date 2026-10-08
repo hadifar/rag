@@ -24,6 +24,7 @@ graph LR
     archives[(Archive storage<br/>disk / Azure Blob)]
     llm[[LLM provider]]
     langfuse[[Langfuse<br/>optional]]
+    appinsights[[Application Insights<br/>optional]]
 
     ui -->|assets| static
     ui -->|fetch / SSE| proxy
@@ -34,6 +35,7 @@ graph LR
     agent -->|search_kb| postgres
     agent -->|chat, embeddings| llm
     agent -.->|traces| langfuse
+    api -.->|requests, errors| appinsights
 ```
 
 ## Backend layers

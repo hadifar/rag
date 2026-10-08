@@ -21,4 +21,3 @@ Change the database schema with Alembic. Use for every table, column, index or c
 * Write `downgrade()` for every migration. CI runs `downgrade base`.
 * Put Alembic tables in `public`.
 * Encode table rules as constraints: `CHECK`, partial unique index. Example: `ck_ingestion_runs_state`, `ux_conversations_one_empty_per_user`.
-* Do not add ORM models. `migrations/` is the only schema source.

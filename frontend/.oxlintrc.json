@@ -17,7 +17,7 @@
       "error",
       {
         "name": "fetch",
-        "message": "Call the backend through shared/api/client.ts (request, requestJson, authFetch): it adds the token and refreshes it."
+        "message": "Call the backend through shared/api/client.ts (api, authFetch): it adds the token and refreshes it."
       }
     ],
     "no-restricted-imports": [
@@ -274,7 +274,7 @@
                   "apiUrl",
                   "jsonPostInit"
                 ],
-                "message": "Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream, the multipart upload and login need the untyped calls."
+                "message": "Call the backend through the typed `api` client (with `unwrap`), checked against the OpenAPI schema. Only the SSE stream and login need the untyped calls."
               }
             ]
           }
@@ -284,7 +284,6 @@
     {
       "files": [
         "src/features/chat/api/chat.ts",
-        "src/features/knowledge-base/api/ingestions.ts",
         "src/features/auth/api/auth.ts"
       ],
       "rules": {

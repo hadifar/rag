@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class CacheConfig(BaseModel):
     """Caches, in Postgres, of what the same input always gives: a query's embedding,
-    a search's reranked result (emptied by every ingestion) and the off-topic guard's
+    a search's reranked result (emptied by every ingestion) and the input guard's
     verdict. Each entry is keyed by the model that made it, so a new model misses.
     """
 

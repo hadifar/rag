@@ -6,13 +6,12 @@ from pathlib import PureWindowsPath
 from rag.domain.errors import (
     AttachmentNotFoundError,
     AttachmentTooLargeError,
-    ConversationNotFoundError,
     UnsupportedAttachmentError,
 )
-from rag.domain.models import Attachment, AttachmentFile
+from rag.domain.models import Attachment, AttachmentFile, Upload
 from rag.domain.ports import AttachmentRepositoryPort, ConversationRepositoryPort
 from rag.services.attachment_service.kinds import KINDS, AttachmentKind
-from rag.shared.text_normalizer import normalize_text
+from rag.shared.text_normalizer import one_line
 
 MAX_NAME_LENGTH = 255  # characters kept of an uploaded file's name
 FALLBACK_NAME = "attachment"
@@ -28,25 +27,30 @@ class AttachmentService:
         self,
         attachments: AttachmentRepositoryPort,
         conversations: ConversationRepositoryPort,
+        *,
+        max_bytes: int,
         kinds: Sequence[AttachmentKind] = KINDS,
     ):
+        """No file over `max_bytes` is accepted, whatever its kind; each kind may cap
+        it lower.
+        """
         self._attachments = attachments
         self._conversations = conversations
+        self._max_bytes = max_bytes
         self._kinds = kinds
 
-    @property
-    def max_bytes(self) -> int:
-        """No upload larger than this can be accepted, whatever its kind."""
-        return max(kind.max_bytes for kind in self._kinds)
-
     async def upload(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID, name: str, data: bytes
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, upload: Upload
     ) -> Attachment:
         """Keeps the file in the conversation, recognized by its content; raises if
-        it's no kind that can be attached, or too large for its kind.
+        it's too large, no kind that can be attached, or too large for its kind.
         """
-        await self._require_owned(user_id, conversation_id)
-        name = _base_name(name)
+        await self._conversations.get_owned(user_id, conversation_id)
+        # First: a file read only up to the cap is cut short, and may no longer look
+        # like its kind.
+        if len(upload.data) > self._max_bytes:
+            raise AttachmentTooLargeError(self._max_bytes)
+        name, data = _base_name(upload.name), upload.data
         kind = next((k for k in self._kinds if k.accepts(name, data)), None)
         if kind is None or not data:
             raise UnsupportedAttachmentError(", ".join(k.label for k in self._kinds))
@@ -77,7 +81,7 @@ class AttachmentService:
         """
         if not attachment_ids:
             return []
-        await self._require_owned(user_id, conversation_id)
+        await self._conversations.get_owned(user_id, conversation_id)
         files = await self._attachments.list_in(conversation_id, attachment_ids)
         found = {f.attachment.id for f in files}
         if missing := next((i for i in attachment_ids if i not in found), None):
@@ -90,7 +94,7 @@ class AttachmentService:
         """Deletes an attachment the user removed before sending it. One already sent
         stays with its turn.
         """
-        await self._require_owned(user_id, conversation_id)
+        await self._conversations.get_owned(user_id, conversation_id)
         if not await self._attachments.delete_unsent(conversation_id, attachment_id):
             raise AttachmentNotFoundError(attachment_id)
 
@@ -101,17 +105,11 @@ class AttachmentService:
         cutoff = datetime.now(UTC) - older_than
         return await self._attachments.delete_unsent_before(cutoff)
 
-    async def _require_owned(
-        self, user_id: uuid.UUID, conversation_id: uuid.UUID
-    ) -> None:
-        if await self._conversations.get_owned(user_id, conversation_id) is None:
-            raise ConversationNotFoundError(conversation_id)
-
 
 def _base_name(name: str) -> str:
     """The file's own name, without the directories a client may send (with either
     slash), normalized as typed text, on one line, and capped in length.
     """
-    base = " ".join(normalize_text(PureWindowsPath(name).name).split())
+    base = one_line(PureWindowsPath(name).name)
     base = base[:MAX_NAME_LENGTH]
     return base or FALLBACK_NAME

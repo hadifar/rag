@@ -9,19 +9,23 @@ from langchain_openai import (
 )
 
 from rag.config import AzureOpenAILLMConfig, OpenAILLMConfig, Settings
+from rag.domain.models import MODEL_NAMES, ModelName
 from rag.domain.ports import EmbeddingsPort
 
 EMBEDDING_DIMENSIONS = 1536
 
 
-def build_llm(settings: Settings, model: str | None = None) -> BaseChatModel:
-    """The main chat model (MODEL or DEPLOYMENT), or `model`, one a user picks: for
-    Azure, the name of its deployment.
-    """
+def build_llms(settings: Settings) -> dict[ModelName, BaseChatModel]:
+    """One chat model per name a conversation can be set to."""
+    return {model: _build_llm(settings, model) for model in MODEL_NAMES}
+
+
+def _build_llm(settings: Settings, model: ModelName) -> BaseChatModel:
+    """`model`; for Azure, the deployment of that name."""
     match settings.LLM:
         case OpenAILLMConfig() as config:
             return ChatOpenAI(
-                model=model or config.MODEL,
+                model=model,
                 api_key=config.API_KEY,
                 streaming=True,
                 **_sampling(config),
@@ -29,7 +33,7 @@ def build_llm(settings: Settings, model: str | None = None) -> BaseChatModel:
         case AzureOpenAILLMConfig() as config:
             return AzureChatOpenAI(
                 azure_endpoint=config.ENDPOINT,
-                azure_deployment=model or config.DEPLOYMENT,
+                azure_deployment=model,
                 api_version=config.API_VERSION,
                 api_key=config.API_KEY,
                 streaming=True,
@@ -38,11 +42,11 @@ def build_llm(settings: Settings, model: str | None = None) -> BaseChatModel:
 
 
 def _sampling(config: OpenAILLMConfig | AzureOpenAILLMConfig) -> dict[str, Any]:
-    """Temperature for a plain chat model; for a reasoning model, the Responses API
-    with a reasoning summary, which is the only way OpenAI returns any reasoning text.
+    """Nothing for a plain chat model; for a reasoning model, the Responses API with a
+    reasoning summary, which is the only way OpenAI returns any reasoning text.
     """
     if config.REASONING_EFFORT is None:
-        return {"temperature": config.TEMPERATURE}
+        return {}
     return {
         "use_responses_api": True,
         "reasoning": {"effort": config.REASONING_EFFORT, "summary": "auto"},

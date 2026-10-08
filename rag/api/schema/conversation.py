@@ -15,7 +15,8 @@ from pydantic import (
 
 from rag.api.schema.chat import StreamEventResponse
 from rag.api.schema.common import UserText
-from rag.domain.models import ConversationUpdate, Effort, HistoryMessage, ModelName
+from rag.domain.models import ConversationUpdate, HistoryMessage
+from rag.shared.text_normalizer import one_line
 
 MAX_MESSAGE_LENGTH = 8192  # characters in one user message
 MAX_ATTACHMENTS = 3  # files sent with one message
@@ -35,8 +36,6 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     pinned_at: datetime | None  # Null while it isn't pinned
-    model: ModelName  # what its turns run on
-    effort: Effort
 
 
 class ConversationPageResponse(BaseModel):
@@ -109,14 +108,10 @@ class ChatMessageRequest(BaseModel):
         return self
 
 
-def _one_line(title: str) -> str:
-    return " ".join(title.split())
-
-
 # A title the user writes: one line, never blank (a null title marks the empty draft).
 UserTitle = Annotated[
     UserText,
-    AfterValidator(_one_line),
+    AfterValidator(one_line),
     Field(min_length=1, max_length=MAX_TITLE_LENGTH),
 ]
 
@@ -126,8 +121,6 @@ class ConversationUpdateRequest(BaseModel):
 
     title: UserTitle | None = None
     pinned: bool | None = None
-    model: ModelName | None = None
-    effort: Effort | None = None
 
     def to_update(self) -> ConversationUpdate:
         return ConversationUpdate(**self.model_dump())
