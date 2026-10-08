@@ -70,7 +70,7 @@ export function MessageList({
   }, [bubbles, isWaiting]);
 
   return (
-    <div role="log" aria-label="Messages" className="flex-1 space-y-4 overflow-y-auto px-4 py-6">
+    <div role="log" aria-label="Messages" className="relative flex-1 space-y-4 overflow-y-auto px-4 py-6">
       {bubbles.map((bubble) => (
         <div
           key={bubble.id}
