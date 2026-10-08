@@ -11,6 +11,8 @@
     "frontendContainerImageName": { "value": "rag-frontend:<tag>" },
     "ciServicePrincipalObjectId": { "value": "<ci-service-principal-object-id>" },
     "appServicePlanSku": { "value": "S1" },
+    "backendWorkers": { "value": 1 },
+    "databasePoolSize": { "value": 4 },
 
     "llmProvider": { "value": "openai" },
 

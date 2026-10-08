@@ -44,3 +44,4 @@ Provision or update the Azure environment with `infra/azure/main.bicep`. Diagram
 * Pass the five secure parameters on the command line. Do not commit them.
 * Generate `jwtSecret` with `openssl rand -hex 32`.
 * The App Service Plan must be Standard (`S1`) or higher. Private Endpoints need it.
+* Raise `backendWorkers` above 1 only on a plan with more than one vCPU. Keep `backendWorkers` × instances × `databasePoolSize` under the Postgres server's `max_connections`.

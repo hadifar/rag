@@ -4,8 +4,8 @@ Known gaps. None of these is addressed yet.
 
 ## Ingestion
 
-* Uploads run as an in-process background task. A restart kills the run. Startup marks it failed.
-* The startup sweep assumes a single backend instance.
+* Uploads run as an in-process background task. A restart kills the run. It shows as failed up to a minute later, once its lease lapses.
+* A run whose process stalls for over a minute without dying is failed, but its ingestion can still commit afterwards. The index then matches the archive while the run reads `failed`.
 * `rag ingest` ignores the one-run-at-a-time rule.
 * `rag ingest --latest` uses the newest valid zip, not the newest successful one.
 * `WholeDocumentChunker` stores a whole file as one chunk.
@@ -87,7 +87,6 @@ Known gaps. None of these is addressed yet.
 
 ## Scalability
 
-* `rag serve` runs one uvicorn worker.
 * The App Service Plan has no autoscale rule.
 * nginx rate limits are per replica.
 

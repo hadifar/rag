@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import uuid
+from datetime import timedelta
 
 from rag.domain.errors import (
     AppError,
@@ -27,6 +28,10 @@ from rag.services.ingestion_service.loaders import load_archive
 
 logger = logging.getLogger(__name__)
 
+# A running run renews its lease this often; one not renewed for STALE_AFTER is failed.
+HEARTBEAT_INTERVAL = timedelta(seconds=15)
+STALE_AFTER = timedelta(minutes=1)
+
 
 class IngestionService:
     """Makes the index match a source.
@@ -38,6 +43,11 @@ class IngestionService:
     Uploads go through runs: `start_upload` validates and stores the zip and records a
     `running` run (at most one at a time); `complete_run` then does the ingestion,
     meant to run in the background, and records how it ended.
+
+    A run holds a lease while it works: `complete_run` renews it every
+    `HEARTBEAT_INTERVAL`. A run not renewed within `STALE_AFTER` died with its process
+    (a restart, a crashed worker or instance), so it's failed before runs are read or a
+    new one starts, instead of blocking uploads.
     """
 
     def __init__(
@@ -63,6 +73,7 @@ class IngestionService:
             raise ArchiveTooLargeError(self._max_archive_bytes)
         # Checked before storing, so a rejected upload isn't kept. The unique index
         # behind `create` still catches two uploads racing past this check.
+        await self._fail_stale_runs()
         if await self._runs.running() is not None:
             raise IngestionInProgressError()
         name = await self.save_archive(archive)
@@ -70,6 +81,7 @@ class IngestionService:
 
     async def complete_run(self, run: IngestionRun) -> None:
         """Never raises: however the ingestion ends is recorded on the run."""
+        heartbeat = asyncio.create_task(self._keep_alive(run.id))
         try:
             report = await self.ingest_archive(run.archive_name)
         except AppError as exc:
@@ -81,23 +93,36 @@ class IngestionService:
             )
         else:
             await self._runs.finish(run.id, report)
+        finally:
+            heartbeat.cancel()
 
     async def get_run(self, run_id: uuid.UUID) -> IngestionRun:
+        await self._fail_stale_runs()
         run = await self._runs.get(run_id)
         if run is None:
             raise IngestionRunNotFoundError(run_id)
         return run
 
     async def latest_run(self) -> IngestionRun | None:
+        await self._fail_stale_runs()
         return await self._runs.latest()
 
-    async def fail_interrupted_runs(self) -> int:
-        """At startup: a run still `running` was cut off by a restart (its background
-        task died with the old process), so mark it failed instead of blocking uploads.
-        """
-        return await self._runs.fail_running(
-            "Interrupted by a server restart; upload the archive again"
+    async def _keep_alive(self, run_id: uuid.UUID) -> None:
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL.total_seconds())
+            try:
+                await self._runs.heartbeat(run_id)
+            except Exception:
+                # One missed beat isn't fatal: the lease outlasts several intervals.
+                logger.warning("Couldn't renew ingestion run %s", run_id, exc_info=True)
+
+    async def _fail_stale_runs(self) -> None:
+        count = await self._runs.fail_stale(
+            "Interrupted: the server running it stopped; upload the archive again",
+            STALE_AFTER,
         )
+        if count:
+            logger.warning("Marked %d interrupted ingestion run(s) as failed", count)
 
     async def save_archive(self, archive: bytes) -> str:
         """Validates the zip, then keeps it; returns its name. An invalid zip raises

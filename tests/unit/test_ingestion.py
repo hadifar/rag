@@ -1,6 +1,8 @@
+import asyncio
 import io
 import uuid
 import zipfile
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,7 @@ from rag.domain.errors import (
 from rag.config import UploadsConfig
 from rag.domain.models import IngestionReport, RawDocument
 from rag.services.ingestion_service import loaders
+from rag.services.ingestion_service import service as ingestion_service
 from rag.services.ingestion_service.chunking import (
     WholeDocumentChunker,
     markdown_summary,
@@ -346,13 +349,54 @@ async def test_a_failing_run_records_the_error_and_frees_the_slot() -> None:
     await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)  # slot is free
 
 
-async def test_interrupted_runs_are_failed_at_startup() -> None:
+async def test_a_run_whose_lease_lapses_is_failed_and_frees_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ingestion_service, "STALE_AFTER", timedelta(0))
     ingestion = _service(FakeDocumentIndex())
     run = await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
 
-    assert await ingestion.fail_interrupted_runs() == 1
-    assert (await ingestion.get_run(run.id)).status == "failed"
-    assert await ingestion.latest_run() is not None
+    latest = await ingestion.latest_run()  # nothing renews it: its process is gone
+    assert latest is not None
+    assert (latest.id, latest.status) == (run.id, "failed")
+    assert latest.error is not None
+    assert "Interrupted" in latest.error
+    await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)  # slot is free
+
+
+async def test_a_working_run_keeps_its_lease(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ingestion_service, "HEARTBEAT_INTERVAL", timedelta(seconds=0.01)
+    )
+    monkeypatch.setattr(ingestion_service, "STALE_AFTER", timedelta(seconds=0.05))
+    release = asyncio.Event()
+
+    class SlowIndex(FakeDocumentIndex):
+        async def areplace_documents(self, documents, *, removed) -> None:
+            await release.wait()
+            await super().areplace_documents(documents, removed=removed)
+
+    ingestion = _service(SlowIndex())
+    run = await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
+    working = asyncio.create_task(ingestion.complete_run(run))
+
+    await asyncio.sleep(0.2)  # several leases long
+    assert (await ingestion.get_run(run.id)).status == "running"
+    release.set()
+    await working
+    assert (await ingestion.get_run(run.id)).status == "succeeded"
+
+
+async def test_a_run_failed_as_stale_keeps_that_outcome() -> None:
+    runs = FakeIngestionRunRepository()
+    ingestion = _service(FakeDocumentIndex(), runs=runs)
+    run = await ingestion.start_upload(_zip({"a.md": "A"}), user_id=None)
+    await runs.fail(run.id, "stale")
+
+    await ingestion.complete_run(run)  # its process was alive after all
+
+    done = await ingestion.get_run(run.id)
+    assert (done.status, done.error) == ("failed", "stale")
 
 
 async def test_unknown_run_raises() -> None:

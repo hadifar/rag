@@ -46,6 +46,7 @@ The knowledge base is a zip or directory of `.md` files (`KNOWLEDGE_BASE_SOURCE`
 * The file basename is the document id.
 * Ingestion syncs the index to the source in one transaction: it embeds new and changed files and deletes missing files.
 * `POST /api/ingestions` stores the zip, then ingests it in the background. One run at a time.
+* A running run renews a lease (`heartbeat_at`) every 15 seconds. Reading runs or starting an upload first fails any run not renewed for a minute: its process died. Any worker or instance can do this safely.
 
 ## Authentication
 

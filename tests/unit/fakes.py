@@ -143,6 +143,7 @@ class FakeIngestionRunRepository:
 
     def __init__(self):
         self.runs: dict[uuid.UUID, IngestionRun] = {}
+        self.heartbeats: dict[uuid.UUID, datetime] = {}
         self._clock = datetime(2026, 1, 1, tzinfo=UTC)
 
     async def create(
@@ -159,6 +160,7 @@ class FakeIngestionRunRepository:
             started_at=self._clock,
         )
         self.runs[run.id] = run
+        self.heartbeats[run.id] = datetime.now(UTC)
         return run
 
     async def get(self, run_id: uuid.UUID) -> IngestionRun | None:
@@ -171,18 +173,30 @@ class FakeIngestionRunRepository:
         return next((r for r in self.runs.values() if r.status == "running"), None)
 
     async def finish(self, run_id: uuid.UUID, report: IngestionReport) -> None:
-        self.runs[run_id] = replace(
-            self.runs[run_id], status="succeeded", **asdict(report)
-        )
+        if self.runs[run_id].status == "running":
+            self.runs[run_id] = replace(
+                self.runs[run_id], status="succeeded", **asdict(report)
+            )
 
     async def fail(self, run_id: uuid.UUID, error: str) -> None:
-        self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
+        if self.runs[run_id].status == "running":
+            self.runs[run_id] = replace(self.runs[run_id], status="failed", error=error)
 
-    async def fail_running(self, error: str) -> int:
-        running = [r for r in self.runs.values() if r.status == "running"]
-        for run in running:
+    async def heartbeat(self, run_id: uuid.UUID) -> None:
+        if self.runs[run_id].status == "running":
+            self.heartbeats[run_id] = datetime.now(UTC)
+
+    async def fail_stale(self, error: str, stale_after: timedelta) -> int:
+        """Leases run on the wall clock, like Postgres's `now()`."""
+        cutoff = datetime.now(UTC) - stale_after
+        stale = [
+            r
+            for r in self.runs.values()
+            if r.status == "running" and self.heartbeats[r.id] < cutoff
+        ]
+        for run in stale:
             await self.fail(run.id, error)
-        return len(running)
+        return len(stale)
 
 
 class FakeArchiveStore:

@@ -30,7 +30,6 @@ def _build_lifespan(container: Container | None, settings: Settings):
             return
 
         async with build_container(settings) as built:
-            await _fail_interrupted_runs(built)
             app.state.container = built
             yield
 
@@ -42,17 +41,6 @@ def register_error_handlers(app: FastAPI) -> None:
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
-
-
-async def _fail_interrupted_runs(container: Container) -> None:
-    try:
-        count = await container.ingestion_service.fail_interrupted_runs()
-    except Exception:
-        # E.g. migrations not applied yet — that mustn't stop the app from serving.
-        logger.warning("Couldn't check for interrupted ingestion runs", exc_info=True)
-        return
-    if count:
-        logger.warning("Marked %d interrupted ingestion run(s) as failed", count)
 
 
 def create_app(

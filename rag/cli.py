@@ -29,15 +29,20 @@ def _run[T](command: Callable[["Container"], Awaitable[T]]) -> T:
 def serve(
     host: str = typer.Option(None, help="Override HOST from settings"),
     port: int = typer.Option(None, help="Override PORT from settings"),
+    workers: int = typer.Option(None, min=1, help="Override WORKERS from settings"),
     reload: bool = typer.Option(False, help="Autoreload (dev only)"),
 ) -> None:
     """Start the FastAPI app."""
     settings = get_settings()
+    workers = workers or settings.WORKERS
+    if reload and workers > 1:
+        raise typer.BadParameter("--reload runs one worker", param_hint="--workers")
     uvicorn.run(
         "rag.app:create_app",
         factory=True,
         host=host or settings.HOST,
         port=port or settings.PORT,
+        workers=workers,
         reload=reload,
     )
 

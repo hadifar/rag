@@ -35,6 +35,14 @@ param ciServicePrincipalObjectId string
 @description('Linux App Service Plan SKU. Private Endpoints (see backendPrivateEndpoint below) require Standard or higher — Basic/Free/Shared don\'t support them.')
 param appServicePlanSku string = 'S1'
 
+@description('uvicorn worker processes per backend instance (rag.config.Settings.WORKERS). More than one only helps on a plan with more than one vCPU.')
+@minValue(1)
+param backendWorkers int = 1
+
+@description('DB connections each backend worker keeps open (rag.config.Settings.DATABASE_POOL_SIZE). Postgres must allow backendWorkers x instances x this.')
+@minValue(1)
+param databasePoolSize int = 4
+
 @description('Address space for the VNet that isolates the backend Web App from the public internet.')
 param vnetAddressPrefix string = '10.20.0.0/16'
 
@@ -423,6 +431,8 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     {
       // Must match the port rag.config.Settings.PORT defaults to / the app binds.
       WEBSITES_PORT: '8000'
+      WORKERS: string(backendWorkers)
+      DATABASE_POOL_SIZE: string(databasePoolSize)
 
       DATABASE_URL: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/database-url/)'
       LLM__API_KEY: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/llm-api-key/)'
