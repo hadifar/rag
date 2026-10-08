@@ -10,7 +10,7 @@ Add an event to the chat stream. Use when the agent must send the client a new k
 2. Add the dataclass to the `StreamEvent` union.
 3. Re-export the dataclass from `rag/domain/models/__init__.py`.
 4. Emit the event in `parse_event` in `rag/services/agent_service/streaming.py`.
-5. If a graph node emits the event, name the custom event in `rag/services/agent_service/streaming.py` and dispatch it with `adispatch_custom_event`. Example: `AnswerVerified`.
+5. If a graph node emits the event, name the custom event in `rag/services/agent_service/streaming.py`, add an async helper there that dispatches it with `adispatch_custom_event`, and call the helper from the node. Example: the blocked message's refusal (`input_blocked`).
 6. If the event changes events already sent, apply it in `TranscriptBuilder` in `rag/services/chat_service/transcript.py`.
 7. Add a Pydantic model with `type: Literal[...]` to `rag/api/schema/chat.py`.
 8. Add the model to the `StreamEventResponse` union. `to_stream_event` maps the dataclass by its fields and `type`, so the two must match.

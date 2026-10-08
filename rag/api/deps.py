@@ -12,6 +12,7 @@ from rag.services.attachment_service.service import AttachmentService
 from rag.services.auth_service.service import AuthenticatedIdentity, AuthService
 from rag.services.chat_service.service import ChatService
 from rag.services.conversation_service.service import ConversationService
+from rag.services.setting_service.service import SettingService
 from rag.services.share_service.service import ShareService
 from rag.services.ingestion_service.service import IngestionService
 from rag.services.retrieval_service.service import RetrievalService
@@ -57,7 +58,12 @@ AttachmentServiceDep = Annotated[
     AttachmentService, _from_container(lambda c: c.attachment_service)
 ]
 SkillServiceDep = Annotated[SkillService, _from_container(lambda c: c.skill_service)]
-AppSettingsDep = Annotated[AppSettings, _from_container(lambda c: c.app_settings)]
+SettingServiceDep = Annotated[
+    SettingService, _from_container(lambda c: c.setting_service)
+]
+AppSettingsDep = Annotated[
+    AppSettings, _from_container(lambda c: c.setting_service.app)
+]
 
 
 async def get_current_user(

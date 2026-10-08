@@ -3,8 +3,10 @@ import uuid
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
-from rag.domain.models import SKILL_NAME_PATTERN
-from rag.services.agent_service.tools import SKILL_TOOL
+from rag.domain.models import SKILL_NAME_PATTERN, SkillContent
+from rag.services.agent_service.tools import SKILL_TOOL, render_skill
+
+# The skill tools are in tools.py, with the agent's other tools.
 
 # A message that invokes a skill starts with "/<name>", then a space or its end.
 _INVOCATION = re.compile(rf"/({SKILL_NAME_PATTERN})(?=\s|$)")
@@ -18,11 +20,10 @@ def invoked_skill(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def skill_loaded(name: str, instructions: str) -> list[BaseMessage]:
-    """The load_skill call and its result (`instructions`, as `loaded_skill` words
-    them), as if the model had made it: what a turn
-    that invokes the skill starts with, so the model follows it, and later turns
-    remember it was loaded.
+def skill_to_messages(name: str, content: SkillContent) -> list[BaseMessage]:
+    """The load_skill call and its result (`content`, as `render_skill` words it), as
+    if the model had made it: what a turn that invokes the skill starts with, so the
+    model follows it, and later turns remember it was loaded.
     """
     call_id = f"call_{uuid.uuid4().hex}"  # shaped like the ids OpenAI gives calls
     return [
@@ -30,5 +31,7 @@ def skill_loaded(name: str, instructions: str) -> list[BaseMessage]:
             content="",
             tool_calls=[{"name": SKILL_TOOL, "args": {"name": name}, "id": call_id}],
         ),
-        ToolMessage(content=instructions, name=SKILL_TOOL, tool_call_id=call_id),
+        ToolMessage(
+            content=render_skill(content), name=SKILL_TOOL, tool_call_id=call_id
+        ),
     ]

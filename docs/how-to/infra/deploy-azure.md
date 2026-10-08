@@ -14,7 +14,7 @@ Provision or update the Azure environment with `infra/azure/main.bicep`. Diagram
 
 1. Copy `infra/azure/main.parameters.example.json` to `infra/azure/main.parameters.local.json`.
 2. Fill `main.parameters.local.json` with environment values.
-3. If `llmProvider` is `azure_openai`, set `azureOpenAiEndpoint`, `azureOpenAiDeployment`, `azureOpenAiApiVersion`.
+3. If `llmProvider` is `azure_openai`, set `azureOpenAiEndpoint` and `azureOpenAiApiVersion`. The resource needs one chat deployment per model a user can pick, named after it (`gpt-6-luna`, `gpt-6-astra`, `gpt-6-sol`).
 4. Validate: `az bicep build --file infra/azure/main.bicep --stdout > /dev/null`.
 5. Lint: `az bicep lint --file infra/azure/main.bicep`.
 6. Preview:

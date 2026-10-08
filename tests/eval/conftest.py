@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from rag.adapters.langchain.llm_client import build_embeddings, build_llm
+from rag.adapters.langchain.llm_client import build_embeddings, build_llms
 from rag.config import Settings
 from rag.domain.models import RunContext
 from rag.repository.cache_repository import NoCache
@@ -66,7 +66,7 @@ def search(eval_settings: Settings, kb: DocumentRepository) -> RetrievalService:
     """The app's search over `kb`, reranked as `RETRIEVAL__RERANK_CANDIDATES` says, as
     in the container. The reranker's one-shot LLM call needs no tracing.
     """
-    llm = Llm(build_llm(eval_settings), _no_tracing, eval_settings.LLM.RETRY_ATTEMPTS)
+    llm = Llm(build_llms(eval_settings), _no_tracing, eval_settings.LLM.RETRY_ATTEMPTS)
     retrieval = eval_settings.RETRIEVAL
     reranker = LlmReranker(llm) if retrieval.RERANK_CANDIDATES else NoReranker()
     return RetrievalService(

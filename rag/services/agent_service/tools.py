@@ -1,16 +1,26 @@
 from typing import Any
 
+from langchain.agents.middleware.todo import write_todos
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+
 from rag.domain.models import ARTIFACTS, RunContext, SkillContent, SourceArtifact
 from rag.domain.ports import SearchPort, SkillsPort
 from rag.services.agent_service.prompts import SKILL_FILES_NOTE
 
-# The tools that hand the model a skill's instructions and its reference files: not
-# knowledge-base content, so the groundedness guard leaves their results out.
+# The tools that hand the model a skill's instructions and its reference files.
 SKILL_TOOL = "load_skill"
 SKILL_FILE_TOOL = "read_skill_file"
-SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
+
+
+def agent_tools(search: SearchPort, skills: SkillsPort) -> list[BaseTool]:
+    """Every tool the chat agent's model can call."""
+    return [
+        search_tool(search),
+        skill_tool(skills),
+        skill_file_tool(skills),
+        write_todos,
+    ]
 
 
 def search_tool(knowledge_base: SearchPort) -> BaseTool:
@@ -41,7 +51,7 @@ def search_tool(knowledge_base: SearchPort) -> BaseTool:
     return search_kb
 
 
-def loaded_skill(content: SkillContent) -> str:
+def render_skill(content: SkillContent) -> str:
     """What loading a skill hands the model: its instructions, then the paths of its
     reference files, if it has any.
     """
@@ -67,7 +77,7 @@ def skill_tool(skills: SkillsPort) -> BaseTool:
         content = await skills.content(runtime.context.user_id, name)
         if content is None:
             return f"The user has no skill named {name!r}."
-        return loaded_skill(content)
+        return render_skill(content)
 
     return load_skill
 

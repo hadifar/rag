@@ -9,13 +9,17 @@ from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
     messages_from_dict,
+    messages_to_dict,
     trim_messages,
 )
 from langchain_core.messages.utils import count_tokens_approximately
 
-from rag.domain.models import AgentMemory
+from rag.domain.models import ARTIFACTS, AgentMemory, Artifact, ArtifactsReady
+from rag.services.agent_service.messages import split_turns
 from rag.services.agent_service.tools import SKILL_TOOL
-from rag.services.agent_service.turn import split_turns
+
+# The agent's memory of a conversation: what each turn saves (`remember`), and how
+# much of it later turns reread (`recall`).
 
 
 @dataclass(frozen=True)
@@ -24,8 +28,24 @@ class HistoryLimits:
     turns are left out.
     """
 
-    max_tokens: int = 16_000  # counted approximately
+    max_tokens: int = 16_000
     max_turns: int = 20
+
+
+def remember(
+    messages: Sequence[BaseMessage], question: HumanMessage
+) -> tuple[AgentMemory | None, ArtifactsReady | None]:
+    """What the agent is to remember of the turn `question` started (its messages, from
+    the question on), and what its tools handed the user, if any tool that hands
+    anything over ran; neither if the question was dropped (a blocked one).
+    """
+    ids = [m.id for m in messages]
+    if question.id not in ids:
+        return None, None
+    turn = messages[ids.index(question.id) :]
+    artifacts = _artifacts(turn)
+    handed_over = None if artifacts is None else ArtifactsReady(artifacts=artifacts)
+    return messages_to_dict(turn), handed_over
 
 
 def recall(history: Sequence[AgentMemory], limits: HistoryLimits) -> list[AnyMessage]:
@@ -46,6 +66,21 @@ def recall(history: Sequence[AgentMemory], limits: HistoryLimits) -> list[AnyMes
         start_on="human",  # a cut inside a turn drops the rest of it too
     )
     return cast(list[AnyMessage], kept)
+
+
+def _artifacts(turn: Sequence[BaseMessage]) -> list[Artifact] | None:
+    """What the tools handed the user in `turn`, deduplicated in the order they did;
+    empty if they found nothing, None if no tool that hands anything over ran.
+    """
+    handed_over = [
+        message.artifact
+        for message in turn
+        if isinstance(message, ToolMessage) and isinstance(message.artifact, list)
+    ]
+    if not handed_over:
+        return None
+    artifacts = ARTIFACTS.validate_python([a for each in handed_over for a in each])
+    return list(dict.fromkeys(artifacts))
 
 
 def _compact(turn: Sequence[BaseMessage]) -> list[BaseMessage]:

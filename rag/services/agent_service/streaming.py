@@ -1,29 +1,39 @@
-from collections.abc import Mapping
+import logging
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.messages import (
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
 
 from rag.domain.models import (
-    AnswerVerified,
+    AgentMemory,
     ReasoningDelta,
     StreamEvent,
     TextDelta,
     TodosUpdated,
     ToolCall,
+    TurnFailed,
 )
+from rag.services.agent_service.memory import remember
+from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
 
-# The custom events RagAgent's guard nodes dispatch, which the stream turns into
-# user-facing events (see _guard_events).
-# verify: the answer's check starting, then its verdict.
-ANSWER_VERIFICATION = "answer_verification"
-# classify: a blocked message, with the refusal sent instead of an answer.
-INPUT_BLOCKED = "input_blocked"
+logger = logging.getLogger(__name__)
 
-# Only RagAgent's model node produces the user-facing answer. The guards' own LLM
-# calls (classification, not an answer) run in their own nodes of this same
-# graph and would otherwise leak into the text stream too, since astream_events
-# captures every chat model call in the run, not just this one.
-_USER_FACING_NODE = "model"
+# The custom event check_input dispatches (with `input_blocked`) for a blocked message,
+# with the refusal sent instead of an answer.
+_INPUT_BLOCKED = "input_blocked"
+
+# Only RagAgent's answer and decline nodes write the user-facing answer; research's
+# reasoning is shown too, but its text (only "Done.") isn't. The input guard's own LLM
+# calls (verdicts, not an answer) run in this same graph and would otherwise leak into
+# the stream too, since astream_events captures every chat model call in the run.
+_ANSWER_NODES = frozenset({"answer", "decline"})
+_REASONING_NODES = _ANSWER_NODES | {"research"}
 
 # LangChain's planning tool, which RagAgent uses as is. Its call is the plan, not a
 # search, so it's sent as the plan itself; it returns a Command whose state update holds
@@ -31,14 +41,52 @@ _USER_FACING_NODE = "model"
 _PLANNING_TOOL = "write_todos"
 
 
+class AgentTurn:
+    """One turn: iterate it for its events, as the user is to see them, then what its
+    tools handed the user. Once they end, `memory` holds
+    the turn's messages, from the question on; it stays None for a turn to forget: a
+    blocked question, a failed tool or model call (whose unanswered tool call the
+    model's API would reject in every later turn), or a stream its caller stopped
+    reading.
+    """
+
+    def __init__(self, run: AsyncIterator[Any], question: HumanMessage):
+        self._run = run
+        self._question = question
+        self._messages: list[BaseMessage] = []  # the run's, once it ends
+        self.memory: AgentMemory | None = None
+
+    async def __aiter__(self) -> AsyncIterator[StreamEvent]:
+        """If a tool or the model fails, the turn ends with `TurnFailed` instead."""
+        try:
+            async for event in self._events():
+                yield event
+            self.memory, artifacts = remember(self._messages, self._question)
+            if artifacts is not None:
+                yield artifacts
+        except Exception:
+            logger.exception("chat turn failed")
+            self.memory = None
+            yield TurnFailed(message=TURN_FAILED_MESSAGE)
+
+    async def _events(self) -> AsyncIterator[StreamEvent]:
+        async for raw_event in self._run:
+            # The run's own end (it has no parent) carries the final state.
+            if raw_event["event"] == "on_chain_end" and not raw_event["parent_ids"]:
+                self._messages = raw_event["data"]["output"]["messages"]
+            for event in parse_event(raw_event):
+                yield event
+
+
 def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     """The user-facing events a raw graph event stands for; none if it isn't one."""
     kind = raw_event["event"]
 
     if kind == "on_chat_model_stream":
-        if raw_event.get("metadata", {}).get("langgraph_node") != _USER_FACING_NODE:
+        node = raw_event.get("metadata", {}).get("langgraph_node")
+        if node not in _REASONING_NODES:
             return []
-        return _chunk_events(raw_event["data"]["chunk"])
+        return _chunk_events(raw_event["data"]["chunk"], text=node in _ANSWER_NODES)
 
     if kind in ("on_tool_start", "on_tool_end"):
         return _tool_events(raw_event)
@@ -49,55 +97,17 @@ def parse_event(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     return []
 
 
-class AnswerGate:
-    """Holds back answer text the groundedness guard may still reject, so the user never
-    sees an answer that is then taken back. Text streams live until a tool runs in the
-    turn: with nothing retrieved there is nothing to check it against. After that, each
-    model call's text is held until it is clear what it was: released before the next
-    tool call (the model was still working), after a passing verdict, or at the end of
-    the turn (an answer that wasn't checked); dropped on a failing verdict, as the guard
-    then has the model revise it. Reasoning and every other event pass straight through.
-    """
-
-    def __init__(self):
-        self._checkable = False
-        self._held: list[TextDelta] = []
-
-    def feed(self, event: StreamEvent) -> list[StreamEvent]:
-        """What to send for `event` now: none while it's held, else it and any text
-        it releases, in the order they were produced.
-        """
-        match event:
-            case TextDelta() if self._checkable:
-                self._held.append(event)
-                return []
-            case ToolCall() | TodosUpdated():
-                self._checkable = True
-                return [*self.flush(), event]
-            case AnswerVerified(status="done", grounded=False):
-                self._held.clear()
-                return [event]
-            case AnswerVerified(status="done"):
-                return [event, *self.flush()]
-            case _:
-                return [event]
-
-    def flush(self) -> list[StreamEvent]:
-        """The held text, released; call it once the turn ends."""
-        held, self._held = self._held, []
-        return list(held)
+async def input_blocked(message: str) -> None:
+    """Sends `message`, the refusal, as the blocked question's answer."""
+    await adispatch_custom_event(_INPUT_BLOCKED, {"message": message})
 
 
 def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
-    """What the guards dispatched: the answer's check starting, then its verdict; or
-    the refusal for a blocked message, sent as the answer's text. Other custom events
-    aren't streamed.
+    """The refusal for a blocked message, sent as the answer's text. Other custom
+    events aren't streamed.
     """
-    name, data = raw_event["name"], raw_event["data"]
-    if name == ANSWER_VERIFICATION:
-        return [AnswerVerified(status=data["status"], grounded=data.get("grounded"))]
-    if name == INPUT_BLOCKED:
-        return [TextDelta(text=data["message"])]
+    if raw_event["name"] == _INPUT_BLOCKED:
+        return [TextDelta(text=raw_event["data"]["message"])]
     return []
 
 
@@ -128,13 +138,14 @@ def _tool_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
     ]
 
 
-def _chunk_events(chunk: AIMessageChunk) -> list[StreamEvent]:
-    """A chunk's text and reasoning, read from its provider-neutral content blocks: a
-    plain string for Chat Completions, a list of blocks for the Responses API.
+def _chunk_events(chunk: AIMessageChunk, *, text: bool) -> list[StreamEvent]:
+    """A chunk's reasoning, and its text if `text`, read from its provider-neutral
+    content blocks: a plain string for Chat Completions, a list of blocks for the
+    Responses API.
     """
     events: list[StreamEvent] = []
     for block in chunk.content_blocks:
-        if block["type"] == "text" and block["text"]:
+        if block["type"] == "text" and block["text"] and text:
             events.append(TextDelta(text=block["text"]))
         elif block["type"] == "reasoning" and "reasoning" in block:
             # Each summary part opens with an empty block; a paragraph break keeps one

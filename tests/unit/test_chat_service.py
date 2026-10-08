@@ -5,11 +5,11 @@ import pytest
 
 from rag.domain.errors import ConversationNotFoundError
 from rag.domain.models import (
-    ConversationUpdate,
     AgentMemory,
     ArtifactsReady,
     AttachmentFile,
     RunContext,
+    RunSettingsUpdate,
     StreamEvent,
     TextDelta,
     Turn,
@@ -18,6 +18,7 @@ from rag.services.chat_service.service import ChatService
 from tests.unit.fakes import (
     FakeAttachmentRepository,
     FakeConversationRepository,
+    FakeUserRepository,
     StubAgent,
     StubTurn,
 )
@@ -27,12 +28,17 @@ BOB = uuid.uuid4()
 
 
 def _service(
-    agent: StubAgent | None = None,
+    agent: StubAgent | None = None, users: FakeUserRepository | None = None
 ) -> tuple[ChatService, FakeConversationRepository]:
     repository = FakeConversationRepository()
+    if users is None:
+        users = FakeUserRepository()
+    users.add(ALICE)
+    users.add(BOB)
     service = ChatService(
         repository=repository,
         attachments=FakeAttachmentRepository(repository),
+        users=users,
         agent=agent or StubAgent(),
     )
     return service, repository
@@ -166,18 +172,23 @@ async def test_attachments_go_to_the_agent_and_are_saved_with_their_turn() -> No
     assert [t.attachments for t in turns] == [[file.attachment], []]
 
 
-async def test_a_turn_runs_on_the_model_and_effort_its_conversation_is_set_to() -> None:
+async def test_every_conversation_runs_on_the_model_and_effort_the_user_set() -> None:
     agent = StubAgent()
-    service, repository = _service(agent)
-    conversation_id = (await repository.get_or_create_empty(ALICE)).id
+    users = FakeUserRepository()
+    service, repository = _service(agent, users)
+    first = (await repository.get_or_create_empty(ALICE)).id
+    await repository.set_title(first, "first")
 
-    await _chat(service, conversation_id, "hi")
-    await repository.update_owned(
-        ALICE, conversation_id, ConversationUpdate(model="gpt-6-sol", effort="max")
+    await _chat(service, first, "hi")
+    await users.update_run_settings(
+        ALICE, RunSettingsUpdate(model="gpt-6-sol", effort="high")
     )
-    await _chat(service, conversation_id, "again")
+    second = (await repository.get_or_create_empty(ALICE)).id
+    await _chat(service, second, "new chat")
+    await _chat(service, first, "back to the first")
 
     assert [(c.model, c.effort) for c in agent.contexts] == [
         ("gpt-6-luna", "low"),
-        ("gpt-6-sol", "max"),
+        ("gpt-6-sol", "high"),
+        ("gpt-6-sol", "high"),
     ]

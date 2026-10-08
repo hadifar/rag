@@ -135,7 +135,7 @@ class SearchCacheRepository(_PostgresCache):
 
 
 class InputVerdictCacheRepository(_PostgresCache):
-    """CachePort of the off-topic guard's verdicts, by the classifier's prompt."""
+    """CachePort of the input guard's verdicts, by its prompt."""
 
     table = "input_verdict_cache"
 
