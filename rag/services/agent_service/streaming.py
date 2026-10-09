@@ -21,6 +21,7 @@ from rag.domain.models import (
 )
 from rag.services.agent_service.memory import remember
 from rag.services.agent_service.prompts import TURN_FAILED_MESSAGE
+from rag.services.agent_service.tools import SKILL_FILE_TOOL, SKILL_TOOL
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ _REASONING_NODES = _ANSWER_NODES | {"research"}
 # search, so it's sent as the plan itself; it returns a Command whose state update holds
 # the new todos.
 _PLANNING_TOOL = "write_todos"
+
+# Their output is a skill's text, for the model to follow, not for the user to read.
+_SKILL_TOOLS = frozenset({SKILL_TOOL, SKILL_FILE_TOOL})
 
 
 class AgentTurn:
@@ -112,30 +116,51 @@ def _guard_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
 
 
 def _tool_events(raw_event: Mapping[str, Any]) -> list[StreamEvent]:
-    """A search is shown `pending` with its query, then `done` with its output; the
-    planning tool only once it's done, as the plan its state update holds.
+    """A tool call is shown `pending`, then `done` with its output, each with a label
+    for the user; a skill tool's output is left out. The planning tool is shown only
+    once it's done, as the plan its state update holds.
     """
     started = raw_event["event"] == "on_tool_start"
+    name = raw_event["name"]
     data = raw_event["data"]
+    args = data.get("input") or {}
 
-    if raw_event["name"] == _PLANNING_TOOL:
+    if name == _PLANNING_TOOL:
         return [] if started else [TodosUpdated(todos=data["output"].update["todos"])]
 
     if started:
         return [
             ToolCall(
-                name=raw_event["name"],
+                name=name,
                 status="pending",
-                query=data.get("input", {}).get("query", ""),
+                label=_tool_label(name, args, done=False),
+                query=args.get("query", ""),
             )
         ]
     return [
         ToolCall(
-            name=raw_event["name"],
+            name=name,
             status="done",
-            output=_tool_output_text(data.get("output", "")),
+            label=_tool_label(name, args, done=True),
+            output=None
+            if name in _SKILL_TOOLS
+            else _tool_output_text(data.get("output", "")),
         )
     ]
+
+
+def _tool_label(name: str, args: Mapping[str, Any], *, done: bool) -> str:
+    """What the chat shows for a tool call, from its arguments; an unknown tool's
+    name as is.
+    """
+    if name == "search_kb":
+        return f"{'Searched' if done else 'Searching'}: {args.get('query', '')}"
+    if name == SKILL_TOOL:
+        return f"{'Loaded' if done else 'Loading'} skill: {args.get('name', '')}"
+    if name == SKILL_FILE_TOOL:
+        verb = "Read" if done else "Reading"
+        return f"{verb} {args.get('path', '')} from {args.get('skill', '')}"
+    return name
 
 
 def _chunk_events(chunk: AIMessageChunk, *, text: bool) -> list[StreamEvent]:

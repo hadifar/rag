@@ -64,6 +64,8 @@ A chat answer streams as Server-Sent Events: one JSON `data:` line per event, to
 
 Event types: `text`, `reasoning`, `tool`, `todos`, `answer_check`, `artifacts`, `error`. `answer_check` is no longer sent; it stays so stored transcripts still read. History replays the stored events through the same `applyEvent`.
 
+A `tool` event carries a `label`, what the chat shows for the call, which `_tool_label` builds from its arguments (e.g. `Searched: pricing`, `Loaded skill: release-notes`). A skill tool's `done` event has no `output`: the skill's text is for the model. Transcripts stored before `label` show the tool's name.
+
 `artifacts` is sent once the turn is done, if a tool returned an artifact (`response_format="content_and_artifact"`): what the tools handed the user (today, the knowledge-base sources a search found), each tagged by its `kind` and deduplicated. The agent keeps them on the `ToolMessage` as plain JSON, so its memory of the turn holds no domain classes.
 
 A turn whose tool or model fails (after `Llm.prepare`'s retries of the model call) ends with an `error` event carrying a user-facing message, never the exception. The agent does not remember the failed turn (its `memory` stays `None`), so the same message can be sent again. The chat shows a Retry button on that error while it is the last bubble.

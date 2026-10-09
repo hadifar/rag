@@ -41,7 +41,8 @@ Known gaps. None of these is addressed yet.
 * An off-topic (`off_topic`) message loads nothing, even the skill it invokes. The input guard checks the message with its `/<name>` command, so a style skill (`/tone ...`) can be judged off-topic.
 * The input guard doesn't know about skills, so a request a skill covers can still be judged `off_topic` and get no tools.
 * Nothing checks what a skill or its reference files ask for. The prompt only tells the model that its own rules come first. See [Security](#security).
-* The chat shows a `load_skill` call as a generic tool bubble.
+* A skill invoked with `/<name>` is loaded by the `load_skills` node, not by a tool call, so the chat shows no bubble for it. Only skills the model loads itself are shown.
+* Transcripts stored before tool calls had a `label` still show a `load_skill` call by its name, with the skill's text as its output.
 
 ## Models
 
@@ -70,7 +71,6 @@ Known gaps. None of these is addressed yet.
 * No token rotation or revocation.
 * Login rate limiting is per IP only (nginx).
 * Share links (`GET /api/shares/{share_id}`) are public, never expire, and have no rate limit. Shared answers can quote the knowledge base.
-* The backend image runs as root on a floating base image.
 * Uploaded skills are untrusted instructions. A skill, or a reference file it loads, goes to the model as instructions, and nothing scans it. A skill downloaded from elsewhere can carry prompt injection the user never read: it can tell the model to ignore the knowledge base, misstate facts, or answer with links to an outside URL that carry conversation text (answers render as markdown; nginx's CSP, `img-src 'self' data:`, blocks outside images, but a link only needs a click). Its reach is the user's own conversations and tools (`search_kb`), as with a message they type. The only safeguards are the system prompt (its rules come first) and a warning in Settings to upload only skills the user has read. Skills are never run, shared or shown to other users.
 
 ## Reliability

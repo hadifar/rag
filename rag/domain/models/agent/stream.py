@@ -25,8 +25,14 @@ class ReasoningDelta:
 
 @dataclass
 class ToolCall:
+    """A tool the model called: `pending` while it runs, then `done`. `label` is what
+    the user sees (None in transcripts stored before it); `output`, None for a tool
+    whose result is only for the model.
+    """
+
     name: str
     status: Literal["pending", "done"]
+    label: str | None = None
     query: str | None = None
     output: str | None = None
     type: Literal["tool"] = "tool"

@@ -1,4 +1,4 @@
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessageChunk, ToolMessage
 from langgraph.types import Command
 
 from rag.domain.models import (
@@ -6,6 +6,7 @@ from rag.domain.models import (
     TextDelta,
     Todo,
     TodosUpdated,
+    ToolCall,
 )
 from rag.services.agent_service.streaming import parse_event
 
@@ -92,6 +93,64 @@ def test_planning_tool_output_is_the_plan():
 def test_planning_tool_start_is_not_a_tool_call():
     event = {"event": "on_tool_start", "name": "write_todos", "data": {"input": {}}}
     assert parse_event(event) == []
+
+
+def _tool(event: str, name: str, args: dict, output: str = "") -> dict:
+    return {
+        "event": event,
+        "name": name,
+        "data": {"input": args, "output": ToolMessage(output, tool_call_id="call-1")},
+    }
+
+
+def test_a_search_is_labelled_with_its_query_and_keeps_its_output():
+    args = {"query": "pricing"}
+    assert parse_event(_tool("on_tool_start", "search_kb", args)) == [
+        ToolCall(
+            name="search_kb",
+            status="pending",
+            label="Searching: pricing",
+            query="pricing",
+        )
+    ]
+    assert parse_event(_tool("on_tool_end", "search_kb", args, "Plans…")) == [
+        ToolCall(
+            name="search_kb", status="done", label="Searched: pricing", output="Plans…"
+        )
+    ]
+
+
+def test_a_skill_load_is_labelled_with_its_name_and_hides_its_instructions():
+    args = {"name": "release-notes"}
+    assert parse_event(_tool("on_tool_start", "load_skill", args)) == [
+        ToolCall(
+            name="load_skill",
+            status="pending",
+            label="Loading skill: release-notes",
+            query="",
+        )
+    ]
+    assert parse_event(_tool("on_tool_end", "load_skill", args, "Do X.")) == [
+        ToolCall(name="load_skill", status="done", label="Loaded skill: release-notes")
+    ]
+
+
+def test_a_skill_file_read_is_labelled_with_its_path_and_hides_the_file():
+    args = {"skill": "release-notes", "path": "template.md"}
+    assert parse_event(_tool("on_tool_end", "read_skill_file", args, "# T")) == [
+        ToolCall(
+            name="read_skill_file",
+            status="done",
+            label="Read template.md from release-notes",
+        )
+    ]
+
+
+def test_an_unknown_tool_is_labelled_with_its_name():
+    [event] = parse_event(_tool("on_tool_end", "other_tool", {}, "out"))
+    assert event == ToolCall(
+        name="other_tool", status="done", label="other_tool", output="out"
+    )
 
 
 def test_a_blocked_messages_refusal_is_sent_as_the_answers_text():
