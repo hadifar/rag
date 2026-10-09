@@ -23,11 +23,15 @@ class ReasoningEvent(BaseModel):
 
 
 class ToolEvent(BaseModel):
-    """A knowledge-base search: `pending` with its query, then `done` with its output."""
+    """A tool call: `pending`, then `done` with its output. `label` is what the chat
+    shows (None in transcripts stored before it); `output` is None for a skill tool,
+    whose result is only for the model.
+    """
 
     type: Literal["tool"] = "tool"
     name: str
     status: Literal["pending", "done"]
+    label: str | None = None
     query: str | None = None
     output: str | None = None
 

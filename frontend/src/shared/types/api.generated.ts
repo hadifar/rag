@@ -863,7 +863,9 @@ export interface components {
         };
         /**
          * ToolEvent
-         * @description A knowledge-base search: `pending` with its query, then `done` with its output.
+         * @description A tool call: `pending`, then `done` with its output. `label` is what the chat
+         *     shows (None in transcripts stored before it); `output` is None for a skill tool,
+         *     whose result is only for the model.
          */
         ToolEvent: {
             /**
@@ -878,6 +880,8 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "done";
+            /** Label */
+            label?: string | null;
             /** Query */
             query?: string | null;
             /** Output */

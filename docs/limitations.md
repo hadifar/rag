@@ -41,7 +41,8 @@ Known gaps. None of these is addressed yet.
 * An off-topic (`off_topic`) message loads nothing, even the skill it invokes. The input guard checks the message with its `/<name>` command, so a style skill (`/tone ...`) can be judged off-topic.
 * The input guard doesn't know about skills, so a request a skill covers can still be judged `off_topic` and get no tools.
 * Nothing checks what a skill or its reference files ask for. The prompt only tells the model that its own rules come first. See [Security](#security).
-* The chat shows a `load_skill` call as a generic tool bubble.
+* A skill invoked with `/<name>` is loaded by the `load_skills` node, not by a tool call, so the chat shows no bubble for it. Only skills the model loads itself are shown.
+* Transcripts stored before tool calls had a `label` still show a `load_skill` call by its name, with the skill's text as its output.
 
 ## Models
 
