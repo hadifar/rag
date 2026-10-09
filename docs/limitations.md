@@ -71,7 +71,6 @@ Known gaps. None of these is addressed yet.
 * No token rotation or revocation.
 * Login rate limiting is per IP only (nginx).
 * Share links (`GET /api/shares/{share_id}`) are public, never expire, and have no rate limit. Shared answers can quote the knowledge base.
-* The backend image runs as root on a floating base image.
 * Uploaded skills are untrusted instructions. A skill, or a reference file it loads, goes to the model as instructions, and nothing scans it. A skill downloaded from elsewhere can carry prompt injection the user never read: it can tell the model to ignore the knowledge base, misstate facts, or answer with links to an outside URL that carry conversation text (answers render as markdown; nginx's CSP, `img-src 'self' data:`, blocks outside images, but a link only needs a click). Its reach is the user's own conversations and tools (`search_kb`), as with a message they type. The only safeguards are the system prompt (its rules come first) and a warning in Settings to upload only skills the user has read. Skills are never run, shared or shown to other users.
 
 ## Reliability
